@@ -308,6 +308,16 @@ esp_err_t walkie_ble_start(int ch)
 void walkie_ble_stop(void)
 {
     s_on = false;
+    if (!bsp_ble_stack_up()) {
+        s_cent = 0;
+        s_have_want = false;
+        s_peer_tx = s_peer_rx = 0;
+        s_sub_n = 0;
+        if (s_noted) {
+            s_noted = false;
+        }
+        return;
+    }
     ble_gap_disc_cancel();
     if (s_cent) {
         ble_gap_terminate(s_cent, BLE_ERR_REM_USER_CONN_TERM);

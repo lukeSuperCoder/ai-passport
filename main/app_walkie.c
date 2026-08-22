@@ -4,9 +4,12 @@
 #include "app_prefs.h"
 #include "app_ui.h"
 #include "app_web.h"
+#include "bsp_ble.h"
 #include "bsp_wifi.h"
 #include "ui_pixel.h"
 #include "walkie.h"
+
+#include "esp_heap_caps.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -16,6 +19,40 @@ static lv_timer_t *s_timer;
 static int s_sel;
 static int s_err; /* 1=wifi 2=ble 3=fail */
 static bool s_pending;
+static bool s_parked_ble;
+static bool s_stopped_wx;
+
+#define WALKIE_NEED_BLK 8192
+
+static size_t largest_blk(void)
+{
+    return heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+}
+
+static void radio_borrow(walkie_mode_t mode)
+{
+    app_wx_pause(true);
+    size_t blk = largest_blk();
+    if (mode == WALKIE_MODE_WEBRTC && bsp_ble_stack_up() && blk < WALKIE_NEED_BLK) {
+        if (bsp_ble_suspend() == ESP_OK) s_parked_ble = true;
+    } else if (mode == WALKIE_MODE_BLE && blk < WALKIE_NEED_BLK) {
+        app_wx_stop();
+        s_stopped_wx = true;
+    }
+}
+
+static void radio_restore(void)
+{
+    if (s_parked_ble) {
+        bsp_ble_resume();
+        s_parked_ble = false;
+    }
+    app_wx_pause(false);
+    if (s_stopped_wx) {
+        s_stopped_wx = false;
+        app_wx_start();
+    }
+}
 
 static int item_n(void)
 {
@@ -82,7 +119,6 @@ static void paint(void)
             }
         }
         if (mode == WALKIE_MODE_WEBRTC) append_url(buf, sizeof(buf), &used, "/w");
-        append_url(buf, sizeof(buf), &used, "/rtc");
         lv_label_set_text(s_body, buf);
         app_shell_wake();
         return;
@@ -109,7 +145,7 @@ static void paint(void)
                      s_sel == 1 ? ">" : " ", app_str(APP_STR_WALKIE_CH), ch,
                      s_sel == 2 ? ">" : " ", app_str(APP_STR_WALKIE_START));
     if (n > 0) used = (size_t)n;
-    append_url(buf, sizeof(buf), &used, "/rtc");
+    if (mode != WALKIE_MODE_BLE) append_url(buf, sizeof(buf), &used, "/w");
     lv_label_set_text(s_body, buf);
 }
 
@@ -139,14 +175,20 @@ static void tick(lv_timer_t *t)
         int ch = walkie_ch_clamp(app_prefs()->walkie_ch);
         s_err = 0;
         walkie_clear_err();
+        radio_borrow(mode);
         if (mode == WALKIE_MODE_WEBRTC && bsp_wifi_state() != BSP_WIFI_CONNECTED) {
             s_err = 1;
+            radio_restore();
         } else if (walkie_start(mode, ch) != ESP_OK) {
+            radio_restore();
             apply_err();
         }
     }
     if (walkie_busy()) s_err = 0;
-    else if (walkie_last_err() != WALKIE_E_OK) apply_err();
+    else {
+        radio_restore();
+        if (walkie_last_err() != WALKIE_E_OK) apply_err();
+    }
     paint();
 }
 
@@ -163,6 +205,8 @@ void app_walkie_enter(lv_obj_t *p)
     s_sel = 0;
     s_err = 0;
     s_pending = false;
+    s_parked_ble = false;
+    s_stopped_wx = false;
     walkie_clear_err();
     if (!app_prefs()->walkie_ch) app_prefs()->walkie_ch = 1;
     lv_obj_t *card = app_ui_card(p);
@@ -176,6 +220,7 @@ void app_walkie_enter(lv_obj_t *p)
 void app_walkie_exit(void)
 {
     walkie_stop();
+    radio_restore();
     if (s_timer) { lv_timer_delete(s_timer); s_timer = NULL; }
     s_title = s_hint = s_body = NULL;
 }
@@ -192,6 +237,7 @@ void app_walkie_key(bsp_btn_t btn, bsp_btn_ev_t ev)
     if (walkie_busy()) {
         if (btn == BSP_BTN_OK) {
             walkie_stop();
+            radio_restore();
             paint();
         }
         return;

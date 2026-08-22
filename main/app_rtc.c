@@ -4,6 +4,7 @@
 #include "esp_http_server.h"
 #include "esp_log.h"
 #include "sdkconfig.h"
+#include "walkie.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -117,7 +118,10 @@ static const char PAGE[] =
     "ptt.addEventListener('touchstart',down,{passive:false});"
     "ptt.addEventListener('touchend',up);"
     "(async()=>{"
-    "if(gum()||location.protocol==='https:')return;"
+    "async function goW(){try{const j=await(await fetch('/w/s')).json();"
+    "if(j.on)location.replace('/w')}catch(e){}}"
+    "goW();setInterval(goW,1500);"
+    "if(gum()||location.protocol==='https:'){openws();return}"
     "const ua=navigator.userAgent||'';"
     "if(/MicroMessenger|AlipayClient|DingTalk/i.test(ua)){"
     "st.textContent='open in Safari/Chrome, not WeChat';return}"
@@ -287,6 +291,14 @@ static void send_hello(httpd_req_t *req, rtc_peer_t *me)
 static esp_err_t send_page(httpd_req_t *req)
 {
     if (app_web_redirect_https(req, "/rtc")) return ESP_OK;
+    /* /rtc 是浏览器互相对讲。设备对讲已经开时,改去 /w 才能跟喇叭/麦克风通话。 */
+    if (walkie_busy() && walkie_mode() == WALKIE_MODE_WEBRTC) {
+        httpd_resp_set_status(req, "302 Found");
+        httpd_resp_set_hdr(req, "Location", "/w");
+        httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+        httpd_resp_send(req, NULL, 0);
+        return ESP_OK;
+    }
     httpd_resp_set_type(req, "text/html; charset=utf-8");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
     return httpd_resp_send(req, PAGE, HTTPD_RESP_USE_STRLEN);

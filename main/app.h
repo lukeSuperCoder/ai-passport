@@ -69,6 +69,7 @@ void app_logs_key(bsp_btn_t btn, bsp_btn_ev_t ev);
 
 void app_wx_start(void);
 void app_wx_pause(bool on);
+void app_wx_stop(void);
 // Wi-Fi 开启且有城市时写一行锁屏天气。无缓存时仍返回 true 并写城市。
 bool app_wx_lock_line(char *out, size_t n);
 // 有有效预报时返回 WMO 天气码,否则 -1。

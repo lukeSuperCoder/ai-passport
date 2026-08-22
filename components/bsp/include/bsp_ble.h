@@ -77,9 +77,17 @@ esp_err_t bsp_ble_resume_advertising(void);
 // 若有尚未取走的完整通知,拷到 out 并返回 true。
 bool bsp_ble_take_notif(bsp_ble_notif_t *out);
 
-// 射频/广播开关。关闭后停止广播并断开。未开启时图标应隐藏。
+// 射频/广播开关。关闭后停止广播、断开,并释放 NimBLE 主机/控制器堆。
+// 未开启时图标应隐藏。关射频不会清绑定。
 bool bsp_ble_enabled(void);
 esp_err_t bsp_ble_set_enabled(bool on);
+
+// NimBLE 是否在跑。关射频或 suspend 后为 false,此时不可调用 GAP/GATT。
+bool bsp_ble_stack_up(void);
+// 卸栈但不改开关/NVS。对讲机 Wi-Fi 模式用来腾出 ESP32-C3 内部 RAM。
+esp_err_t bsp_ble_suspend(void);
+// 若开关仍为开,则重新拉起协议栈并广播。
+esp_err_t bsp_ble_resume(void);
 
 // 列表中已绑定设备都连上后停止广播。无绑定时仍广播以便首对。
 bool bsp_ble_quiet(void);

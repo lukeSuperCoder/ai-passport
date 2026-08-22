@@ -96,6 +96,7 @@ typedef struct {
 static wx_snap_t s_snap;
 static volatile int s_req; // 1=forecast 2=geocode
 static volatile bool s_paused;
+static volatile bool s_die;
 static char s_lookup[33];
 static char s_http[WX_BUF];
 static int64_t s_hold_off_us;
@@ -948,6 +949,10 @@ static void wx_task(void *arg)
     (void)arg;
     ESP_LOGI(TAG, "task running");
     for (;;) {
+        if (s_die) {
+            s_task = NULL;
+            vTaskDelete(NULL);
+        }
         if (s_paused || bsp_wifi_state() != BSP_WIFI_CONNECTED) {
             vTaskDelay(pdMS_TO_TICKS(5000));
             continue;
@@ -975,6 +980,7 @@ static void wx_task(void *arg)
 void app_wx_start(void)
 {
     if (s_task) return;
+    s_die = false;
     uint32_t now = xTaskGetTickCount();
     if (s_retry_at && now < s_retry_at) return;
     if (!s_mu) {
@@ -1002,6 +1008,19 @@ void app_wx_start(void)
 void app_wx_pause(bool on)
 {
     s_paused = on;
+}
+
+void app_wx_stop(void)
+{
+    s_paused = true;
+    s_die = true;
+    for (int i = 0; i < 40 && s_task; i++) vTaskDelay(pdMS_TO_TICKS(25));
+    if (s_task) {
+        ESP_LOGW(TAG, "wx task force delete");
+        vTaskDelete(s_task);
+        s_task = NULL;
+    }
+    s_die = false;
 }
 
 static void apply_city(int i)

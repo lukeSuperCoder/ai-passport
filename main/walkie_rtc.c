@@ -105,8 +105,8 @@ static const char PAGE[] =
     "const v=a+(b-a)*(x-i0);pcm[i]=Math.max(-32768,Math.min(32767,v*32767))}"
     "acc=acc.subarray(Math.floor(ratio*160));"
     "const snap={p:encS.p,i:encS.i};const ad=enc(encS,pcm);"
-    "ws.send(pack(ch,seq++&255,5,snap,ad))}}"
-    "src.connect(proc);proc.connect(ac.destination)}"
+    "ws.send(pack(ch,seq++&255,5,snap,ad))}};"
+    "src.connect(proc);proc.connect(ac.destination);}"
     "function down(e){e.preventDefault();talk=1;ptt.classList.add('on');"
     "mic().catch(err=>{micE=err&&err.message||micHint();st.textContent=micE})}"
     "function up(e){e.preventDefault();talk=0;ptt.classList.remove('on')}"
@@ -125,6 +125,7 @@ static const char PAGE[] =
     "const a=document.getElementById('hs');"
     "if(a){a.href=tlsUrl();a.textContent=tlsUrl()}"
     "micE=micHint();st.textContent=micE}"
+    "if(gum()||location.protocol==='https:')open();"
     "tick();setInterval(tick,2000);"
     "</script>";
 

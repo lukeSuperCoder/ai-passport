@@ -16,6 +16,8 @@
 #include "host/util/util.h"
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "nvs.h"
 #include "nvs_flash.h"
 #include "os/os_mbuf.h"
@@ -233,6 +235,7 @@ typedef struct {
 } ble_link_t;
 
 static bool s_inited;
+static bool s_stack;
 static volatile bsp_ble_state_t s_state;
 static char s_name[BSP_BLE_NAME_MAX + 1];
 static uint8_t s_own_addr_type;
@@ -284,6 +287,7 @@ static void set_state(bsp_ble_state_t st) {
 
 static int peer_bond_count(void) {
     int n = 0;
+    if (!s_stack) return 0;
     ble_store_util_count(BLE_STORE_OBJ_TYPE_PEER_SEC, &n);
     return n;
 }
@@ -394,6 +398,7 @@ static bool peer_connected(const ble_addr_t *id) {
 }
 
 static bool all_bonded_connected(void) {
+    if (!s_stack) return false;
     int n = 0;
     for (int i = 0; i < BSP_BLE_PEER_MAX; i++) {
         struct ble_store_key_sec key;
@@ -517,8 +522,8 @@ static void app_timer_cb(void *arg) {
 static void advertise(void);
 
 static void apply_coex_ps(void) {
-    bool perf = (s_state == BSP_BLE_PAIRING) ||
-                (s_fast_adv && ble_gap_adv_active() != 0);
+    bool perf = s_stack && ((s_state == BSP_BLE_PAIRING) ||
+                (s_fast_adv && ble_gap_adv_active() != 0));
     bsp_wifi_set_power_save(!perf);
 }
 
@@ -535,12 +540,17 @@ static bool slots_free(void) {
 }
 
 static bool can_advertise(void) {
-    if (!s_enabled || !s_want_adv || !slots_free()) return false;
+    if (!s_stack || !s_enabled || !s_want_adv || !slots_free()) return false;
     if (s_quiet && all_bonded_connected() && !s_user_adv) return false;
     return true;
 }
 
 static void advertise_if_room(void) {
+    if (!s_stack) {
+        set_state(BSP_BLE_IDLE);
+        apply_coex_ps();
+        return;
+    }
     if (s_quiet && all_bonded_connected() && !s_user_adv) {
         s_want_adv = false;
     }
@@ -586,11 +596,12 @@ static void adv_timer_cb(void *arg) {
 static void fast_timer_cb(void *arg) {
     (void)arg;
     s_fast_adv = false;
-    if (can_advertise() && ble_gap_adv_active()) advertise();
+    if (can_advertise() && s_stack && ble_gap_adv_active()) advertise();
     else apply_coex_ps();
 }
 
 static void advertise(void) {
+    if (!s_stack) return;
     const char *name = "Passport";
     uint8_t adv[31];
     uint8_t rsp[31];
@@ -1236,43 +1247,24 @@ static esp_err_t nvs_ready(void) {
     return e;
 }
 
-esp_err_t bsp_ble_init(void) {
-    if (s_inited) return ESP_OK;
-
-    esp_err_t e = nvs_ready();
-    if (e != ESP_OK) return e;
-
+static void stack_reset_links(void)
+{
     for (int i = 0; i < BLE_CONN_MAX; i++) link_reset(&s_link[i]);
-    load_ble_flags();
-    load_pnames();
+    s_app_conns = 0;
+    s_passkey = 0;
+    s_pair_confirm = false;
+    s_pair_conn = BLE_HS_CONN_HANDLE_NONE;
+    s_wait_notify = false;
+    s_notif_fresh = false;
+    s_pending_valid = false;
+    s_fast_adv = false;
+}
 
-    const esp_timer_create_args_t data_args = {
-        .callback = data_timer_cb,
-        .name = "ancs_ds",
-    };
-    const esp_timer_create_args_t disc_args = {
-        .callback = disc_timer_cb,
-        .name = "ancs_disc",
-    };
-    const esp_timer_create_args_t adv_args = {
-        .callback = adv_timer_cb,
-        .name = "ble_adv",
-    };
-    const esp_timer_create_args_t app_args = {
-        .callback = app_timer_cb,
-        .name = "ancs_app",
-    };
-    const esp_timer_create_args_t fast_args = {
-        .callback = fast_timer_cb,
-        .name = "ble_fast",
-    };
-    if (esp_timer_create(&data_args, &s_data_timer) != ESP_OK) return ESP_ERR_NO_MEM;
-    if (esp_timer_create(&disc_args, &s_disc_timer) != ESP_OK) return ESP_ERR_NO_MEM;
-    if (esp_timer_create(&adv_args, &s_adv_timer) != ESP_OK) return ESP_ERR_NO_MEM;
-    if (esp_timer_create(&app_args, &s_app_timer) != ESP_OK) return ESP_ERR_NO_MEM;
-    if (esp_timer_create(&fast_args, &s_fast_timer) != ESP_OK) return ESP_ERR_NO_MEM;
+static esp_err_t stack_start(void)
+{
+    if (s_stack) return ESP_OK;
 
-    e = nimble_port_init();
+    esp_err_t e = nimble_port_init();
     if (e != ESP_OK) {
         ESP_LOGE(TAG, "nimble_port_init %s", esp_err_to_name(e));
         return e;
@@ -1311,12 +1303,95 @@ esp_err_t bsp_ble_init(void) {
     set_state(BSP_BLE_IDLE);
 
     nimble_port_freertos_init(host_task);
-    s_inited = true;
-    ESP_LOGI(TAG, "BLE 就绪 max_conn=%d, free heap=%u largest=%u",
+    s_stack = true;
+    ESP_LOGI(TAG, "BLE 栈已启动 max_conn=%d heap=%u largest=%u",
              BLE_CONN_MAX,
              (unsigned)esp_get_free_heap_size(),
              (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
     return ESP_OK;
+}
+
+static void stack_stop(void)
+{
+    if (!s_stack) return;
+
+    s_want_adv = false;
+    s_user_adv = false;
+    if (s_adv_timer) esp_timer_stop(s_adv_timer);
+    if (s_disc_timer) esp_timer_stop(s_disc_timer);
+    if (s_fast_timer) esp_timer_stop(s_fast_timer);
+    if (s_data_timer) esp_timer_stop(s_data_timer);
+    if (s_app_timer) esp_timer_stop(s_app_timer);
+
+    ble_gap_adv_stop();
+    for (int i = 0; i < BLE_CONN_MAX; i++) {
+        if (s_link[i].conn == BLE_HS_CONN_HANDLE_NONE) continue;
+        ble_gap_terminate(s_link[i].conn, BLE_ERR_REM_USER_CONN_TERM);
+    }
+
+    int rc = nimble_port_stop();
+    if (rc != 0) ESP_LOGW(TAG, "nimble_port_stop rc=%d", rc);
+    /* host_task 在 nimble_port_run 返回后会自删,等它退出再 deinit。 */
+    vTaskDelay(pdMS_TO_TICKS(50));
+    esp_err_t e = nimble_port_deinit();
+    if (e != ESP_OK) ESP_LOGW(TAG, "nimble_port_deinit %s", esp_err_to_name(e));
+
+    stack_reset_links();
+    s_stack = false;
+    set_state(BSP_BLE_IDLE);
+    apply_coex_ps();
+    ESP_LOGI(TAG, "BLE 栈已释放 heap=%u largest=%u",
+             (unsigned)esp_get_free_heap_size(),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
+}
+
+esp_err_t bsp_ble_init(void) {
+    if (s_inited) return ESP_OK;
+
+    esp_err_t e = nvs_ready();
+    if (e != ESP_OK) return e;
+
+    for (int i = 0; i < BLE_CONN_MAX; i++) link_reset(&s_link[i]);
+    load_ble_flags();
+    load_pnames();
+
+    const esp_timer_create_args_t data_args = {
+        .callback = data_timer_cb,
+        .name = "ancs_ds",
+    };
+    const esp_timer_create_args_t disc_args = {
+        .callback = disc_timer_cb,
+        .name = "ancs_disc",
+    };
+    const esp_timer_create_args_t adv_args = {
+        .callback = adv_timer_cb,
+        .name = "ble_adv",
+    };
+    const esp_timer_create_args_t app_args = {
+        .callback = app_timer_cb,
+        .name = "ancs_app",
+    };
+    const esp_timer_create_args_t fast_args = {
+        .callback = fast_timer_cb,
+        .name = "ble_fast",
+    };
+    if (esp_timer_create(&data_args, &s_data_timer) != ESP_OK) return ESP_ERR_NO_MEM;
+    if (esp_timer_create(&disc_args, &s_disc_timer) != ESP_OK) return ESP_ERR_NO_MEM;
+    if (esp_timer_create(&adv_args, &s_adv_timer) != ESP_OK) return ESP_ERR_NO_MEM;
+    if (esp_timer_create(&app_args, &s_app_timer) != ESP_OK) return ESP_ERR_NO_MEM;
+    if (esp_timer_create(&fast_args, &s_fast_timer) != ESP_OK) return ESP_ERR_NO_MEM;
+
+    strlcpy(s_name, "Passport", sizeof(s_name));
+    set_state(BSP_BLE_IDLE);
+    s_inited = true;
+
+    if (!s_enabled) {
+        ESP_LOGI(TAG, "BLE 已关闭,跳过协议栈 heap=%u largest=%u",
+                 (unsigned)esp_get_free_heap_size(),
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
+        return ESP_OK;
+    }
+    return stack_start();
 }
 
 bsp_ble_state_t bsp_ble_state(void) {
@@ -1361,7 +1436,7 @@ esp_err_t bsp_ble_pair_reply(bool accept) {
 }
 
 esp_err_t bsp_ble_unpair(void) {
-    if (!s_inited) return ESP_ERR_INVALID_STATE;
+    if (!s_inited || !s_stack) return ESP_ERR_INVALID_STATE;
     s_wait_notify = false;
     if (s_adv_timer) esp_timer_stop(s_adv_timer);
     if (s_disc_timer) esp_timer_stop(s_disc_timer);
@@ -1388,11 +1463,11 @@ esp_err_t bsp_ble_ensure_advertising(void) {
 }
 
 bool bsp_ble_adv_active(void) {
-    return ble_gap_adv_active() != 0;
+    return s_stack && ble_gap_adv_active() != 0;
 }
 
 esp_err_t bsp_ble_set_advertising(bool on) {
-    if (!s_inited) return ESP_ERR_INVALID_STATE;
+    if (!s_inited || !s_stack) return ESP_ERR_INVALID_STATE;
     if (!s_enabled) return ESP_ERR_INVALID_STATE;
     s_want_adv = on;
     s_user_adv = on;
@@ -1416,7 +1491,7 @@ esp_err_t bsp_ble_set_advertising(bool on) {
 }
 
 esp_err_t bsp_ble_resume_advertising(void) {
-    if (!s_inited) return ESP_ERR_INVALID_STATE;
+    if (!s_inited || !s_stack) return ESP_ERR_INVALID_STATE;
     begin_connectable_adv();
     return ESP_OK;
 }
@@ -1432,28 +1507,49 @@ bool bsp_ble_enabled(void) {
     return s_enabled;
 }
 
+bool bsp_ble_stack_up(void) {
+    return s_stack;
+}
+
+esp_err_t bsp_ble_suspend(void)
+{
+    if (!s_inited) return ESP_ERR_INVALID_STATE;
+    stack_stop();
+    return ESP_OK;
+}
+
+esp_err_t bsp_ble_resume(void)
+{
+    if (!s_inited) return ESP_ERR_INVALID_STATE;
+    if (!s_enabled) return ESP_OK;
+    esp_err_t e = stack_start();
+    if (e != ESP_OK) return e;
+    s_want_adv = true;
+    s_user_adv = false;
+    arm_fast_adv();
+    advertise_if_room();
+    return ESP_OK;
+}
+
 esp_err_t bsp_ble_set_enabled(bool on) {
     if (!s_inited) return ESP_ERR_INVALID_STATE;
-    if (s_enabled == on) return ESP_OK;
+    if (s_enabled == on) {
+        if (on && !s_stack) return bsp_ble_resume();
+        if (!on && s_stack) stack_stop();
+        return ESP_OK;
+    }
     s_enabled = on;
     save_ble_flags();
     if (!on) {
-        s_wait_notify = false;
-        s_want_adv = false;
-        s_user_adv = false;
-        if (s_adv_timer) esp_timer_stop(s_adv_timer);
-        if (s_disc_timer) esp_timer_stop(s_disc_timer);
-        if (s_fast_timer) esp_timer_stop(s_fast_timer);
-        s_fast_adv = false;
-        ble_gap_adv_stop();
-        for (int i = 0; i < BLE_CONN_MAX; i++) {
-            if (s_link[i].conn == BLE_HS_CONN_HANDLE_NONE) continue;
-            ble_gap_terminate(s_link[i].conn, BLE_ERR_REM_USER_CONN_TERM);
-        }
-        set_state(BSP_BLE_IDLE);
-        apply_coex_ps();
+        stack_stop();
         ESP_LOGI(TAG, "BLE 已关闭");
         return ESP_OK;
+    }
+    esp_err_t e = stack_start();
+    if (e != ESP_OK) {
+        s_enabled = false;
+        save_ble_flags();
+        return e;
     }
     s_want_adv = true;
     s_user_adv = false;
@@ -1476,7 +1572,7 @@ esp_err_t bsp_ble_set_quiet(bool on) {
 }
 
 int bsp_ble_list_peers(bsp_ble_peer_t *out, int max) {
-    if (!out || max <= 0) return 0;
+    if (!out || max <= 0 || !s_stack) return 0;
     if (max > BSP_BLE_PEER_MAX) max = BSP_BLE_PEER_MAX;
     int count = 0;
     for (int i = 0; i < max; i++) {
@@ -1513,7 +1609,7 @@ int bsp_ble_list_peers(bsp_ble_peer_t *out, int max) {
 }
 
 esp_err_t bsp_ble_forget_at(int index) {
-    if (!s_inited || index < 0) return ESP_ERR_INVALID_ARG;
+    if (!s_inited || !s_stack || index < 0) return ESP_ERR_INVALID_ARG;
     bsp_ble_peer_t list[BSP_BLE_PEER_MAX];
     int n = bsp_ble_list_peers(list, BSP_BLE_PEER_MAX);
     if (index >= n) return ESP_ERR_NOT_FOUND;
@@ -1593,7 +1689,7 @@ esp_err_t bsp_ble_note_app_conn(int delta)
 
 esp_err_t bsp_ble_refresh_adv(void)
 {
-    if (!s_inited) return ESP_ERR_INVALID_STATE;
+    if (!s_inited || !s_stack) return ESP_ERR_INVALID_STATE;
     advertise_if_room();
     return ESP_OK;
 }
