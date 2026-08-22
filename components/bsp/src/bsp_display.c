@@ -147,3 +147,19 @@ void bsp_display_backlight(uint8_t percent) {
     ledc_set_duty(BSP_BL_LEDC_MODE, BSP_BL_LEDC_CHANNEL, duty);
     ledc_update_duty(BSP_BL_LEDC_MODE, BSP_BL_LEDC_CHANNEL);
 }
+
+void bsp_display_sleep(bool sleep) {
+    if (!s_panel) return;
+    if (sleep) {
+        esp_lcd_panel_disp_on_off(s_panel, false);
+        if (esp_lcd_panel_disp_sleep(s_panel, true) != ESP_OK && s_io) {
+            esp_lcd_panel_io_tx_param(s_io, 0x10, NULL, 0);  // SLPIN
+        }
+    } else {
+        if (esp_lcd_panel_disp_sleep(s_panel, false) != ESP_OK && s_io) {
+            esp_lcd_panel_io_tx_param(s_io, 0x11, NULL, 0);  // SLPOUT
+            vTaskDelay(pdMS_TO_TICKS(120));
+        }
+        esp_lcd_panel_disp_on_off(s_panel, true);
+    }
+}

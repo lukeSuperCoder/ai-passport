@@ -2,6 +2,8 @@
 
 English | [简体中文](README.zh_CN.md)
 
+On-device apps and settings: [English](docs/APPS.md) · [简体中文](docs/APPS.zh_CN.md)
+
 FoloToy AI Passport is open wearable AI hardware designed for AI agents. This repository is the development baseline for the device. It goes beyond showing “what the board can run” by keeping the **hardware facts, stable interfaces, resource boundaries, reference implementations, and validation methods** that an agent needs to build applications in one place.
 
 The repository is organized around the following principles:
@@ -49,12 +51,14 @@ The table below describes the application capabilities implemented by the curren
 | Input | `UP`, `DOWN`, and `OK` share an ADC resistor ladder on GPIO0 | `bsp_button_init()`, `bsp_button_read_mv()` | Callbacks run in the button component task and must not block; do not create a second ADC1 unit |
 | Audio | ES8311 with full-duplex PCM over I2S0, supporting playback and microphone capture | `bsp_audio_*` | PCM reads and writes block and belong in a worker task; format changes must retain the BSP close/open sequence |
 | Battery | CW2017 state-of-charge and voltage readings | `bsp_battery_*` | This capability is optional at runtime; accuracy depends on the cell and battery profile and is not equivalent to a calibrated result |
+| Wi-Fi | 2.4 GHz STA: scan, join, NVS-backed auto-reconnect | `bsp_wifi_*` | STA only (SoftAP is compiled out); scan and join are started from a worker task; credentials are stored in NVS after a successful IP lease; RF range and coexistence are board-specific and must be measured |
+| BLE / ANCS | NimBLE peripheral + Apple Notification Center client | `bsp_ble_*` | Two concurrent connections and up to 6 bonds; ANCS is iPhone-only; pair and enable “Share Notifications”; keyword matching runs on the device; UI can show CJK via a 12px fallback font; RF range and Wi-Fi coexistence must be measured |
 | Shared bus | ES8311 and CW2017 share I2C0 | `bsp_i2c_*` | Every device must reuse the bus owned by the BSP; do not create another bus on the same port for scanning or a new device |
 | Logging and flashing | Native ESP32-C3 USB Serial/JTAG | ESP-IDF console | GPIO18/19 are reserved for USB; the default UART0 TX on GPIO21 conflicts with the backlight |
 
 All pins, addresses, panel parameters, and button voltage windows are defined only in [`components/bsp/include/bsp_pins.h`](components/bsp/include/bsp_pins.h). Application code must not duplicate these constants. See the [AI Hardware Development Guide](docs/AI_HARDWARE_DEVELOPMENT_GUIDE.md) for the complete pin map, panel initialization, ADC thresholds, I2C addressing rules, audio clocks, and memory details.
 
-Applications may also use ESP-IDF timers, FreeRTOS tasks, and internal Flash/NVS; the Pomodoro branch contains an NVS example. The ESP32-C3 supports 2.4 GHz Wi-Fi and Bluetooth LE, but the current BSP does not wrap either radio and `main` does not initialize a wireless stack. `demo/claude-buddy-port` is a BLE application architecture reference, not a substitute for measuring the current board's antenna, RF performance, power consumption, and coexistence behavior. Every FoloToy AI Passport has 8 MB of Flash, and the default firmware configuration targets 8 MB.
+Applications may also use ESP-IDF timers, FreeRTOS tasks, and internal Flash/NVS; the Pomodoro branch contains an additional NVS example. The BSP wraps 2.4 GHz Wi-Fi STA through `bsp_wifi_*` and BLE ANCS through `bsp_ble_*`. Classic Bluetooth is not available on ESP32-C3. `demo/claude-buddy-port` remains a BLE application-architecture reference, not a substitute for measuring this board's antenna, RF performance, power consumption, and Wi-Fi coexistence. Every FoloToy AI Passport has 8 MB of Flash, and the default firmware configuration targets 8 MB.
 
 ### Capabilities outside the current contract
 
@@ -156,13 +160,28 @@ idf.py flash monitor
 
 The first build uses ESP-IDF Component Manager to fetch LVGL, `esp_lvgl_port`, `button`, `esp_codec_dev`, and other dependencies. Do not edit the generated `managed_components/` directory. If configuration state is stale, use `idf.py fullclean` and configure again, but never use it to clean user source changes.
 
-The current baseline includes a pure-logic test that can run independently:
+The current baseline includes pure-logic tests that can run independently:
 
 ```bash
 cc -std=c11 -Wall -Wextra -Werror -Imain \
   tests/test_ui_pixel_math.c main/ui_pixel_math.c \
   -o /tmp/test_ui_pixel_math
 /tmp/test_ui_pixel_math
+
+cc -std=c11 -Wall -Wextra -Werror -Imain \
+  tests/test_ble_filter.c main/ble_filter.c \
+  -o /tmp/test_ble_filter
+/tmp/test_ble_filter
+
+cc -std=c11 -Wall -Wextra -Werror -Imain \
+  tests/test_app_i18n.c main/app_i18n.c \
+  -o /tmp/test_app_i18n
+/tmp/test_app_i18n
+
+cc -std=c11 -Wall -Wextra -Werror -Imain \
+  tests/test_walkie_codec.c main/walkie_codec.c \
+  -o /tmp/test_walkie_codec
+/tmp/test_walkie_codec
 ```
 
 Different example branches may provide their own host-test commands; follow the README on that branch.
@@ -176,6 +195,9 @@ Different example branches may provide their own host-test commands; follow the 
 - `UP`, `DOWN`, and `OK` produce the intended events, and long `OK` returns correctly.
 - Audio sample rate, playback, non-zero recording, and page exit behavior are correct.
 - Battery readings are plausible, and the application degrades safely when the CW2017 is absent.
+- Wi-Fi page can scan, join a network, survive reboot with saved credentials, and forget the network.
+- BLE page can advertise, pair with an iPhone and one additional host (Mac or another Passport, 2 links at a time), receive ANCS notifications, and show keyword-matched SMS (or the extracted code).
+- Walkie page can start WebRTC/Wi-Fi or Bluetooth mode, hold UP to talk, and stop with OK; two devices on the same channel hear each other. Phones on the same LAN can open `http://<ip>:8080/` from the QR page (plain HTTP; do not use port 80). Mic pages `/w` and `/rtc` redirect to `https://<ip>:8443/` (accept the self-signed cert). Do not use WeChat's in-app browser — open in Safari or Chrome. Passport is signaling only.
 - Repeated page transitions and concurrent operations do not continuously leak tasks, objects, or heap.
 
 An agent's final delivery must distinguish these outcomes:
@@ -193,10 +215,12 @@ See the [AI Hardware Development Guide](docs/AI_HARDWARE_DEVELOPMENT_GUIDE.md) f
 
 ```text
 components/bsp/include/  Public BSP APIs and bsp_pins.h hardware facts
-components/bsp/src/      Display, button, audio, battery, and shared-I2C implementations
+components/bsp/src/      Display, button, audio, battery, Wi-Fi, BLE, and shared-I2C implementations
 main/                    Minimal menu, LVGL UI, and independent hardware demo pages
 tests/                   Lightweight logic tests that can run without hardware
-docs/                    Agent hardware development guide and extension documentation
-sdkconfig.defaults       ESP32-C3, USB console, Flash, and LVGL defaults
+docs/                    Agent hardware guide, on-device app/settings notes, and extension docs
+docs/APPS.md             Home apps, Settings pages, and NVS keys
+sdkconfig.defaults       ESP32-C3, USB console, Flash, LVGL, Wi-Fi STA, NimBLE defaults
+partitions.csv           8 MB Flash layout with a 3 MB factory app slot
 AGENTS.md                Coding, validation, and contribution rules for agents
 ```

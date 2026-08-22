@@ -63,12 +63,20 @@ static esp_err_t i2s_full_duplex_init(void) {
     if ((e = i2s_channel_init_std_mode(s_rx, &std)) != ESP_OK) {
         ESP_LOGE(TAG, "i2s rx 初始化失败: %s", esp_err_to_name(e)); return e;
     }
-    // esp_codec_dev_open 内部重配前会先 i2s_channel_disable,而 disable 要求通道处于
-    // RUNNING;刚 init 的通道是 READY,会打一条 "channel has not been enabled yet" 错误日志。
-    // 这里先 enable 一次让那次 disable 合法(此时 codec 未配,不出声)。
-    i2s_channel_enable(s_tx);
-    i2s_channel_enable(s_rx);
+    // 通道保持 READY,不在开机时 enable:enable 会打出 MCLK,空闲也耗电。
+    // open 前由 i2s_run() 补上,因为 esp_codec_dev_open 内部会先 disable,
+    // disable 要求通道处于 RUNNING。
     return ESP_OK;
+}
+
+static void i2s_run(void) {
+    if (s_tx) i2s_channel_enable(s_tx);
+    if (s_rx) i2s_channel_enable(s_rx);
+}
+
+static void i2s_halt(void) {
+    if (s_tx) i2s_channel_disable(s_tx);
+    if (s_rx) i2s_channel_disable(s_rx);
 }
 
 esp_err_t bsp_audio_init(void) {
@@ -129,11 +137,9 @@ esp_err_t bsp_audio_set_format(uint32_t hz, uint8_t bits, uint8_t ch) {
     if (s_opened) {
         esp_codec_dev_close(s_dev);
         s_opened = false;
-        // close 把 I2S 通道退回 READY,而接下来的 open 内部又会 disable 一次 →
-        // 会打 "channel has not been enabled yet"。补一次 enable 让它合法。
-        if (s_tx) i2s_channel_enable(s_tx);
-        if (s_rx) i2s_channel_enable(s_rx);
     }
+    // close / 初次打开前通道可能是 READY。open 内部会 disable,必须先 enable。
+    i2s_run();
 
     esp_codec_dev_sample_info_t fs = {
         .bits_per_sample = bits,
@@ -167,4 +173,16 @@ esp_err_t bsp_audio_read(void *pcm, size_t bytes) {
 
 void bsp_audio_set_volume(uint8_t percent) {
     if (s_dev) esp_codec_dev_set_out_vol(s_dev, percent);
+}
+
+void bsp_audio_standby(void) {
+    if (!s_dev) return;
+    if (s_opened) {
+        esp_codec_dev_close(s_dev);
+        s_opened = false;
+        s_hz = 0;
+        s_bits = 0;
+        s_ch = 0;
+    }
+    i2s_halt();
 }
