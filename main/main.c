@@ -9,6 +9,7 @@
 #include "bsp_battery.h"
 #include "bsp_wifi.h"
 #include "bsp_ble.h"
+#include "bsp_pm.h"
 #include "app_web.h"
 #include "bsp_pins.h"
 #include "walkie_ble.h"
@@ -66,6 +67,7 @@ void app_main(void)
     app_prefs_apply_display();
     app_time_init();
     app_tone_start();
+    bsp_pm_init();
 
     if (bsp_lvgl_lock(1000)) {
         app_shell_start();

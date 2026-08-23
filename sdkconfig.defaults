@@ -25,8 +25,21 @@ CONFIG_LV_THEME_DEFAULT_GROW=n
 CONFIG_LV_MEM_SIZE_KILOBYTES=24
 
 # --- 系统 ---
-# 100Hz 足够按键与 UI;1000Hz 空闲时白白增加 tick 中断。
-CONFIG_FREERTOS_HZ=100
+# tickless idle 会在浅睡时停掉 tick。1000Hz 只影响唤醒后的调度粒度,
+# 让 IDLE_TIME_BEFORE_SLEEP=3 变成 3ms,BLE 连接事件之间才进得去浅睡。
+CONFIG_FREERTOS_HZ=1000
+# 息屏后自动 Light Sleep + BLE Modem Sleep,保 ANCS;按键/通知再醒。
+# 板载 32kHz 晶振未证实,BLE 浅睡时钟用主晶振,并在浅睡时给主晶振上电。
+CONFIG_PM_ENABLE=y
+CONFIG_PM_DFS_INIT_AUTO=n
+CONFIG_FREERTOS_USE_TICKLESS_IDLE=y
+CONFIG_FREERTOS_IDLE_TIME_BEFORE_SLEEP=3
+CONFIG_BT_CTRL_MODEM_SLEEP=y
+CONFIG_BT_CTRL_MODEM_SLEEP_MODE_1=y
+CONFIG_BT_CTRL_LPCLK_SEL_MAIN_XTAL=y
+CONFIG_BT_CTRL_MAIN_XTAL_PU_DURING_LIGHT_SLEEP=y
+# 浅睡关 MAC/BB,大约多占 2~5KB RAM,换更低射频漏电。
+CONFIG_ESP_PHY_MAC_BB_PD=y
 # 开机要在主任务里建主页并排 CJK 字形,默认 3584 会溢出导致黑屏复位。
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
 # 按键回调跑在 esp_timer 任务;切语言/刷中文标签需要比默认更大的栈。

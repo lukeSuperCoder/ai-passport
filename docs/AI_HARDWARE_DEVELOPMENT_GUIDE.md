@@ -30,7 +30,7 @@ AI 应先完成以下检查：
 | BLE | NimBLE 外设 + ANCS 客户端 | 内部射频，与 Wi-Fi 共存 | 已实现 |
 | 日志 | USB Serial/JTAG | 原生 USB GPIO18/19 | 已配置 |
 
-仓库没有提供原理图、PCB、BOM、电池型号、充电芯片信息、LCD TE 引脚或板卡修订号。因此不能据此声称支持充电控制、USB 检测、休眠唤醒、屏幕读回、触摸或其他未在代码中出现的能力。
+仓库没有提供原理图、PCB、BOM、电池型号、充电芯片信息、LCD TE 引脚或板卡修订号。因此不能据此声称支持充电控制、USB 检测、深度睡眠唤醒、屏幕读回、触摸或其他未在代码中出现的能力。息屏路径已实现自动 Light Sleep（保 BLE / ANCS），但板载 32 kHz 晶振、USB 插入时是否挡浅睡、以及待机电流都尚未实测。
 
 ## 3. 完整引脚表
 
@@ -38,7 +38,7 @@ AI 应先完成以下检查：
 
 | GPIO | 功能 | 方向/外设 | 重要说明 |
 | ---: | --- | --- | --- |
-| 0 | 三键公共 ADC 节点 | ADC1_CH0 输入 | 外部 10 kΩ 上拉；也是启动相关管脚，硬件改动前需核对 ESP32-C3 strapping 要求 |
+| 0 | 三键公共 ADC 节点 | ADC1_CH0 输入；息屏时切 GPIO 输入 | 外部 10 kΩ 上拉；也是启动相关管脚。息屏后停 ADC 扫描，用低电平唤醒浅睡，唤醒后再切回 ADC 分辨三键 |
 | 1 | LCD CS | SPI 输出 | ST7789P3 片选 |
 | 2 | I2S DOUT | 输出 | MCU → ES8311，播放数据 |
 | 3 | I2S WS | 输出 | MCU 为 I2S master |
@@ -68,6 +68,7 @@ app_main
   ├─ bsp_battery_init
   ├─ bsp_wifi_init（若有已存凭据则后台自动连接）
   ├─ bsp_ble_init（广播 Passport-XXXX，等待 iPhone 配对）
+  ├─ bsp_pm_init（DFS；息屏后才开自动 Light Sleep）
   └─ LVGL menu
        ├─ Display demo
        ├─ Button demo
@@ -88,6 +89,7 @@ app_main
 - `bsp_battery.h`：SOC 与电压。
 - `bsp_wifi.h`：STA 扫描、连接、NVS 记忆、开机自动重连。
 - `bsp_ble.h`：BLE 广播、配对、ANCS 通知。
+- `bsp_pm.h`：DFS 与息屏自动 Light Sleep（保 BLE，不是 Deep Sleep）。
 - `bsp_pins.h`：硬件常量，不承载业务逻辑。
 
 `main` 里的对讲机（Walkie）用 8 kHz IMA ADPCM 半双工：Wi-Fi 模式在局域网 UDP 广播，并给浏览器提供 `/w` WebSocket 页（设备音频）；蓝牙模式走自定义 GATT。浏览器互通则走 `/rtc`：设备只做 WebSocket 信令，两端用 RTCPeerConnection。`getUserMedia` 要求安全源，所以 `/rtc` 与 `/w` 会 302 到 `https://<ip>:8443` 自签证书（微信内置浏览器除外）。TLS 不占 443，扫码首页用 `http://<ip>:8080/`，避免浏览器把局域网 IP 升到 HTTPS 后卡在证书页。ESP32-C3 没有经典蓝牙，也装不下带 DTLS-SRTP 的完整 WebRTC 栈。

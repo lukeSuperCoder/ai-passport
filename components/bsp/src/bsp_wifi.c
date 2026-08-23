@@ -32,6 +32,8 @@ static bool s_auto = true;
 static bool s_started;
 static bool s_ps = true;
 static int s_ps_hold;
+static bool s_radio_held;
+static bool s_resume_connect;
 static char s_ssid[BSP_WIFI_SSID_MAX + 1];
 static char s_pass[BSP_WIFI_PASS_MAX + 1];
 static SemaphoreHandle_t s_mu;
@@ -438,6 +440,11 @@ esp_err_t bsp_wifi_set_enabled(bool on) {
             s_state = BSP_WIFI_CONNECTING;
             apply_sta_config();
         }
+        if (s_radio_held) {
+            s_resume_connect = s_want_connect;
+            ESP_LOGI(TAG, "WiFi 已开启(射频暂停中,按键唤醒后上电)");
+            return ESP_OK;
+        }
         esp_err_t e = esp_wifi_start();
         if (e != ESP_OK && e != ESP_ERR_INVALID_STATE) {
             ESP_LOGE(TAG, "wifi start: %s", esp_err_to_name(e));
@@ -503,4 +510,44 @@ void bsp_wifi_ps_release(void)
     if (s_ps_hold > 0) s_ps_hold--;
     unlock();
     apply_ps();
+}
+
+esp_err_t bsp_wifi_radio_suspend(void)
+{
+    if (!s_inited) return ESP_ERR_INVALID_STATE;
+    if (s_radio_held) return ESP_OK;
+    s_radio_held = true;
+    s_resume_connect = s_want_connect;
+    if (!s_started) return ESP_OK;
+    s_want_connect = false;
+    s_state = BSP_WIFI_IDLE;
+    esp_wifi_disconnect();
+    esp_wifi_stop();
+    s_started = false;
+    ESP_LOGI(TAG, "WiFi 射频暂停(息屏)");
+    return ESP_OK;
+}
+
+esp_err_t bsp_wifi_radio_resume(void)
+{
+    if (!s_inited) return ESP_ERR_INVALID_STATE;
+    if (!s_radio_held) return ESP_OK;
+    s_radio_held = false;
+    if (!s_enabled) return ESP_OK;
+    if (s_resume_connect && s_ssid[0]) {
+        s_want_connect = true;
+        s_auth_fails = 0;
+        s_state = BSP_WIFI_CONNECTING;
+        apply_sta_config();
+    }
+    esp_err_t e = esp_wifi_start();
+    if (e != ESP_OK && e != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "wifi resume start: %s", esp_err_to_name(e));
+        return e;
+    }
+    s_started = true;
+    apply_ps();
+    if (s_want_connect) esp_wifi_connect();
+    ESP_LOGI(TAG, "WiFi 射频恢复");
+    return ESP_OK;
 }

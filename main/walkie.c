@@ -52,6 +52,7 @@ static int16_t s_pcm[WALKIE_SAMPLES];
 static int16_t s_out[WALKIE_SAMPLES];
 static int16_t s_raw[CODEC_N];
 static uint8_t s_adp[WALKIE_ADPCM_N];
+static int s_dc_x, s_dc_y;
 
 static uint32_t now_ms(void)
 {
@@ -179,12 +180,38 @@ static bool codec_open(void)
     return true;
 }
 
+static int16_t dc_block(int16_t x)
+{
+    /* y = x - x1 + 0.996 y1,去掉麦头直流,不然 ADPCM 台阶被偏置吃掉、底噪变大。 */
+    int y = (int)x - s_dc_x + ((s_dc_y * 255) >> 8);
+    s_dc_x = x;
+    if (y > 32767) y = 32767;
+    if (y < -32768) y = -32768;
+    s_dc_y = y;
+    return (int16_t)y;
+}
+
 static void down_pcm(void)
 {
+    int prev = s_raw[0];
     for (int i = 0; i < WALKIE_SAMPLES; i++) {
-        int a = s_raw[i * 2];
-        int b = s_raw[i * 2 + 1];
-        s_pcm[i] = (int16_t)((a + b) / 2);
+        int a = prev;
+        int b = s_raw[i * 2];
+        int c = s_raw[i * 2 + 1];
+        prev = c;
+        s_pcm[i] = dc_block((int16_t)((a + b + b + c) >> 2));
+    }
+}
+
+static void gate_pcm(void)
+{
+    int64_t e = 0;
+    for (int i = 0; i < WALKIE_SAMPLES; i++) {
+        int v = s_pcm[i];
+        e += (int64_t)v * v;
+    }
+    if (e < (int64_t)480 * 480 * WALKIE_SAMPLES) {
+        memset(s_pcm, 0, sizeof(s_pcm));
     }
 }
 
@@ -192,8 +219,10 @@ static void up_pcm(int n)
 {
     if (n > WALKIE_SAMPLES) n = WALKIE_SAMPLES;
     for (int i = 0; i < n; i++) {
-        s_raw[i * 2] = s_out[i];
-        s_raw[i * 2 + 1] = s_out[i];
+        int a = s_out[i];
+        int b = (i + 1 < n) ? s_out[i + 1] : a;
+        s_raw[i * 2] = (int16_t)a;
+        s_raw[i * 2 + 1] = (int16_t)((a + b) / 2);
     }
     for (int i = n * 2; i < CODEC_N; i++) s_raw[i] = 0;
 }
@@ -204,6 +233,7 @@ static void audio_task(void *arg)
     walkie_adpcm_t enc, dec;
     walkie_adpcm_init(&enc);
     walkie_adpcm_init(&dec);
+    s_dc_x = s_dc_y = 0;
     int hello = 0;
 
     esp_err_t te = ESP_OK;
@@ -245,7 +275,9 @@ static void audio_task(void *arg)
         down_pcm();
         if (s_mode == WALKIE_MODE_WEBRTC) walkie_rtc_poll();
 
+        memset(s_out, 0, sizeof(s_out));
         if (s_ptt) {
+            gate_pcm();
             walkie_adpcm_t snap = enc;
             walkie_adpcm_encode(&enc, s_pcm, WALKIE_SAMPLES, s_adp);
             send_frame(WALKIE_F_AUDIO | WALKIE_F_PTT, s_adp, WALKIE_ADPCM_N, &snap);
@@ -257,12 +289,9 @@ static void audio_task(void *arg)
                 int pn = 0;
                 if (walkie_unpack(pkt.data, pkt.n, &m, &payload, &pn) && pn > 0) {
                     walkie_adpcm_t st = { .pred = m.pred, .index = m.index };
-                    memset(s_out, 0, sizeof(s_out));
                     int samples = pn * 2;
                     if (samples > WALKIE_SAMPLES) samples = WALKIE_SAMPLES;
                     walkie_adpcm_decode(&st, payload, pn, s_out);
-                    up_pcm(samples);
-                    bsp_audio_write(s_raw, sizeof(s_raw));
                     s_rx_ms = now_ms();
                 }
             }
@@ -271,6 +300,9 @@ static void audio_task(void *arg)
                 send_hello();
             }
         }
+        /* I2S TX 一直要喂。只在有包时 write 会欠载,喇叭出现咔嗒和底噪。 */
+        up_pcm(WALKIE_SAMPLES);
+        bsp_audio_write(s_raw, sizeof(s_raw));
     }
     s_task = NULL;
     vTaskDelete(NULL);

@@ -8,11 +8,16 @@
 #include "bsp_battery.h"
 #include "bsp_ble.h"
 #include "bsp_display.h"
+#include "bsp_pm.h"
 #include "bsp_wifi.h"
+#include "esp_event.h"
 #include "ui_pixel.h"
 #include "walkie.h"
 
 #define STACK_MAX 8
+
+ESP_EVENT_DEFINE_BASE(APP_SHELL_EVENT);
+#define APP_SHELL_BLE_WAKE 1
 
 typedef struct {
     app_enter_fn enter;
@@ -24,7 +29,7 @@ static lv_obj_t *s_scr, *s_main, *s_clock, *s_batt, *s_ico_bt, *s_ico_wf;
 static lv_timer_t *s_timer, *s_home_lock_timer;
 static page_t s_stack[STACK_MAX];
 static int s_sp = -1;
-static bool s_asleep;
+static volatile bool s_asleep;
 static bool s_lock_skip;
 static uint32_t s_idle_ms;
 static int s_seen_soc = -2;
@@ -141,7 +146,10 @@ static void sleep_now(void)
     bsp_display_sleep(true);
     bsp_audio_standby();
     app_wx_pause(true);
-    if (s_timer) lv_timer_set_period(s_timer, 1000);
+    bsp_wifi_radio_suspend();
+    bsp_button_sleep_gpio(true);
+    bsp_lvgl_tick_enable(false);
+    bsp_pm_set_sleeping(true);
 }
 
 void app_shell_wake(void)
@@ -149,6 +157,9 @@ void app_shell_wake(void)
     s_idle_ms = 0;
     if (!s_asleep) return;
     s_asleep = false;
+    bsp_pm_set_sleeping(false);
+    bsp_button_sleep_gpio(false);
+    bsp_lvgl_tick_enable(true);
     app_wx_pause(false);
     if (app_prefs()->lock_on || app_lock_visible()) {
         if (!app_lock_visible()) app_lock_show();
@@ -263,17 +274,51 @@ static bool on_home(void)
     return s_sp <= 0;
 }
 
+static void wifi_bringup(void)
+{
+    bsp_wifi_radio_resume();
+}
+
+static void on_gpio_wake(void)
+{
+    if (!bsp_lvgl_lock(1000)) return;
+    s_lock_skip = true;
+    app_shell_wake();
+    wifi_bringup();
+    bsp_lvgl_unlock();
+}
+
+static void on_shell_evt(void *h, esp_event_base_t b, int32_t id, void *d)
+{
+    (void)h;
+    (void)b;
+    (void)id;
+    (void)d;
+    if (!bsp_lvgl_lock(1000)) return;
+    app_shell_wake();
+    app_notif_poll();
+    bsp_lvgl_unlock();
+}
+
+static void on_ble_activity(void)
+{
+    if (!app_shell_asleep()) return;
+    esp_event_post(APP_SHELL_EVENT, APP_SHELL_BLE_WAKE, NULL, 0, 0);
+}
+
 void app_shell_on_key(bsp_btn_t btn, bsp_btn_ev_t ev)
 {
     if (s_asleep) {
         home_lock_cancel();
         if (ev == BSP_BTN_PRESS || ev == BSP_BTN_CLICK) {
             app_shell_wake();
+            wifi_bringup();
             s_lock_skip = true;
         }
         return;
     }
     s_idle_ms = 0;
+    wifi_bringup();
 
     if (btn == BSP_BTN_OK && ev == BSP_BTN_PRESS && on_home() &&
         !app_lock_visible()) {
@@ -366,6 +411,9 @@ void app_shell_start(void)
     s_sp = -1;
     s_asleep = false;
     s_idle_ms = 0;
+    bsp_button_set_wake_cb(on_gpio_wake);
+    bsp_ble_set_activity_cb(on_ble_activity);
+    esp_event_handler_register(APP_SHELL_EVENT, APP_SHELL_BLE_WAKE, on_shell_evt, NULL);
     app_shell_open(app_home_enter, app_home_exit, app_home_key);
     header_refresh();
     s_timer = lv_timer_create(tick, 250, NULL);

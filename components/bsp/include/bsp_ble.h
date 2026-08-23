@@ -77,6 +77,9 @@ esp_err_t bsp_ble_resume_advertising(void);
 // 若有尚未取走的完整通知,拷到 out 并返回 true。
 bool bsp_ble_take_notif(bsp_ble_notif_t *out);
 
+// 完整 ANCS 或进入配对时调用。在 NimBLE host 任务,禁止直接操作 LVGL。
+void bsp_ble_set_activity_cb(void (*cb)(void));
+
 // 射频/广播开关。关闭后停止广播、断开,并释放 NimBLE 主机/控制器堆。
 // 未开启时图标应隐藏。关射频不会清绑定。
 bool bsp_ble_enabled(void);

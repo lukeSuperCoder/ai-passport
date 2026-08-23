@@ -9,6 +9,9 @@ static lv_font_t s_font_20;
 static lv_font_t s_cjk_title;
 static bool s_fonts_ready;
 
+/* 点阵放大共用暂存。LVGL 单线程绘制,CJK 2x 与时钟 4x 不会重入。 */
+static uint8_t s_scale_src[64 * 24];
+
 /* 12px 点阵放大一倍给 20px 标题用。必须返回 lv_draw_buf_t*,不能返回像素指针,
  * 否则 LVGL9 会把像素当 draw_buf 解引用 → 黑屏。内层 bitmap 也必须走
  * lv_font_cjk_12(fmt_txt),不能再指向 s_cjk_title,否则递归。 */
@@ -39,12 +42,11 @@ static const void *cjk_title_bitmap(lv_font_glyph_dsc_t *g_dsc, lv_draw_buf_t *d
     uint16_t sw = (uint16_t)(g_dsc->box_w / 2);
     uint16_t sh = (uint16_t)(g_dsc->box_h / 2);
     uint32_t stride_in = lv_draw_buf_width_to_stride(sw, LV_COLOR_FORMAT_A8);
-    static uint8_t src_mem[64 * 24];
-    if (stride_in == 0 || (uint32_t)sh * stride_in > sizeof(src_mem)) return NULL;
+    if (stride_in == 0 || (uint32_t)sh * stride_in > sizeof(s_scale_src)) return NULL;
 
     lv_draw_buf_t src_buf;
     if (lv_draw_buf_init(&src_buf, sw, sh, LV_COLOR_FORMAT_A8,
-                         stride_in, src_mem, sizeof(src_mem)) != LV_RESULT_OK) {
+                         stride_in, s_scale_src, sizeof(s_scale_src)) != LV_RESULT_OK) {
         return NULL;
     }
 
@@ -72,6 +74,107 @@ static const void *cjk_title_bitmap(lv_font_glyph_dsc_t *g_dsc, lv_draw_buf_t *d
         for (uint16_t x = 0; x < g_dsc->box_w; x++) dst[x] = row[x / 2];
     }
     return draw_buf;
+}
+
+#define CLOCK_SCALE 4
+
+static int clock4x_advance(uint32_t letter, uint32_t next)
+{
+    lv_font_glyph_dsc_t dsc;
+    if (!lv_font_montserrat_20.get_glyph_dsc(&lv_font_montserrat_20, &dsc, letter, next)) {
+        return 8 * CLOCK_SCALE;
+    }
+    return (int)dsc.adv_w * CLOCK_SCALE;
+}
+
+void ui_pixel_draw_clock4x(lv_layer_t *layer, const char *txt, const lv_area_t *box,
+                           uint32_t color)
+{
+    if (!layer || !txt || !txt[0] || !box) return;
+
+    int text_w = 0;
+    for (const char *p = txt; *p; p++) {
+        text_w += clock4x_advance((uint8_t)*p, (uint8_t)p[1]);
+    }
+    int box_w = (int)lv_area_get_width(box);
+    int pen = box->x1;
+    if (box_w > text_w) pen += (box_w - text_w) / 2;
+    const int y = box->y1;
+    const int line_h = lv_font_montserrat_20.line_height;
+    const int base = lv_font_montserrat_20.base_line;
+
+    lv_draw_rect_dsc_t rd;
+    lv_draw_rect_dsc_init(&rd);
+    rd.bg_color = lv_color_hex(color);
+    rd.radius = 0;
+    rd.border_width = 0;
+    rd.outline_width = 0;
+    rd.shadow_width = 0;
+
+    for (const char *p = txt; *p; p++) {
+        uint32_t letter = (uint8_t)*p;
+        uint32_t next = (uint8_t)p[1];
+        lv_font_glyph_dsc_t dsc;
+        if (!lv_font_montserrat_20.get_glyph_dsc(&lv_font_montserrat_20, &dsc,
+                                                 letter, next) ||
+            !dsc.gid.index) {
+            pen += clock4x_advance(letter, next);
+            continue;
+        }
+
+        uint16_t sw = dsc.box_w;
+        uint16_t sh = dsc.box_h;
+        uint32_t stride = lv_draw_buf_width_to_stride(sw, LV_COLOR_FORMAT_A8);
+        if (stride == 0 || (uint32_t)sh * stride > sizeof(s_scale_src)) {
+            pen += (int)dsc.adv_w * CLOCK_SCALE;
+            continue;
+        }
+
+        lv_draw_buf_t src_buf;
+        if (lv_draw_buf_init(&src_buf, sw, sh, LV_COLOR_FORMAT_A8,
+                             stride, s_scale_src, sizeof(s_scale_src)) != LV_RESULT_OK) {
+            pen += (int)dsc.adv_w * CLOCK_SCALE;
+            continue;
+        }
+        dsc.resolved_font = &lv_font_montserrat_20;
+        dsc.req_raw_bitmap = 0;
+        dsc.stride = 0;
+        dsc.format = LV_FONT_GLYPH_FORMAT_A8;
+        if (!lv_font_montserrat_20.get_glyph_bitmap(&dsc, &src_buf)) {
+            pen += (int)dsc.adv_w * CLOCK_SCALE;
+            continue;
+        }
+
+        int gx = pen + dsc.ofs_x * CLOCK_SCALE;
+        int gy = y + (line_h - base - dsc.box_h - dsc.ofs_y) * CLOCK_SCALE;
+        const uint8_t *in = src_buf.data;
+        for (uint16_t sy = 0; sy < sh; sy++) {
+            const uint8_t *row = in + sy * stride;
+            int run = -1;
+            uint8_t run_a = 0;
+            for (int sx = 0; sx <= (int)sw; sx++) {
+                uint8_t a = (sx < (int)sw) ? row[sx] : 0;
+                if (a < 24) a = 0;
+                if (a && run < 0) {
+                    run = sx;
+                    run_a = a;
+                } else if (run >= 0 &&
+                           (a == 0 || a + 48 < run_a || run_a + 48 < a)) {
+                    rd.bg_opa = run_a;
+                    lv_area_t ar = {
+                        .x1 = gx + run * CLOCK_SCALE,
+                        .y1 = gy + sy * CLOCK_SCALE,
+                        .x2 = gx + sx * CLOCK_SCALE - 1,
+                        .y2 = gy + (sy + 1) * CLOCK_SCALE - 1,
+                    };
+                    lv_draw_rect(layer, &rd, &ar);
+                    run = a ? sx : -1;
+                    run_a = a;
+                }
+            }
+        }
+        pen += (int)dsc.adv_w * CLOCK_SCALE;
+    }
 }
 
 void ui_pixel_fonts_init(void)

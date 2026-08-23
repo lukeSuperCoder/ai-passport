@@ -199,7 +199,7 @@ TOTP and the lock-screen clock use this clock. NTP on/off and the server index p
 | Item | Values | Default | Notes |
 | --- | --- | --- | --- |
 | Brightness | 10%–100% in steps of 10 | 50% | Applied immediately |
-| Sleep | never / 15s / 30s / 60s / 120s | 30s | Turns the backlight off and sleeps the panel. Walkie, notification overlays, and web input reset the idle timer |
+| Sleep | never / 15s / 30s / 60s / 120s | 30s | Backlight off, panel sleep, Wi-Fi radio off, automatic light sleep while BLE stays up. ANCS can wake the display without bringing Wi-Fi back; a keypress reconnects Wi-Fi if it is enabled. Walkie, notification overlays, and web input reset the idle timer. |
 | Lock | ON / OFF | ON | After sleep or long `OK` on Home: date, large clock, weather, battery |
 | Stay lit | ON / OFF | OFF | Keep the backlight on while locked |
 

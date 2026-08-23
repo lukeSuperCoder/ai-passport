@@ -33,6 +33,6 @@ idf_component_register(
          "fonts/lv_font_cjk_12.c"
     INCLUDE_DIRS "."
     REQUIRES bsp nvs_flash esp_netif lwip esp_http_server esp_https_server
-             esp_app_format spi_flash driver bt
+             esp_app_format spi_flash driver bt esp_event
     EMBED_TXTFILES "certs/servercert.pem" "certs/prvtkey.pem"
 )

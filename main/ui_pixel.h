@@ -31,5 +31,9 @@ void ui_pixel_fonts_init(void);
 const lv_font_t *ui_pixel_font_14(void);
 const lv_font_t *ui_pixel_font_20(void);
 
+/* 锁屏时钟:Montserrat 20 近邻放大 4 倍,不向 LVGL 池申请 80px A8 字形缓冲。 */
+void ui_pixel_draw_clock4x(lv_layer_t *layer, const char *txt, const lv_area_t *box,
+                           uint32_t color);
+
 // 按完整 UTF-8 码点拷贝,避免中文 SSID 被截断成非法序列。
 void ui_pixel_utf8_copy(char *dst, size_t dst_n, const char *src);

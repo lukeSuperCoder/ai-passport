@@ -69,3 +69,7 @@ esp_err_t bsp_wifi_set_power_save(bool on);
 // 嵌套:天气 HTTP 拉取期间强制 WIFI_PS_NONE,避免 BLE 把省电又打开导致收包失败。
 void bsp_wifi_ps_hold(void);
 void bsp_wifi_ps_release(void);
+
+// 息屏时停射频,不改 NVS 开关。只在按键唤醒后 resume,ANCS 亮屏不重连。
+esp_err_t bsp_wifi_radio_suspend(void);
+esp_err_t bsp_wifi_radio_resume(void);

@@ -164,6 +164,7 @@ static int iv_index(uint16_t m)
 static lv_obj_t *pix(lv_obj_t *p, int x, int y, int w, int h, uint32_t c)
 {
     lv_obj_t *o = lv_obj_create(p);
+    if (!o) return NULL;
     ui_pixel_strip_theme(o);
     lv_obj_set_pos(o, x, y);
     lv_obj_set_size(o, w, h);
@@ -1059,7 +1060,7 @@ bool app_wx_lock_line(char *out, size_t n)
     if (!cname[0]) cname = app_str(APP_STR_WX);
 
     wx_snap_t snap;
-    xSemaphoreTake(s_mu, portMAX_DELAY);
+    if (xSemaphoreTake(s_mu, pdMS_TO_TICKS(20)) != pdTRUE) return false;
     snap = s_snap;
     xSemaphoreGive(s_mu);
 
@@ -1078,7 +1079,7 @@ int app_wx_wmo(void)
 {
     if (!s_mu) return -1;
     wx_snap_t snap;
-    xSemaphoreTake(s_mu, portMAX_DELAY);
+    if (xSemaphoreTake(s_mu, pdMS_TO_TICKS(20)) != pdTRUE) return -1;
     snap = s_snap;
     xSemaphoreGive(s_mu);
     return snap.ok == 1 ? snap.wmo : -1;

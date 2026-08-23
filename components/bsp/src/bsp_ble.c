@@ -254,6 +254,7 @@ static uint8_t s_scan_uuid128[16];
 static bool s_scan_uuid;
 static uint8_t s_scan_mfg[8];
 static uint8_t s_scan_mfg_n;
+static void (*s_activity_cb)(void);
 static void (*s_gap_cb)(void *event);
 static int s_app_conns;
 
@@ -282,7 +283,9 @@ static uint8_t s_app_cache_next;
 static int gap_event(struct ble_gap_event *event, void *arg);
 
 static void set_state(bsp_ble_state_t st) {
+    bool became_pair = (st == BSP_BLE_PAIRING && s_state != BSP_BLE_PAIRING);
     s_state = st;
+    if (became_pair && s_activity_cb) s_activity_cb();
 }
 
 static int peer_bond_count(void) {
@@ -512,6 +515,7 @@ static void finish_notif(void) {
              (unsigned)strlen(s_notif.subtitle),
              (unsigned)strlen(s_notif.message),
              s_notif.date[0] ? s_notif.date : "-");
+    if (s_activity_cb) s_activity_cb();
 }
 
 static void app_timer_cb(void *arg) {
@@ -1678,6 +1682,11 @@ void bsp_ble_set_scan_mfg(const uint8_t *data, size_t n)
 void bsp_ble_set_gap_cb(void (*cb)(void *event))
 {
     s_gap_cb = cb;
+}
+
+void bsp_ble_set_activity_cb(void (*cb)(void))
+{
+    s_activity_cb = cb;
 }
 
 esp_err_t bsp_ble_note_app_conn(int delta)

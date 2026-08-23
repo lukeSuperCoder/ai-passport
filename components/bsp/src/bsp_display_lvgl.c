@@ -20,6 +20,7 @@ lv_display_t *bsp_lvgl_init(void) {
     lvgl_port_cfg_t pc = ESP_LVGL_PORT_INIT_CONFIG();
     // 中文回退字体 cmap 多,标题/列表排版比纯英文吃栈。5120 在中文主页会溢出黑屏。
     pc.task_stack = 8192;
+    pc.task_max_sleep_ms = 10000;
     if (lvgl_port_init(&pc) != ESP_OK) {
         ESP_LOGE(TAG, "lvgl_port_init 失败");
         return NULL;
@@ -54,6 +55,16 @@ void bsp_lvgl_flush_enable(bool on)
 {
     if (!s_disp) return;
     lv_display_enable_invalidation(s_disp, on);
+}
+
+void bsp_lvgl_tick_enable(bool on)
+{
+    if (on) {
+        lvgl_port_resume();
+        lvgl_port_task_wake(LVGL_PORT_EVENT_USER, NULL);
+    } else {
+        lvgl_port_stop();
+    }
 }
 
 void bsp_lvgl_pause(void) { bsp_lvgl_flush_enable(false); }

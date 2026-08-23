@@ -38,8 +38,11 @@ struct _lv_display_t *bsp_lvgl_init(void);
 bool bsp_lvgl_lock(int timeout_ms);
 void bsp_lvgl_unlock(void);
 
-// 关掉 flush,LVGL 定时器仍跑(壳层轮询通知)。息屏时避免往已睡眠的面板刷 SPI。
+// 关掉 flush,避免往已睡眠的面板刷 SPI。
 void bsp_lvgl_flush_enable(bool on);
+
+// 停/开 LVGL tick。息屏后关掉 5ms 定时器,否则进不了浅睡。
+void bsp_lvgl_tick_enable(bool on);
 
 // 暂停/恢复往 LCD 刷帧。LVGL 定时器仍跑(shell/通知),只是不 SPI 传输。
 void bsp_lvgl_pause(void);
