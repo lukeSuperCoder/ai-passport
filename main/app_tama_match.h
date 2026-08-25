@@ -13,6 +13,11 @@
 #define APP_TAMA_MAT_TIME_PER 1000
 #define APP_TAMA_MAT_TIME_MAX 99000
 #define APP_TAMA_MAT_PTS      10
+#define APP_TAMA_MAT_ST_IDLE   0
+#define APP_TAMA_MAT_ST_VANISH 1
+#define APP_TAMA_MAT_ST_FALL   2
+#define APP_TAMA_MAT_VANISH_MS 280
+#define APP_TAMA_MAT_FALL_MS   240
 
 #define APP_TAMA_MAT_EV_NONE   0
 #define APP_TAMA_MAT_EV_SEL    1
@@ -34,6 +39,9 @@ typedef struct {
     int8_t hdir;
     uint8_t rng;
     uint8_t over;
+    uint8_t anim;
+    uint16_t anim_ms;
+    uint8_t fall[APP_TAMA_MAT_H][APP_TAMA_MAT_W];
     int score;
     int left_ms;
 } app_tama_mat_t;
@@ -46,5 +54,6 @@ int app_tama_mat_tick(app_tama_mat_t *g, uint32_t dt_ms);
 int app_tama_mat_matches(const app_tama_mat_t *g);
 int app_tama_mat_sec(const app_tama_mat_t *g);
 bool app_tama_mat_done(const app_tama_mat_t *g);
+bool app_tama_mat_busy(const app_tama_mat_t *g);
 bool app_tama_mat_selected(const app_tama_mat_t *g);
 int app_tama_mat_good(const app_tama_mat_t *g, int kind);

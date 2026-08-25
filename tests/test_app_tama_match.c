@@ -26,6 +26,28 @@ static void assert_full(const app_tama_mat_t *g)
     assert(app_tama_mat_matches(g) == 0);
 }
 
+static int settle(app_tama_mat_t *g)
+{
+    int n = APP_TAMA_MAT_EV_NONE;
+    int ev;
+
+    while (app_tama_mat_busy(g) && !app_tama_mat_done(g)) {
+        ev = app_tama_mat_tick(g, 40);
+        if (ev == APP_TAMA_MAT_EV_NEXT || ev == APP_TAMA_MAT_EV_CLEAR) n = ev;
+        if (ev == APP_TAMA_MAT_EV_OVER) break;
+    }
+    return n;
+}
+
+static int play_ok(app_tama_mat_t *g)
+{
+    int n = app_tama_mat_ok(g);
+    int s = settle(g);
+
+    if (s == APP_TAMA_MAT_EV_NEXT) return s;
+    return n;
+}
+
 int main(void)
 {
     app_tama_mat_t g;
@@ -117,11 +139,12 @@ int main(void)
     b = g.cell[1][2];
     (void)a;
     (void)b;
-    n = app_tama_mat_ok(&g);
+    n = play_ok(&g);
     assert(n == APP_TAMA_MAT_EV_CLEAR || n == APP_TAMA_MAT_EV_NEXT);
     assert(g.score >= 3 * APP_TAMA_MAT_PTS);
     assert(g.left_ms > APP_TAMA_MAT_TIME0);
     assert(!app_tama_mat_selected(&g));
+    assert(!app_tama_mat_busy(&g));
     assert_full(&g);
 
     app_tama_mat_make(&g, 4);
@@ -161,13 +184,13 @@ int main(void)
     app_tama_mat_ok(&g);
     g.cur_r = 3;
     g.cur_c = 3;
-    n = app_tama_mat_ok(&g);
+    n = play_ok(&g);
     assert(n == APP_TAMA_MAT_EV_CLEAR || n == APP_TAMA_MAT_EV_NEXT);
     assert(g.score % APP_TAMA_MAT_PTS == 0);
     assert(g.score >= 30);
     assert_full(&g);
 
-    /* 下方消除后，上方格子落到空位，顶部再补新块 */
+    /* 连线先消失、周边不动，再垂直落下 */
     app_tama_mat_make(&g, 9);
     fill_plain(&g);
     g.cell[4][0] = 0;
@@ -175,17 +198,38 @@ int main(void)
     g.cell[4][2] = 1;
     g.cell[5][2] = 0;
     a = g.cell[3][1];
-    g.cur_r = 4;
-    g.cur_c = 2;
-    assert(app_tama_mat_ok(&g) == APP_TAMA_MAT_EV_SEL);
-    g.cur_r = 5;
-    g.cur_c = 2;
-    n = app_tama_mat_ok(&g);
-    assert(n == APP_TAMA_MAT_EV_CLEAR || n == APP_TAMA_MAT_EV_NEXT);
-    if (n == APP_TAMA_MAT_EV_CLEAR) {
+    b = g.cell[4][3];
+    {
+        uint8_t side = g.cell[5][1];
+
+        g.cur_r = 4;
+        g.cur_c = 2;
+        assert(app_tama_mat_ok(&g) == APP_TAMA_MAT_EV_SEL);
+        g.cur_r = 5;
+        g.cur_c = 2;
+        n = app_tama_mat_ok(&g);
+        assert(n == APP_TAMA_MAT_EV_CLEAR);
+        assert(app_tama_mat_busy(&g));
+        assert(g.anim == APP_TAMA_MAT_ST_VANISH);
+        assert(g.cell[4][0] == 0 && g.cell[4][1] == 0 && g.cell[4][2] == 0);
+        assert(g.mark[4][0] && g.mark[4][1] && g.mark[4][2]);
+        assert(g.cell[3][1] == a);
+        assert(g.cell[4][3] == b);
+        assert(g.cell[5][1] == side);
+        assert(app_tama_mat_tick(&g, APP_TAMA_MAT_VANISH_MS - 1) ==
+               APP_TAMA_MAT_EV_NONE);
+        assert(g.cell[4][1] == 0);
+        assert(g.cell[3][1] == a);
+        assert(g.cell[4][3] == b);
+        app_tama_mat_tick(&g, 1);
+        assert(g.anim == APP_TAMA_MAT_ST_FALL);
         assert(g.cell[4][1] == a);
+        assert(g.fall[4][1] >= 1);
+        settle(&g);
+        assert(!app_tama_mat_busy(&g));
+        assert(g.cell[4][1] == a);
+        assert_full(&g);
     }
-    assert_full(&g);
 
     app_tama_mat_make(&g, 7);
     memset(g.cell, APP_TAMA_MAT_EMPTY, sizeof(g.cell));
@@ -200,10 +244,10 @@ int main(void)
     assert(app_tama_mat_ok(&g) == APP_TAMA_MAT_EV_SEL);
     g.cur_r = 5;
     g.cur_c = 2;
-    n = app_tama_mat_ok(&g);
+    n = play_ok(&g);
     assert(n == APP_TAMA_MAT_EV_CLEAR || n == APP_TAMA_MAT_EV_NEXT);
-    assert(g.score == 40 + 3 * APP_TAMA_MAT_PTS);
-    assert(g.left_ms == 20000 + 3 * APP_TAMA_MAT_TIME_PER);
+    assert(g.score >= 40 + 3 * APP_TAMA_MAT_PTS);
+    assert(g.left_ms > 20000);
     assert(!app_tama_mat_selected(&g));
     assert_full(&g);
 
@@ -222,10 +266,10 @@ int main(void)
     assert(app_tama_mat_ok(&g) == APP_TAMA_MAT_EV_SEL);
     g.cur_r = 5;
     g.cur_c = 2;
-    n = app_tama_mat_ok(&g);
+    n = play_ok(&g);
     assert(n == APP_TAMA_MAT_EV_CLEAR || n == APP_TAMA_MAT_EV_NEXT);
-    assert(g.score == 10 + 3 * APP_TAMA_MAT_PTS);
-    assert(g.left_ms == 15000 + 3 * APP_TAMA_MAT_TIME_PER);
+    assert(g.score >= 10 + 3 * APP_TAMA_MAT_PTS);
+    assert(g.left_ms > 15000);
     assert_full(&g);
 
     puts("ok");

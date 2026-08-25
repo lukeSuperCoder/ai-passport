@@ -1230,7 +1230,9 @@ void app_tama_advance(app_tama_t *p, uint32_t now_sec, int hour)
 bool app_tama_can(const app_tama_t *p, app_tama_act_t act)
 {
     if (!app_tama_valid(p)) return false;
-    if (p->trip_st == APP_TAMA_TRIP_AWAY) return act == APP_TAMA_RESET;
+    if (p->trip_st == APP_TAMA_TRIP_AWAY) {
+        return act == APP_TAMA_RESET || act == APP_TAMA_PLAY;
+    }
     if (act == APP_TAMA_RESET || act == APP_TAMA_LIGHT) return true;
     if (p->stage == APP_TAMA_DEAD || p->stage == APP_TAMA_EGG) return false;
     if (act == APP_TAMA_BED) return true;

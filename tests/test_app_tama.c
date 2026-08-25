@@ -665,6 +665,8 @@ int main(void)
         assert(app_tama_inv(&pet, APP_TAMA_G_ONIGIRI) == food - 1);
         assert(app_tama_inv(&pet, APP_TAMA_G_WATER) == water - 1);
         assert(!app_tama_can(&pet, APP_TAMA_FEED));
+        assert(app_tama_can(&pet, APP_TAMA_PLAY));
+        assert(app_tama_play_apply(&pet, 1) == 1);
         assert(!app_tama_trip_can(&pet));
         assert(app_tama_trip_claim(&pet) == 0);
         app_tama_advance(&pet,

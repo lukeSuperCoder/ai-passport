@@ -171,6 +171,7 @@ static app_tama_mat_t s_mat;
 static app_tama_run_t s_run;
 static uint32_t s_run_t0;
 static uint32_t s_rhy_t0;
+static uint32_t s_mat_last;
 static uint8_t s_rhy_held;
 static int s_pad_x;
 static int s_fish_x;
@@ -1852,28 +1853,52 @@ static void page_match(lv_layer_t *layer, int bx, int by)
     snprintf(s_line, sizeof(s_line), "%d", sec);
     draw_txt(layer, bx + 184, by + 30, 40, 16, s_line, tc, LV_TEXT_ALIGN_RIGHT);
 
-    for (r = 0; r < APP_TAMA_MAT_H; r++) {
-        for (c = 0; c < APP_TAMA_MAT_W; c++) {
-            int x = x0 + c * MAT_CELL;
-            int y = y0 + r * MAT_CELL;
-            int id = (int)s_mat.cell[r][c];
-            bool cur = (r == (int)s_mat.cur_r && c == (int)s_mat.cur_c);
-            bool sel = (s_mat.sel_r == r && s_mat.sel_c == c);
-            uint32_t bg = sel ? COL_GOLD2 : (cur ? COL_RING : COL_WHITE);
+    {
+        int vanish = (s_mat.anim == APP_TAMA_MAT_ST_VANISH);
+        int falling = (s_mat.anim == APP_TAMA_MAT_ST_FALL);
+        int at = 0;
+        int dur = vanish ? APP_TAMA_MAT_VANISH_MS : APP_TAMA_MAT_FALL_MS;
 
-            rrect(layer, x + 1, y + 1, MAT_CELL - 2, MAT_CELL - 2, 8, bg);
-            if (cur) {
-                rrect(layer, x + 1, y + 1, MAT_CELL - 2, 3, 1, COL_CORAL);
-                rrect(layer, x + 1, y + MAT_CELL - 4, MAT_CELL - 2, 3, 1,
-                      COL_CORAL);
-            }
-            if (id >= 0 && id < APP_TAMA_MAT_KIND) {
-                draw_good_sz(layer, app_tama_mat_good(&s_mat, id),
-                             x + (MAT_CELL - MAT_ICON) / 2,
-                             y + (MAT_CELL - MAT_ICON) / 2, MAT_ICON);
+        if ((vanish || falling) && dur > 0) {
+            at = (int)s_mat.anim_ms * 256 / dur;
+            if (at > 256) at = 256;
+        }
+        for (r = 0; r < APP_TAMA_MAT_H; r++) {
+            for (c = 0; c < APP_TAMA_MAT_W; c++) {
+                int x = x0 + c * MAT_CELL;
+                int y = y0 + r * MAT_CELL;
+                int id = (int)s_mat.cell[r][c];
+                bool cur = (r == (int)s_mat.cur_r && c == (int)s_mat.cur_c);
+                bool sel = (s_mat.sel_r == r && s_mat.sel_c == c);
+                bool marked = vanish && s_mat.mark[r][c];
+                uint32_t bg = marked ? COL_CORAL :
+                              (sel ? COL_GOLD2 : (cur ? COL_RING : COL_WHITE));
+                int iz = MAT_ICON;
+                int ix, iy;
+
+                rrect(layer, x + 1, y + 1, MAT_CELL - 2, MAT_CELL - 2, 8, bg);
+                if (cur && !s_mat.anim) {
+                    rrect(layer, x + 1, y + 1, MAT_CELL - 2, 3, 1, COL_CORAL);
+                    rrect(layer, x + 1, y + MAT_CELL - 4, MAT_CELL - 2, 3, 1,
+                          COL_CORAL);
+                }
+                if (id < 0 || id >= APP_TAMA_MAT_KIND) continue;
+                if (marked) {
+                    iz = MAT_ICON * (256 - at) / 256;
+                    if (iz < 2) continue;
+                }
+                ix = x + (MAT_CELL - iz) / 2;
+                iy = y + (MAT_CELL - iz) / 2;
+                if (falling && s_mat.fall[r][c]) {
+                    iy -= (int)s_mat.fall[r][c] * MAT_CELL * (256 - at) / 256;
+                    if (iy + iz <= y0) continue;
+                }
+                draw_good_sz(layer, app_tama_mat_good(&s_mat, id), ix, iy, iz);
             }
         }
     }
+    draw_txt(layer, bx + 8, by + 274, 224, 36,
+             app_str(APP_STR_TAMA_MAT_HINT), COL_MUTE, LV_TEXT_ALIGN_CENTER);
 }
 
 static void page_game(lv_layer_t *layer, int bx, int by)
@@ -2868,7 +2893,8 @@ static void mat_begin(void)
     s_mode = MODE_MATCH;
     s_sel = TAB_GAME;
     s_sub = 3;
-    set_tick_ms(250);
+    s_mat_last = now_ms();
+    set_tick_ms(40);
     paint();
 }
 
@@ -2887,11 +2913,22 @@ static void mat_finish(int timed_out)
 
 static void mat_tick(void)
 {
+    uint32_t now, dt;
+    int ev;
+
     if (s_mode != MODE_MATCH) return;
+    now = now_ms();
+    dt = now - s_mat_last;
+    s_mat_last = now;
+    if (dt == 0) return;
+    if (dt > 200) dt = 200;
     s_play_run = s_mat.score;
     if (s_play_run > s_mat_best) s_mat_best = s_play_run;
-    if (app_tama_mat_tick(&s_mat, 250) == APP_TAMA_MAT_EV_OVER) {
+    ev = app_tama_mat_tick(&s_mat, dt);
+    if (ev == APP_TAMA_MAT_EV_OVER) {
         mat_finish(1);
+    } else if (ev == APP_TAMA_MAT_EV_CLEAR || ev == APP_TAMA_MAT_EV_NEXT) {
+        app_tone_play(APP_TONE_CHIME);
     }
 }
 
@@ -3257,17 +3294,12 @@ static void do_act(void)
             return;
         }
         if (s_sub == 0) {
-            if (s_pet.trip_st == APP_TAMA_TRIP_AWAY) {
-                flash(app_str(APP_STR_TAMA_REFUSE), APP_TONE_BEEP);
-                return;
-            }
             run_care(APP_TAMA_PLAY);
             s_sel = TAB_GAME;
             return;
         }
         if (s_sub == 1) {
-            if (s_pet.trip_st == APP_TAMA_TRIP_AWAY ||
-                !app_tama_can(&s_pet, APP_TAMA_PLAY)) {
+            if (!app_tama_can(&s_pet, APP_TAMA_PLAY)) {
                 flash(app_str(APP_STR_TAMA_REFUSE), APP_TONE_BEEP);
                 return;
             }
@@ -3275,8 +3307,7 @@ static void do_act(void)
             return;
         }
         if (s_sub == 2) {
-            if (s_pet.trip_st == APP_TAMA_TRIP_AWAY ||
-                !app_tama_can(&s_pet, APP_TAMA_PLAY)) {
+            if (!app_tama_can(&s_pet, APP_TAMA_PLAY)) {
                 flash(app_str(APP_STR_TAMA_REFUSE), APP_TONE_BEEP);
                 return;
             }
@@ -3284,8 +3315,7 @@ static void do_act(void)
             return;
         }
         if (s_sub == 3) {
-            if (s_pet.trip_st == APP_TAMA_TRIP_AWAY ||
-                !app_tama_can(&s_pet, APP_TAMA_PLAY)) {
+            if (!app_tama_can(&s_pet, APP_TAMA_PLAY)) {
                 flash(app_str(APP_STR_TAMA_REFUSE), APP_TONE_BEEP);
                 return;
             }
@@ -3580,6 +3610,7 @@ void app_tama_on_key(bsp_btn_t btn, bsp_btn_ev_t ev)
     }
     if (s_mode == MODE_MATCH) {
         if (ev == BSP_BTN_LONG && btn == BSP_BTN_OK) {
+            if (app_tama_mat_busy(&s_mat)) return;
             if (app_tama_mat_selected(&s_mat)) {
                 app_tama_mat_unsel(&s_mat);
                 paint();
@@ -3588,6 +3619,7 @@ void app_tama_on_key(bsp_btn_t btn, bsp_btn_ev_t ev)
             }
             return;
         }
+        if (app_tama_mat_busy(&s_mat)) return;
         if (ev == BSP_BTN_LONG && (btn == BSP_BTN_UP || btn == BSP_BTN_DOWN)) {
             app_tama_mat_move(&s_mat, btn == BSP_BTN_UP ? 0 : 1, 1);
             paint();

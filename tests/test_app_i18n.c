@@ -78,6 +78,7 @@ int main(void)
     assert(strcmp(app_str(APP_STR_TAMA_NAME), "名字") == 0);
     assert(strcmp(app_str(APP_STR_TAMA_KIT), "小猫快跑") == 0);
     assert(strcmp(app_str(APP_STR_TAMA_MAT), "三消") == 0);
+    assert(strstr(app_str(APP_STR_TAMA_MAT_HINT), "确定选中交换") != NULL);
     assert(strcmp(app_str(APP_STR_TAMA_HOLD_BACK), "长按确定全局返回") == 0);
     assert(strcmp(app_str(APP_STR_TAMA_WIPE), "重置游戏") == 0);
     assert(strstr(app_str(APP_STR_TAMA_DX_EGG), "还在里面打呼噜") != NULL);
@@ -94,6 +95,7 @@ int main(void)
     assert(strcmp(app_str(APP_STR_TAMA_USED), "Used %s x%d") == 0);
     assert(strcmp(app_str(APP_STR_TAMA_KIT), "Kitten Run") == 0);
     assert(strcmp(app_str(APP_STR_TAMA_MAT), "Match 3") == 0);
+    assert(strstr(app_str(APP_STR_TAMA_MAT_HINT), "OK pick/swap") != NULL);
     assert(strstr(app_str(APP_STR_TAMA_DX_EGG), "Still napping inside") != NULL);
     assert(strstr(app_str(APP_STR_TAMA_DX_GD14), "Dig once, luck twice") != NULL);
     assert(strcmp(app_str(APP_STR_TAMA_DARK), "lights off") == 0);

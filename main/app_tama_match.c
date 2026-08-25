@@ -2,6 +2,10 @@
 
 #include <string.h>
 
+static int board_left(const app_tama_mat_t *g);
+static int has_move(app_tama_mat_t *g);
+static void deal(app_tama_mat_t *g);
+
 static uint8_t step(uint8_t *rng)
 {
     *rng = (uint8_t)(*rng * 37u + 17u);
@@ -65,25 +69,6 @@ static void fill_empty(app_tama_mat_t *g, int avoid)
     }
 }
 
-static void gravity(app_tama_mat_t *g)
-{
-    int r, c, w;
-
-    for (c = 0; c < APP_TAMA_MAT_W; c++) {
-        w = APP_TAMA_MAT_H - 1;
-        for (r = APP_TAMA_MAT_H - 1; r >= 0; r--) {
-            if (g->cell[r][c] == APP_TAMA_MAT_EMPTY) continue;
-            g->cell[w][c] = g->cell[r][c];
-            if (w != r) g->cell[r][c] = APP_TAMA_MAT_EMPTY;
-            w--;
-        }
-        while (w >= 0) {
-            g->cell[w][c] = APP_TAMA_MAT_EMPTY;
-            w--;
-        }
-    }
-}
-
 static int mark_matches(app_tama_mat_t *g)
 {
     int r, c, n, i, got = 0;
@@ -133,27 +118,84 @@ static void clear_marked(app_tama_mat_t *g)
     }
 }
 
-static int resolve(app_tama_mat_t *g)
+static void score_marks(app_tama_mat_t *g, int n)
 {
-    int total = 0;
-    int n;
+    if (n <= 0) return;
+    g->score += n * APP_TAMA_MAT_PTS;
+    g->left_ms += n * APP_TAMA_MAT_TIME_PER;
+    if (g->left_ms > APP_TAMA_MAT_TIME_MAX) {
+        g->left_ms = APP_TAMA_MAT_TIME_MAX;
+    }
+}
 
-    for (;;) {
-        n = mark_matches(g);
-        if (n <= 0) break;
-        clear_marked(g);
-        gravity(g);
-        fill_empty(g, 1);
-        total += n;
-    }
-    if (total > 0) {
-        g->score += total * APP_TAMA_MAT_PTS;
-        g->left_ms += total * APP_TAMA_MAT_TIME_PER;
-        if (g->left_ms > APP_TAMA_MAT_TIME_MAX) {
-            g->left_ms = APP_TAMA_MAT_TIME_MAX;
+static int begin_vanish(app_tama_mat_t *g)
+{
+    int n = mark_matches(g);
+
+    if (n <= 0) return 0;
+    score_marks(g, n);
+    g->anim = APP_TAMA_MAT_ST_VANISH;
+    g->anim_ms = 0;
+    return n;
+}
+
+static void begin_fall(app_tama_mat_t *g)
+{
+    uint8_t old[APP_TAMA_MAT_H][APP_TAMA_MAT_W];
+    int r, c, w, nnew;
+
+    memcpy(old, g->cell, sizeof(old));
+    memset(g->cell, APP_TAMA_MAT_EMPTY, sizeof(g->cell));
+    memset(g->fall, 0, sizeof(g->fall));
+    for (c = 0; c < APP_TAMA_MAT_W; c++) {
+        w = APP_TAMA_MAT_H - 1;
+        for (r = APP_TAMA_MAT_H - 1; r >= 0; r--) {
+            if (old[r][c] == APP_TAMA_MAT_EMPTY) continue;
+            g->cell[w][c] = old[r][c];
+            g->fall[w][c] = (uint8_t)(w - r);
+            w--;
         }
+        nnew = w + 1;
+        for (r = 0; r < nnew; r++) g->fall[r][c] = (uint8_t)nnew;
     }
-    return total;
+    fill_empty(g, 1);
+    memset(g->mark, 0, sizeof(g->mark));
+    g->anim = APP_TAMA_MAT_ST_FALL;
+    g->anim_ms = 0;
+}
+
+static int finish_fall(app_tama_mat_t *g)
+{
+    memset(g->fall, 0, sizeof(g->fall));
+    g->anim = APP_TAMA_MAT_ST_IDLE;
+    g->anim_ms = 0;
+    if (begin_vanish(g)) return APP_TAMA_MAT_EV_CLEAR;
+    if (board_left(g) <= 0 || !has_move(g)) {
+        deal(g);
+        return APP_TAMA_MAT_EV_NEXT;
+    }
+    return APP_TAMA_MAT_EV_NONE;
+}
+
+static int step_anim(app_tama_mat_t *g, uint32_t dt_ms)
+{
+    uint32_t dur;
+    uint32_t next;
+
+    if (g->anim == APP_TAMA_MAT_ST_VANISH) dur = APP_TAMA_MAT_VANISH_MS;
+    else if (g->anim == APP_TAMA_MAT_ST_FALL) dur = APP_TAMA_MAT_FALL_MS;
+    else return APP_TAMA_MAT_EV_NONE;
+    next = (uint32_t)g->anim_ms + dt_ms;
+    if (next > 0xffffu) next = 0xffffu;
+    g->anim_ms = (uint16_t)next;
+    if (g->anim_ms < dur) return APP_TAMA_MAT_EV_NONE;
+    g->anim_ms = (uint16_t)dur;
+    if (g->anim == APP_TAMA_MAT_ST_VANISH) {
+        clear_marked(g);
+        begin_fall(g);
+        return APP_TAMA_MAT_EV_NONE;
+    }
+    return finish_fall(g);
 }
 
 static void swap_cells(app_tama_mat_t *g, int r0, int c0, int r1, int c1)
@@ -262,9 +304,12 @@ static void deal(app_tama_mat_t *g)
     g->hdir = 1;
     g->sel_r = -1;
     g->sel_c = -1;
+    g->anim = APP_TAMA_MAT_ST_IDLE;
+    g->anim_ms = 0;
     pick_pal(g);
     memset(g->cell, APP_TAMA_MAT_EMPTY, sizeof(g->cell));
     memset(g->mark, 0, sizeof(g->mark));
+    memset(g->fall, 0, sizeof(g->fall));
     fill_empty(g, 1);
 }
 
@@ -302,7 +347,7 @@ void app_tama_mat_move(app_tama_mat_t *g, int axis, int jump)
     int lo, hi, pos, dest;
     int8_t *dir;
 
-    if (!g || g->over) return;
+    if (!g || g->over || g->anim) return;
     if (axis == 0) {
         pos = (int)g->cur_r;
         dir = &g->vdir;
@@ -359,7 +404,7 @@ int app_tama_mat_ok(app_tama_mat_t *g)
 {
     int r0, c0, r1, c1, n;
 
-    if (!g || g->over) return APP_TAMA_MAT_EV_NONE;
+    if (!g || g->over || g->anim) return APP_TAMA_MAT_EV_NONE;
     if (g->sel_r < 0) {
         g->sel_r = (int8_t)g->cur_r;
         g->sel_c = (int8_t)g->cur_c;
@@ -377,28 +422,32 @@ int app_tama_mat_ok(app_tama_mat_t *g)
         return APP_TAMA_MAT_EV_NONE;
     }
     swap_cells(g, r0, c0, r1, c1);
-    n = resolve(g);
+    n = begin_vanish(g);
     if (n <= 0) {
         swap_cells(g, r0, c0, r1, c1);
         app_tama_mat_unsel(g);
         return APP_TAMA_MAT_EV_REVERT;
     }
     app_tama_mat_unsel(g);
-    if (board_left(g) <= 0 || !has_move(g)) {
-        deal(g);
-        return APP_TAMA_MAT_EV_NEXT;
-    }
     return APP_TAMA_MAT_EV_CLEAR;
+}
+
+bool app_tama_mat_busy(const app_tama_mat_t *g)
+{
+    return g && g->anim != APP_TAMA_MAT_ST_IDLE;
 }
 
 int app_tama_mat_tick(app_tama_mat_t *g, uint32_t dt_ms)
 {
+    int ev = APP_TAMA_MAT_EV_NONE;
+
     if (!g || g->over) return APP_TAMA_MAT_EV_NONE;
+    if (g->anim) ev = step_anim(g, dt_ms);
     if (dt_ms >= (uint32_t)g->left_ms) {
         g->left_ms = 0;
         g->over = 1;
         return APP_TAMA_MAT_EV_OVER;
     }
     g->left_ms -= (int)dt_ms;
-    return APP_TAMA_MAT_EV_NONE;
+    return ev;
 }
