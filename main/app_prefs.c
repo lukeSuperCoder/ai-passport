@@ -40,7 +40,7 @@ static void set_defaults(void)
     s_p.ntp_on = 0;
     s_p.ntp_server = 0;
     s_p.auto_hide = 10;
-    s_p.lang = APP_LANG_EN;
+    s_p.lang = APP_LANG_ZH;
     strlcpy(s_p.wx_city, "Shanghai", sizeof(s_p.wx_city));
     s_p.wx_lat_e4 = 312304;
     s_p.wx_lon_e4 = 1214737;

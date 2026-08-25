@@ -1,8 +1,10 @@
-# FoloToy AI Passport
+# FoloToy AI Passport — 拓麻歌子
 
 [English](README.md) | 简体中文
 
-机上应用与设置：[English](docs/APPS.md) · [简体中文](docs/APPS.zh_CN.md)
+**当前 `demo/tamagotchi` 分支是独立宠物游戏固件，不是 `main` 上的首页应用。** 开机直接进入拓麻歌子，不包含通知、对讲机、天气、验证器。语言、Wi-Fi、蓝牙、时钟、屏幕、声音都在游戏里设置。Wi-Fi 和蓝牙用于「世界」里的**拜访**和**对战**（近距离蓝牙，或同一已保存局域网）。STA 上的 NTP 用来给宠物对时睡觉。
+
+游戏说明：[English](docs/APPS.md) · [简体中文](docs/APPS.zh_CN.md)
 
 FoloToy AI Passport 是一个面向 AI agent 的开放式可穿戴 AI 硬件，本仓库是这款 AI 硬件的开发基线。它不只展示“板子能运行什么”，还把 agent 开发应用所需的**硬件事实、稳定接口、资源边界、参考实现和验收方法**放在同一仓库中。
 
@@ -178,9 +180,29 @@ cc -std=c11 -Wall -Wextra -Werror -Imain \
 /tmp/test_app_i18n
 
 cc -std=c11 -Wall -Wextra -Werror -Imain \
-  tests/test_walkie_codec.c main/walkie_codec.c \
-  -o /tmp/test_walkie_codec
-/tmp/test_walkie_codec
+  tests/test_app_tama.c main/app_tama_logic.c \
+  -o /tmp/test_app_tama
+/tmp/test_app_tama
+
+cc -std=c11 -Wall -Wextra -Werror -Imain \
+  tests/test_app_tama_rhythm.c main/app_tama_rhythm.c \
+  -o /tmp/test_app_tama_rhythm
+/tmp/test_app_tama_rhythm
+
+cc -std=c11 -Wall -Wextra -Werror -Imain \
+  tests/test_app_tama_run.c main/app_tama_run.c \
+  -o /tmp/test_app_tama_run
+/tmp/test_app_tama_run
+
+cc -std=c11 -Wall -Wextra -Werror -Imain \
+  tests/test_app_tama_match.c main/app_tama_match.c \
+  -o /tmp/test_app_tama_match
+/tmp/test_app_tama_match
+
+cc -std=c11 -Wall -Wextra -Werror -Imain \
+  tests/test_app_ota.c main/app_ota_logic.c \
+  -o /tmp/test_app_ota
+/tmp/test_app_ota
 ```
 
 不同示例分支可能提供自己的 host test 命令，应以该分支 README 为准。
@@ -220,6 +242,6 @@ tests/                   可脱离硬件运行的轻量逻辑测试源
 docs/                    agent 硬件指南、机上应用/设置说明与扩展文档
 docs/APPS.zh_CN.md       首页应用、设置项与 NVS 键
 sdkconfig.defaults       ESP32-C3、USB console、Flash、LVGL、Wi-Fi STA、NimBLE 默认配置
-partitions.csv           8 MB Flash 分区，factory 应用为 3 MB
+partitions.csv           8 MB Flash 分区，双 OTA 槽各约 3.9 MB
 AGENTS.md                agent 在本仓库的编码、验证和提交规则
 ```

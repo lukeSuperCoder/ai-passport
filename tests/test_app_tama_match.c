@@ -1,0 +1,233 @@
+#include <assert.h>
+#include <stdio.h>
+#include <string.h>
+#include "app_tama_match.h"
+
+static void fill_plain(app_tama_mat_t *g)
+{
+    int r, c;
+
+    for (r = 0; r < APP_TAMA_MAT_H; r++) {
+        for (c = 0; c < APP_TAMA_MAT_W; c++) {
+            g->cell[r][c] = (uint8_t)((r + c * 2) % APP_TAMA_MAT_KIND);
+        }
+    }
+}
+
+static void assert_full(const app_tama_mat_t *g)
+{
+    int r, c;
+
+    for (r = 0; r < APP_TAMA_MAT_H; r++) {
+        for (c = 0; c < APP_TAMA_MAT_W; c++) {
+            assert(g->cell[r][c] < APP_TAMA_MAT_KIND);
+        }
+    }
+    assert(app_tama_mat_matches(g) == 0);
+}
+
+int main(void)
+{
+    app_tama_mat_t g;
+    int seed, r, c, n;
+    uint8_t a, b;
+
+    for (seed = 0; seed < 64; seed++) {
+        app_tama_mat_make(&g, (uint8_t)seed);
+        assert(g.left_ms == APP_TAMA_MAT_TIME0);
+        assert(g.score == 0);
+        assert(g.cur_r == 0 && g.cur_c == 0);
+        assert(!app_tama_mat_selected(&g));
+        assert(app_tama_mat_matches(&g) == 0);
+        {
+            unsigned seen = 0;
+            int k, j;
+
+            for (k = 0; k < APP_TAMA_MAT_KIND; k++) {
+                int id = app_tama_mat_good(&g, k);
+                assert(id >= 0 && id < APP_TAMA_G_N);
+                for (j = 0; j < k; j++) {
+                    assert(app_tama_mat_good(&g, j) != id);
+                }
+                seen |= 1u << id;
+            }
+            assert(seen != 0);
+        }
+        for (r = 0; r < APP_TAMA_MAT_H; r++) {
+            for (c = 0; c < APP_TAMA_MAT_W; c++) {
+                assert(g.cell[r][c] < APP_TAMA_MAT_KIND);
+            }
+        }
+    }
+
+    {
+        app_tama_mat_t a, b;
+        int same = 1, k;
+
+        app_tama_mat_make(&a, 0x11);
+        app_tama_mat_make(&b, 0xC3);
+        for (k = 0; k < APP_TAMA_MAT_KIND; k++) {
+            if (app_tama_mat_good(&a, k) != app_tama_mat_good(&b, k)) same = 0;
+        }
+        assert(!same);
+    }
+
+    app_tama_mat_make(&g, 1);
+    app_tama_mat_move(&g, 0, 0);
+    assert(g.cur_r == 1);
+    app_tama_mat_move(&g, 0, 1);
+    assert(g.cur_r == APP_TAMA_MAT_H - 1);
+    app_tama_mat_move(&g, 0, 1);
+    assert(g.cur_r == 0);
+    app_tama_mat_move(&g, 1, 0);
+    assert(g.cur_c == 1);
+    app_tama_mat_move(&g, 1, 1);
+    assert(g.cur_c == APP_TAMA_MAT_W - 1);
+
+    app_tama_mat_make(&g, 2);
+    assert(app_tama_mat_ok(&g) == APP_TAMA_MAT_EV_SEL);
+    assert(app_tama_mat_selected(&g));
+    assert(g.sel_r == 0 && g.sel_c == 0);
+    app_tama_mat_move(&g, 0, 0);
+    assert(g.cur_r == 1 && g.cur_c == 0);
+    app_tama_mat_move(&g, 0, 0);
+    assert(g.cur_r == 0 && g.cur_c == 0);
+    app_tama_mat_move(&g, 1, 0);
+    assert(g.cur_r == 0 && g.cur_c == 1);
+    app_tama_mat_move(&g, 1, 0);
+    assert(g.cur_c <= 1);
+    app_tama_mat_move(&g, 0, 1);
+    assert(g.cur_r <= 1 && g.cur_c == 0);
+    app_tama_mat_unsel(&g);
+    assert(!app_tama_mat_selected(&g));
+
+    app_tama_mat_make(&g, 3);
+    fill_plain(&g);
+    assert(app_tama_mat_matches(&g) == 0);
+    g.cell[0][0] = 0;
+    g.cell[0][1] = 0;
+    g.cell[0][2] = 1;
+    g.cell[1][2] = 0;
+    g.cur_r = 0;
+    g.cur_c = 2;
+    assert(app_tama_mat_ok(&g) == APP_TAMA_MAT_EV_SEL);
+    g.cur_r = 1;
+    g.cur_c = 2;
+    a = g.cell[0][2];
+    b = g.cell[1][2];
+    (void)a;
+    (void)b;
+    n = app_tama_mat_ok(&g);
+    assert(n == APP_TAMA_MAT_EV_CLEAR || n == APP_TAMA_MAT_EV_NEXT);
+    assert(g.score >= 3 * APP_TAMA_MAT_PTS);
+    assert(g.left_ms > APP_TAMA_MAT_TIME0);
+    assert(!app_tama_mat_selected(&g));
+    assert_full(&g);
+
+    app_tama_mat_make(&g, 4);
+    fill_plain(&g);
+    g.cur_r = 0;
+    g.cur_c = 0;
+    app_tama_mat_ok(&g);
+    g.cur_r = 0;
+    g.cur_c = 1;
+    a = g.cell[0][0];
+    b = g.cell[0][1];
+    assert(app_tama_mat_ok(&g) == APP_TAMA_MAT_EV_REVERT);
+    assert(g.cell[0][0] == a);
+    assert(g.cell[0][1] == b);
+    assert(g.score == 0);
+
+    app_tama_mat_make(&g, 5);
+    assert(app_tama_mat_tick(&g, 1000) == APP_TAMA_MAT_EV_NONE);
+    assert(app_tama_mat_sec(&g) == (APP_TAMA_MAT_TIME0 - 1000 + 999) / 1000);
+    assert(app_tama_mat_tick(&g, APP_TAMA_MAT_TIME0) == APP_TAMA_MAT_EV_OVER);
+    assert(app_tama_mat_done(&g));
+    assert(g.left_ms == 0);
+    assert(app_tama_mat_ok(&g) == APP_TAMA_MAT_EV_NONE);
+
+    app_tama_mat_make(&g, 6);
+    g.score = 0;
+    g.left_ms = APP_TAMA_MAT_TIME0;
+    fill_plain(&g);
+    g.cell[2][1] = 2;
+    g.cell[2][2] = 2;
+    g.cell[2][3] = 2;
+    /* force a resolve via a dummy matched swap */
+    g.cell[3][3] = 2;
+    g.cell[2][3] = 1;
+    g.cur_r = 2;
+    g.cur_c = 3;
+    app_tama_mat_ok(&g);
+    g.cur_r = 3;
+    g.cur_c = 3;
+    n = app_tama_mat_ok(&g);
+    assert(n == APP_TAMA_MAT_EV_CLEAR || n == APP_TAMA_MAT_EV_NEXT);
+    assert(g.score % APP_TAMA_MAT_PTS == 0);
+    assert(g.score >= 30);
+    assert_full(&g);
+
+    /* 下方消除后，上方格子落到空位，顶部再补新块 */
+    app_tama_mat_make(&g, 9);
+    fill_plain(&g);
+    g.cell[4][0] = 0;
+    g.cell[4][1] = 0;
+    g.cell[4][2] = 1;
+    g.cell[5][2] = 0;
+    a = g.cell[3][1];
+    g.cur_r = 4;
+    g.cur_c = 2;
+    assert(app_tama_mat_ok(&g) == APP_TAMA_MAT_EV_SEL);
+    g.cur_r = 5;
+    g.cur_c = 2;
+    n = app_tama_mat_ok(&g);
+    assert(n == APP_TAMA_MAT_EV_CLEAR || n == APP_TAMA_MAT_EV_NEXT);
+    if (n == APP_TAMA_MAT_EV_CLEAR) {
+        assert(g.cell[4][1] == a);
+    }
+    assert_full(&g);
+
+    app_tama_mat_make(&g, 7);
+    memset(g.cell, APP_TAMA_MAT_EMPTY, sizeof(g.cell));
+    g.cell[5][0] = 0;
+    g.cell[5][1] = 0;
+    g.cell[5][2] = 1;
+    g.cell[4][2] = 0;
+    g.score = 40;
+    g.left_ms = 20000;
+    g.cur_r = 4;
+    g.cur_c = 2;
+    assert(app_tama_mat_ok(&g) == APP_TAMA_MAT_EV_SEL);
+    g.cur_r = 5;
+    g.cur_c = 2;
+    n = app_tama_mat_ok(&g);
+    assert(n == APP_TAMA_MAT_EV_CLEAR || n == APP_TAMA_MAT_EV_NEXT);
+    assert(g.score == 40 + 3 * APP_TAMA_MAT_PTS);
+    assert(g.left_ms == 20000 + 3 * APP_TAMA_MAT_TIME_PER);
+    assert(!app_tama_mat_selected(&g));
+    assert_full(&g);
+
+    app_tama_mat_make(&g, 8);
+    memset(g.cell, APP_TAMA_MAT_EMPTY, sizeof(g.cell));
+    g.cell[5][0] = 0;
+    g.cell[5][1] = 0;
+    g.cell[5][2] = 1;
+    g.cell[4][2] = 0;
+    g.cell[0][0] = 1;
+    g.cell[0][5] = 2;
+    g.score = 10;
+    g.left_ms = 15000;
+    g.cur_r = 4;
+    g.cur_c = 2;
+    assert(app_tama_mat_ok(&g) == APP_TAMA_MAT_EV_SEL);
+    g.cur_r = 5;
+    g.cur_c = 2;
+    n = app_tama_mat_ok(&g);
+    assert(n == APP_TAMA_MAT_EV_CLEAR || n == APP_TAMA_MAT_EV_NEXT);
+    assert(g.score == 10 + 3 * APP_TAMA_MAT_PTS);
+    assert(g.left_ms == 15000 + 3 * APP_TAMA_MAT_TIME_PER);
+    assert_full(&g);
+
+    puts("ok");
+    return 0;
+}

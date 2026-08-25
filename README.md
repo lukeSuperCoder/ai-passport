@@ -1,8 +1,10 @@
-# FoloToy AI Passport
+# FoloToy AI Passport — Tamagotchi
 
 English | [简体中文](README.zh_CN.md)
 
-On-device apps and settings: [English](docs/APPS.md) · [简体中文](docs/APPS.zh_CN.md)
+**This `demo/tamagotchi` branch is a standalone pet game, not the Home-app firmware on `main`.** It boots into Tamagotchi only. Alerts, Walkie, Weather, and TOTP are not in this image. Language, Wi-Fi, Bluetooth, clock, screen, and sound are set **inside the game**. Wi-Fi and Bluetooth are for **Visit** and **Battle** under World (nearby BLE, or the same saved LAN). NTP from STA is used for the pet’s bedtime.
+
+Game controls: [English](docs/APPS.md) · [简体中文](docs/APPS.zh_CN.md)
 
 FoloToy AI Passport is open wearable AI hardware designed for AI agents. This repository is the development baseline for the device. It goes beyond showing “what the board can run” by keeping the **hardware facts, stable interfaces, resource boundaries, reference implementations, and validation methods** that an agent needs to build applications in one place.
 
@@ -179,9 +181,29 @@ cc -std=c11 -Wall -Wextra -Werror -Imain \
 /tmp/test_app_i18n
 
 cc -std=c11 -Wall -Wextra -Werror -Imain \
-  tests/test_walkie_codec.c main/walkie_codec.c \
-  -o /tmp/test_walkie_codec
-/tmp/test_walkie_codec
+  tests/test_app_tama.c main/app_tama_logic.c \
+  -o /tmp/test_app_tama
+/tmp/test_app_tama
+
+cc -std=c11 -Wall -Wextra -Werror -Imain \
+  tests/test_app_tama_rhythm.c main/app_tama_rhythm.c \
+  -o /tmp/test_app_tama_rhythm
+/tmp/test_app_tama_rhythm
+
+cc -std=c11 -Wall -Wextra -Werror -Imain \
+  tests/test_app_tama_run.c main/app_tama_run.c \
+  -o /tmp/test_app_tama_run
+/tmp/test_app_tama_run
+
+cc -std=c11 -Wall -Wextra -Werror -Imain \
+  tests/test_app_tama_match.c main/app_tama_match.c \
+  -o /tmp/test_app_tama_match
+/tmp/test_app_tama_match
+
+cc -std=c11 -Wall -Wextra -Werror -Imain \
+  tests/test_app_ota.c main/app_ota_logic.c \
+  -o /tmp/test_app_ota
+/tmp/test_app_ota
 ```
 
 Different example branches may provide their own host-test commands; follow the README on that branch.
@@ -221,6 +243,6 @@ tests/                   Lightweight logic tests that can run without hardware
 docs/                    Agent hardware guide, on-device app/settings notes, and extension docs
 docs/APPS.md             Home apps, Settings pages, and NVS keys
 sdkconfig.defaults       ESP32-C3, USB console, Flash, LVGL, Wi-Fi STA, NimBLE defaults
-partitions.csv           8 MB Flash layout with a 3 MB factory app slot
+partitions.csv           8 MB Flash layout with two ~3.9 MB OTA slots
 AGENTS.md                Coding, validation, and contribution rules for agents
 ```

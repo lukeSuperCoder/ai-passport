@@ -1,19 +1,19 @@
-#include "app.h"
 #include "app_prefs.h"
+#include "app_tama_link.h"
+#include "app_tama_ui.h"
 #include "app_time.h"
 #include "app_tone.h"
-#include "bsp_i2c.h"
-#include "bsp_display.h"
-#include "bsp_button.h"
 #include "bsp_audio.h"
 #include "bsp_battery.h"
-#include "bsp_wifi.h"
 #include "bsp_ble.h"
-#include "bsp_pm.h"
-#include "app_web.h"
+#include "bsp_button.h"
+#include "bsp_display.h"
+#include "bsp_i2c.h"
 #include "bsp_pins.h"
-#include "walkie_ble.h"
+#include "bsp_pm.h"
+#include "bsp_wifi.h"
 #include "ui_pixel.h"
+
 #include "esp_log.h"
 #include "nvs_flash.h"
 
@@ -25,14 +25,13 @@ static void on_key(bsp_btn_t btn, bsp_btn_ev_t ev, void *user)
 {
     (void)user;
     if (!bsp_lvgl_lock(500)) return;
-    app_shell_on_key(btn, ev);
+    app_tama_on_key(btn, ev);
     bsp_lvgl_unlock();
 }
 
 void app_main(void)
 {
-    app_logs_start();
-    ESP_LOGI(TAG, "FoloToy AI Passport");
+    ESP_LOGI(TAG, "FoloToy AI Passport / Tamagotchi");
 
     esp_err_t e = nvs_flash_init();
     if (e == ESP_ERR_NVS_NO_FREE_PAGES || e == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -49,7 +48,7 @@ void app_main(void)
         return;
     }
     ui_pixel_fonts_init();
-    /* 背光默认 duty=0。必须在建 UI 之前点亮,否则 shell 里排版卡住就会一直黑屏。 */
+    /* 背光默认 duty=0。必须在建 UI 之前点亮,否则排版卡住就会一直黑屏。 */
     bsp_display_backlight(50);
 
     s_ok[0] = true;
@@ -57,10 +56,8 @@ void app_main(void)
     s_ok[2] = (bsp_audio_init() == ESP_OK);
     s_ok[3] = (bsp_battery_init() == ESP_OK);
     s_ok[4] = (bsp_wifi_init() == ESP_OK);
-    walkie_ble_prepare();
+    app_tama_link_prepare();
     s_ok[5] = (bsp_ble_init() == ESP_OK);
-    /* httpd 栈必须 ≥4KB,2048 会 Stack protection fault 整机重启回主界面。 */
-    app_web_listen();
 
     app_prefs_load();
     app_prefs_apply_audio();
@@ -70,7 +67,7 @@ void app_main(void)
     bsp_pm_init();
 
     if (bsp_lvgl_lock(1000)) {
-        app_shell_start();
+        app_tama_start();
         bsp_lvgl_unlock();
     }
 

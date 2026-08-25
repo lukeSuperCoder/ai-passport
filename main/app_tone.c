@@ -1,13 +1,13 @@
 #include "app_tone.h"
 
 #include "app_prefs.h"
-#include "walkie.h"
 #include "bsp_audio.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
 
+#include <stdbool.h>
 #include <stdlib.h>
 #include <stdint.h>
 
@@ -16,9 +16,15 @@
 /* codec open + I2S write needs the same 4 KB stack as demo_audio / walkie */
 #define STACK_BYTES 4096
 
+typedef struct {
+    int16_t hz;
+    int16_t ms;
+} tone_job_t;
+
 static QueueHandle_t s_q;
 static TaskHandle_t s_task;
 static int16_t s_pcm[CHUNK];
+static bool s_held;
 
 static void beep(int hz, int ms, int amp)
 {
@@ -50,7 +56,7 @@ static void silence(int ms)
 static void play_id(int id)
 {
     if (id == APP_TONE_OFF) return;
-    if (app_prefs()->muted || walkie_busy()) return;
+    if (app_prefs()->muted) return;
     if (bsp_audio_set_format(SAMPLE_RATE, 16, 1) != ESP_OK) return;
     bsp_audio_set_volume(app_prefs()->volume);
     switch (id) {
@@ -80,28 +86,72 @@ static void play_id(int id)
     default:
         break;
     }
-    if (!walkie_busy()) bsp_audio_standby();
+    if (!s_held) bsp_audio_standby();
+}
+
+static void play_note(int hz, int ms)
+{
+    if (hz < 1 || ms < 1) return;
+    if (app_prefs()->muted) return;
+    if (bsp_audio_set_format(SAMPLE_RATE, 16, 1) != ESP_OK) return;
+    bsp_audio_set_volume(app_prefs()->volume);
+    beep(hz, ms, 5000);
+    if (!s_held) bsp_audio_standby();
 }
 
 static void tone_task(void *arg)
 {
     (void)arg;
     for (;;) {
-        int id = 0;
-        if (xQueueReceive(s_q, &id, portMAX_DELAY) == pdTRUE) play_id(id);
+        tone_job_t j;
+        if (xQueueReceive(s_q, &j, portMAX_DELAY) != pdTRUE) continue;
+        if (j.hz > 0) {
+            play_note(j.hz, j.ms);
+        } else if (j.hz == 0) {
+            play_id(j.ms);
+        } else if (j.hz == -1) {
+            if (app_prefs()->muted) continue;
+            if (bsp_audio_set_format(SAMPLE_RATE, 16, 1) == ESP_OK) {
+                bsp_audio_set_volume(app_prefs()->volume);
+                s_held = true;
+            }
+        } else if (j.hz == -2) {
+            s_held = false;
+            bsp_audio_standby();
+        }
     }
 }
 
 void app_tone_start(void)
 {
     if (s_q) return;
-    s_q = xQueueCreate(4, sizeof(int));
+    s_q = xQueueCreate(8, sizeof(tone_job_t));
     if (!s_q) return;
     xTaskCreate(tone_task, "app_tone", STACK_BYTES, NULL, 4, &s_task);
 }
 
 void app_tone_play(int id)
 {
-    if (!s_q || id == APP_TONE_OFF || app_prefs()->muted || walkie_busy()) return;
-    xQueueSend(s_q, &id, 0);
+    tone_job_t j = { 0, (int16_t)id };
+    if (!s_q || id == APP_TONE_OFF || app_prefs()->muted) return;
+    xQueueSend(s_q, &j, 0);
+}
+
+void app_tone_note(int hz, int ms)
+{
+    tone_job_t j;
+    if (!s_q || hz < 1 || app_prefs()->muted) return;
+    if (ms < 20) ms = 20;
+    if (ms > 160) ms = 160;
+    j.hz = (int16_t)hz;
+    j.ms = (int16_t)ms;
+    xQueueSend(s_q, &j, 0);
+}
+
+void app_tone_gate(bool on)
+{
+    tone_job_t j = { on ? -1 : -2, 0 };
+    if (!s_q) return;
+    if (on && app_prefs()->muted) return;
+    xQueueSend(s_q, &j, 0);
 }

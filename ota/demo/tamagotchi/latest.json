@@ -1,0 +1,10 @@
+{
+  "channel": "demo/tamagotchi",
+  "version": "0.1.0",
+  "url": "https://github.com/pax-zhang/ai-passport/releases/download/demo-tamagotchi-v0.1.0/FoloToy-AI-Passport-demo-tamagotchi.bin",
+  "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "size": 0,
+  "factory_url": "https://github.com/pax-zhang/ai-passport/releases/download/demo-tamagotchi-v0.1.0/FoloToy-AI-Passport-demo-tamagotchi-factory.bin",
+  "factory_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "factory_size": 0
+}
