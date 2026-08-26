@@ -119,6 +119,7 @@ enum {
 ESP_EVENT_DEFINE_BASE(MEOW_EVENT);
 #define MEOW_BLE_WAKE   1
 #define MEOW_ALERT_WAKE 2
+#define MEOW_BED_WAKE   3
 #define ALERT_RECALL_US (180LL * 1000000)
 #define IDLE_PERF_MS    2000u
 #define IDLE_PAINT_MS   1000u
@@ -146,6 +147,7 @@ static uint32_t s_still_ms;
 static uint32_t s_tick_ms = 250;
 static bool s_wake_skip;
 static esp_timer_handle_t s_alert_tm;
+static esp_timer_handle_t s_bed_tm;
 
 static lv_obj_t *s_scr, *s_lcd, *s_ibar, *s_stage;
 static lv_timer_t *s_timer, *s_lang_timer;
@@ -2218,6 +2220,9 @@ static void ble_off(void)
 }
 
 static void alert_tm_cb(void *arg);
+static void bed_tm_cb(void *arg);
+static void call_bedtime(void);
+static void flash_for(const char *s, int tone, int ticks);
 
 static void arm_alert_recall(void)
 {
@@ -2242,6 +2247,40 @@ static void disarm_alert_recall(void)
     if (s_alert_tm) esp_timer_stop(s_alert_tm);
 }
 
+static void disarm_bed_timer(void)
+{
+    if (s_bed_tm) esp_timer_stop(s_bed_tm);
+}
+
+static void arm_bed_timer(void)
+{
+    time_t t;
+    struct tm tm;
+    int bed = (int)app_prefs()->meow_bed;
+    int wake = (int)app_prefs()->meow_wake;
+    int now_s, bed_s, d;
+
+    disarm_bed_timer();
+    if (now_hour() < 0 || bed == wake) return;
+    if (app_meow_asleep_at(now_hour(), bed, wake)) return;
+
+    t = time(NULL);
+    localtime_r(&t, &tm);
+    now_s = tm.tm_hour * 3600 + tm.tm_min * 60 + tm.tm_sec;
+    bed_s = bed * 3600;
+    d = bed_s - now_s;
+    if (d <= 0) d += 86400;
+    if (!s_bed_tm) {
+        const esp_timer_create_args_t a = {
+            .callback = bed_tm_cb,
+            .dispatch_method = ESP_TIMER_TASK,
+            .name = "meow_bed",
+        };
+        if (esp_timer_create(&a, &s_bed_tm) != ESP_OK) return;
+    }
+    esp_timer_start_once(s_bed_tm, (int64_t)d * 1000000LL);
+}
+
 static void sleep_now(void)
 {
     if (s_asleep) return;
@@ -2260,6 +2299,7 @@ static void sleep_now(void)
     bsp_lvgl_tick_enable(false);
     bsp_pm_set_sleeping(true);
     arm_alert_recall();
+    arm_bed_timer();
 }
 
 static void wake_now(void)
@@ -2267,6 +2307,7 @@ static void wake_now(void)
     s_idle_ms = 0;
     s_still_ms = 0;
     disarm_alert_recall();
+    disarm_bed_timer();
     if (!s_asleep) return;
     s_asleep = false;
     s_awake_ms = 0;
@@ -2313,6 +2354,12 @@ static void alert_tm_cb(void *arg)
 {
     (void)arg;
     esp_event_post(MEOW_EVENT, MEOW_ALERT_WAKE, NULL, 0, 0);
+}
+
+static void bed_tm_cb(void *arg)
+{
+    (void)arg;
+    esp_event_post(MEOW_EVENT, MEOW_BED_WAKE, NULL, 0, 0);
 }
 
 static app_str_id_t stage_id(void)
@@ -2551,6 +2598,25 @@ static void on_alert_wake(void *h, esp_event_base_t b, int32_t id, void *d)
     bsp_lvgl_unlock();
 }
 
+static void call_bedtime(void)
+{
+    if (!app_meow_bed_call(&s_pet)) return;
+    if (s_asleep) wake_now();
+    flash_for(app_str(APP_STR_MEOW_SLEEP_NOW), APP_TONE_CHIME, 8);
+}
+
+static void on_bed_wake(void *h, esp_event_base_t b, int32_t id, void *d)
+{
+    (void)h;
+    (void)b;
+    (void)id;
+    (void)d;
+    if (!bsp_lvgl_lock(1000)) return;
+    sync_pet();
+    call_bedtime();
+    bsp_lvgl_unlock();
+}
+
 static void flash_for(const char *s, int tone, int ticks)
 {
     char tmp[sizeof(s_flash)];
@@ -2581,13 +2647,17 @@ static const char *cant_txt(void)
     }
     if (s_pet.stage == APP_MEOW_EGG) return app_str(APP_STR_MEOW_HATCH);
     if (s_pet.stage == APP_MEOW_DEAD) return app_str(APP_STR_MEOW_DEAD);
+    if (app_meow_rest_lock(&s_pet)) return app_str(APP_STR_MEOW_LIGHT_FIRST);
     if (s_pet.sleeping) return app_str(APP_STR_MEOW_SLEEP_NOW);
     return app_str(APP_STR_MEOW_REFUSE);
 }
 
 static const char *act_fail_txt(app_meow_res_t r)
 {
-    if (r == APP_MEOW_SLEEP) return app_str(APP_STR_MEOW_SLEEP_NOW);
+    if (r == APP_MEOW_SLEEP) {
+        return app_str(app_meow_rest_lock(&s_pet) ? APP_STR_MEOW_LIGHT_FIRST :
+                       APP_STR_MEOW_SLEEP_NOW);
+    }
     if (r == APP_MEOW_EGG_WAIT) return app_str(APP_STR_MEOW_HATCH);
     if (r == APP_MEOW_GONE) return app_str(APP_STR_MEOW_DEAD);
     if (r == APP_MEOW_FULL) return app_str(APP_STR_MEOW_FULL);
@@ -3142,7 +3212,16 @@ static void do_act(void)
         }
         s_menu = s_sel;
         s_sub = 0;
-        if (s_sel == TAB_HOME && s_pet.sleeping) s_sub = HOME_LIGHT;
+        if (s_sel == TAB_HOME && s_pet.sleeping &&
+            s_pet.hunger > APP_MEOW_ALERT_PCT_WARN &&
+            !s_pet.sick && !s_pet.poop) {
+            s_sub = HOME_LIGHT;
+        }
+        if (s_sel == TAB_HOME && s_pet.sleeping && !s_pet.lights_off &&
+            s_pet.stage != APP_MEOW_EGG && s_pet.stage != APP_MEOW_DEAD) {
+            flash_for(app_str(APP_STR_MEOW_SLEEP_NOW), APP_TONE_CHIME, 8);
+            return;
+        }
         paint();
         return;
     }
@@ -3388,7 +3467,9 @@ static void on_tick(lv_timer_t *t)
         sync_pet();
         save_nvs();
     } else if (!s_name_edit) {
+        uint8_t was = s_pet.sleeping;
         sync_pet();
+        if (!was && s_pet.sleeping) call_bedtime();
     }
     if (s_ready && s_want_back_hint) {
         s_want_back_hint = false;
@@ -3491,6 +3572,7 @@ void app_meow_start(void)
     bsp_ble_set_activity_cb(on_ble_activity);
     esp_event_handler_register(MEOW_EVENT, MEOW_BLE_WAKE, on_ble_evt, NULL);
     esp_event_handler_register(MEOW_EVENT, MEOW_ALERT_WAKE, on_alert_wake, NULL);
+    esp_event_handler_register(MEOW_EVENT, MEOW_BED_WAKE, on_bed_wake, NULL);
     app_meow_link_start();
     ble_off();
     app_ota_init();

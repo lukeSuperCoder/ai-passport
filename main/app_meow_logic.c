@@ -1050,7 +1050,7 @@ app_meow_res_t app_meow_use(app_meow_t *p, int good)
     if (p->stage == APP_MEOW_DEAD) return APP_MEOW_GONE;
     if (p->stage == APP_MEOW_EGG) return APP_MEOW_EGG_WAIT;
     if (p->trip_st == APP_MEOW_TRIP_AWAY) return APP_MEOW_NONE;
-    if (p->sleeping) return APP_MEOW_SLEEP;
+    if (app_meow_rest_lock(p)) return APP_MEOW_SLEEP;
     const spec_t *s = spec(good);
     if (!s || p->inv_n[good] == 0) return APP_MEOW_EMPTY;
 
@@ -1254,8 +1254,24 @@ bool app_meow_can(const app_meow_t *p, app_meow_act_t act)
     if (act == APP_MEOW_RESET || act == APP_MEOW_LIGHT) return true;
     if (p->stage == APP_MEOW_DEAD || p->stage == APP_MEOW_EGG) return false;
     if (act == APP_MEOW_BED || act == APP_MEOW_PLAY) return true;
-    if (p->sleeping) return false;
+    if (app_meow_rest_lock(p)) return false;
     return true;
+}
+
+bool app_meow_rest_lock(const app_meow_t *p)
+{
+    return app_meow_valid(p) && p->sleeping && p->lights_off;
+}
+
+bool app_meow_bed_call(const app_meow_t *p)
+{
+    if (!app_meow_valid(p) || p->stage == APP_MEOW_EGG ||
+        p->stage == APP_MEOW_DEAD || p->trip_st == APP_MEOW_TRIP_AWAY) {
+        return false;
+    }
+    if (!p->sleeping) return false;
+    if (!p->lights_off) return true;
+    return app_meow_alert_peak(p) >= APP_MEOW_ALERT_WARN;
 }
 
 app_meow_res_t app_meow_act(app_meow_t *p, app_meow_act_t act)
@@ -1282,7 +1298,7 @@ app_meow_res_t app_meow_act(app_meow_t *p, app_meow_act_t act)
     }
     if (p->stage == APP_MEOW_DEAD) return APP_MEOW_GONE;
     if (p->stage == APP_MEOW_EGG) return APP_MEOW_EGG_WAIT;
-    if (p->sleeping) return APP_MEOW_SLEEP;
+    if (app_meow_rest_lock(p)) return APP_MEOW_SLEEP;
 
     if (act == APP_MEOW_FEED || act == APP_MEOW_DRINK || act == APP_MEOW_CLEAN ||
         act == APP_MEOW_BATH || act == APP_MEOW_HEAL) {

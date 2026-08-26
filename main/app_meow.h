@@ -267,6 +267,10 @@ int app_meow_play_tier(int score);
 int app_meow_play_swim_pct(int score);
 int app_meow_play_koi_pct(int score);
 bool app_meow_can(const app_meow_t *p, app_meow_act_t act);
+/* 关灯后的睡觉才锁护理;灯还开着时仍可喂饱、清理、治疗。 */
+bool app_meow_rest_lock(const app_meow_t *p);
+/* 进入睡觉时段且还没安顿好(灯开着,或仍有护理危险)时提醒。 */
+bool app_meow_bed_call(const app_meow_t *p);
 bool app_meow_can_link(const app_meow_t *p);
 void app_meow_snap(const app_meow_t *p, app_meow_snap_t *out);
 int app_meow_power(const app_meow_snap_t *s);

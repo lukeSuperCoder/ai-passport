@@ -207,19 +207,34 @@ int main(void)
     pet.sleeping = 0;
     pet.lights_off = 0;
 
-    /* Night: 21:00..08:00 sleeps; care except light/play is refused. */
+    /* Night: 21:00..08:00 sleeps. Lights on: still feed; lights off: lock. */
+    pet.hunger = 20;
+    app_meow_give(&pet, APP_MEOW_G_ONIGIRI, 1);
     app_meow_advance(&pet, pet.last_sec + APP_MEOW_SEC_PER_MIN, 22);
     assert(pet.sleeping);
-    assert(!app_meow_can(&pet, APP_MEOW_FEED));
-    assert(app_meow_act(&pet, APP_MEOW_FEED) == APP_MEOW_SLEEP);
+    assert(!pet.lights_off);
+    assert(app_meow_bed_call(&pet));
+    assert(app_meow_can(&pet, APP_MEOW_FEED));
+    assert(app_meow_act(&pet, APP_MEOW_FEED) == APP_MEOW_OK);
     assert(app_meow_can(&pet, APP_MEOW_PLAY));
     assert(app_meow_play_apply(&pet, 1) == 1);
     assert(pet.sleeping);
     assert(!app_meow_trip_can(&pet));
     assert(app_meow_act(&pet, APP_MEOW_LIGHT) == APP_MEOW_OK);
     assert(pet.lights_off);
+    assert(app_meow_rest_lock(&pet));
+    assert(!app_meow_can(&pet, APP_MEOW_FEED));
+    assert(app_meow_act(&pet, APP_MEOW_FEED) == APP_MEOW_SLEEP);
+    pet.hunger = APP_MEOW_STAT_MAX;
+    pet.happy = APP_MEOW_STAT_MAX;
+    pet.health = APP_MEOW_STAT_MAX;
+    pet.sick = 0;
+    pet.poop = 0;
+    pet.alert_ack = 0;
+    assert(!app_meow_bed_call(&pet));
     app_meow_act(&pet, APP_MEOW_LIGHT);
     assert(!pet.lights_off);
+    assert(app_meow_bed_call(&pet));
 
     /* Unknown clock does not force sleep. */
     pet.sleeping = 0;

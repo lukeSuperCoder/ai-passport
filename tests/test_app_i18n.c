@@ -88,6 +88,7 @@ int main(void)
     assert(strstr(app_str(APP_STR_CLOCK_HINT), "即存") != NULL);
     assert(strstr(app_str(APP_STR_CLOCK_SET_HINT), "对时") != NULL);
     assert(strcmp(app_str(APP_STR_MEOW_SLEEP_NOW), "睡觉时间到了") == 0);
+    assert(strcmp(app_str(APP_STR_MEOW_LIGHT_FIRST), "正在睡觉") == 0);
     assert(strstr(app_str(APP_STR_MEOW_DX_EGG), "还在里面打呼噜") != NULL);
     assert(strstr(app_str(APP_STR_MEOW_DX_GD0), "油滋滋，吃完去遛弯") != NULL);
     assert(strstr(app_str(APP_STR_MEOW_DX_SV0), "海里寄来的明信片") != NULL);
@@ -105,6 +106,7 @@ int main(void)
     assert(strstr(app_str(APP_STR_MEOW_MAT_HINT), "OK pick/swap") != NULL);
     assert(strstr(app_str(APP_STR_MEOW_DX_EGG), "Still napping inside") != NULL);
     assert(strstr(app_str(APP_STR_MEOW_DX_GD14), "Dig once, luck twice") != NULL);
+    assert(strcmp(app_str(APP_STR_MEOW_LIGHT_FIRST), "sleeping now") == 0);
     assert(strcmp(app_str(APP_STR_MEOW_DARK), "lights off") == 0);
     assert(strcmp(app_str(APP_STR_MEOW_LIT), "lights on") == 0);
     assert(strcmp(app_str(APP_STR_SET_CLOCK), "Set clock") == 0);
