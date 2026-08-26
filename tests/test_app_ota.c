@@ -27,6 +27,9 @@ int main(void)
     assert(!app_ota_is_newer("0.1.0", "0.1.0"));
     assert(!app_ota_is_newer("bad", "0.1.0"));
 
+    assert(strstr(APP_OTA_MANIFEST_URL, "/demo/meow/ota/demo/meow/latest.json"));
+    assert(strstr(APP_OTA_MANIFEST_URL_ALT, "@demo/meow/ota/demo/meow/latest.json"));
+
     assert(app_ota_url_ok("https://example.com/a.bin"));
     assert(app_ota_url_ok(
         "https://github.com/pax-zhang/ai-passport/releases/download/demo-meow-v0.2.0/FoloToy-AI-Passport-demo-meow.bin"));

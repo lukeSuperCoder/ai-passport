@@ -130,7 +130,7 @@ Last tab. Always available, including on the egg and after the pet is gone.
 
 State is stored in NVS (`app` / `meow` for the pet; the same `app` namespace for prefs; `ota_skip` remembers a deferred version).
 
-Each demo has its own channel (`ota/channel`, this branch is `demo/meow`). Devices only fetch `ota/demo/meow/latest.json` from `main` and refuse a manifest whose `channel` does not match. Tag `demo-meow-vX.Y.Z` (or run **Release firmware** on this branch) builds this image only and updates that JSON — other demos are left alone. The release has two bins: `FoloToy-AI-Passport-demo-meow.bin` (OTA app, what Settings → Update installs) and `FoloToy-AI-Passport-demo-meow-factory.bin` (full flash at `0x0`). Do not release on every commit.
+Each demo has its own channel (`ota/channel`, this branch is `demo/meow`). Devices only fetch `ota/demo/meow/latest.json` from the `demo/meow` branch and refuse a manifest whose `channel` does not match. Tag `demo-meow-vX.Y.Z` (or run **Release firmware** on this branch) builds this image only and updates that JSON — other demos are left alone. The release has two bins: `FoloToy-AI-Passport-demo-meow.bin` (OTA app, what Settings → Update installs) and `FoloToy-AI-Passport-demo-meow-factory.bin` (full flash at `0x0`). Do not release on every commit.
 
 ## Idle sleep (device)
 

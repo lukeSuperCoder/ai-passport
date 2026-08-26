@@ -27,11 +27,14 @@
 #define APP_MEOW_BED_HOUR        21
 #define APP_MEOW_WAKE_HOUR       8
 #define APP_MEOW_MAGIC           0x314F454Du /* MEO1 */
-#define APP_MEOW_VER             9u
+#define APP_MEOW_VER             10u
+#define APP_MEOW_VER9            9u
 #define APP_MEOW_VER8            8u
 #define APP_MEOW_VER7            7u
 #define APP_MEOW_VER6            6u
-#define APP_MEOW_NAME_MAX        12
+#define APP_MEOW_NAME_MAX        15 /* 5 个中文 */
+#define APP_MEOW_NAME_CHARS      10 /* 或 10 个字母 */
+#define APP_MEOW_NAME_MAX_V9     12
 #define APP_MEOW_VER2_SIZE       32u
 #define APP_MEOW_VER3_SIZE       37u
 #define APP_MEOW_VER4_N          44
@@ -240,6 +243,8 @@ int app_meow_good_dur_max(int good);
 int app_meow_good_gain(int good);
 const char *app_meow_name(const app_meow_t *p);
 void app_meow_set_name(app_meow_t *p, const char *name);
+/* 按完整码点拷贝,最多 NAME_CHARS 个、NAME_MAX 字节。返回写入字节数。 */
+size_t app_meow_name_copy(char *dst, size_t dst_n, const char *src);
 int app_meow_owned_n(const app_meow_t *p, int cat);
 int app_meow_owned_list(const app_meow_t *p, int cat, uint8_t *out, int max);
 app_meow_res_t app_meow_use(app_meow_t *p, int good);

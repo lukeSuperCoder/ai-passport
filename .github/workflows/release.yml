@@ -1,7 +1,7 @@
 # 按 ota/channel（与 git 分支一致）发对应固件。
-# 标签形如 demo-meow-v0.2.0，只回写 ota/<channel>/latest.json。
+# 标签形如 demo-meow-v0.2.0，只回写本通道分支上的 ota/<channel>/latest.json。
 # 发两份：*.bin 是 OTA 应用分区（设备更新只拉这份）；*-factory.bin 是 0x0 整片。
-# latest.json 的 url/sha256/size 永远指向应用分区，不要把工厂包写进 url。
+# latest.json 的 url 走 jsDelivr（国内快），并回写 ota/<channel> 下的应用分区 bin。
 # 不要每个提交都发版。
 name: Release firmware
 
@@ -124,7 +124,7 @@ jobs:
           DIST: ${{ steps.man.outputs.dist }}
         run: |
           BASE="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
-          URL="${BASE}/${BIN}"
+          URL="https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@${CHANNEL}/ota/${CHANNEL}/${BIN}"
           FACTORY_URL="${BASE}/${FACTORY}"
           printf '%s\n' \
             '{' \
@@ -150,7 +150,7 @@ jobs:
             ${{ steps.man.outputs.dist }}/${{ steps.ver.outputs.factory }}
             ${{ steps.man.outputs.dist }}/latest.json
 
-      - name: Point this channel on default branch
+      - name: Point this channel on its branch
         env:
           CHANNEL: ${{ steps.ver.outputs.channel }}
           VERSION: ${{ steps.ver.outputs.version }}
@@ -166,17 +166,20 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          BRANCH="${{ github.event.repository.default_branch }}"
+          BRANCH="${CHANNEL}"
           git reset --hard HEAD
           git clean -fd
           git fetch origin "$BRANCH"
           git checkout -B "$BRANCH" "origin/$BRANCH"
           mkdir -p "ota/${CHANNEL}"
           cp "${DIST}/latest.json" "ota/${CHANNEL}/latest.json"
-          git add "ota/${CHANNEL}/latest.json"
+          cp "${DIST}/${BIN}" "ota/${CHANNEL}/${BIN}"
+          git add "ota/${CHANNEL}/latest.json" "ota/${CHANNEL}/${BIN}"
           if git diff --staged --quiet; then
             echo "latest.json already current"
             exit 0
           fi
           git commit -m "chore(ota): point ${CHANNEL} at ${TAG}"
           git push origin "$BRANCH"
+          curl -fsS "https://purge.jsdelivr.net/gh/${GITHUB_REPOSITORY}@${BRANCH}/ota/${CHANNEL}/latest.json" || true
+          curl -fsS "https://purge.jsdelivr.net/gh/${GITHUB_REPOSITORY}@${BRANCH}/ota/${CHANNEL}/${BIN}" || true

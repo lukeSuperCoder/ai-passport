@@ -12,6 +12,8 @@ idf_component_register(
          "app_meow_run.c"
          "app_meow_match.c"
          "app_meow.c"
+         "app_meow_web.c"
+         "qrcode.c"
          "app_meow_pet.c"
          "app_meow_good.c"
          "app_meow_souv.c"
@@ -27,7 +29,8 @@ idf_component_register(
     INCLUDE_DIRS "."
     REQUIRES bsp nvs_flash esp_netif lwip
              driver bt esp_event
-             app_update esp_app_format esp_http_client mbedtls esp-tls
+             app_update esp_app_format esp_http_client esp_http_server
+             mbedtls esp-tls
 )
 if(DEFINED APP_OTA_CHANNEL AND APP_OTA_CHANNEL)
     target_compile_definitions(${COMPONENT_LIB} PRIVATE

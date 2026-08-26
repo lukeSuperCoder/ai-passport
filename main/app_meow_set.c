@@ -295,14 +295,17 @@ static void paint_ota(char *out, size_t n)
         return;
     }
     snprintf(out, n,
+             "%s %s  %s\n"
              "%s %s\n"
              "%s %s\n"
              "%s\n"
              "%s  %s\n"
              "%s  %s\n"
              "%s\n",
-             s_sel == 0 ? ">" : " ", app_str(APP_STR_OTA_CHECK),
-             s_sel == 1 ? ">" : " ", app_str(APP_STR_OTA_INSTALL),
+             s_sel == 0 ? ">" : " ", app_str(APP_STR_AUTO),
+             app_str_onoff(app_prefs()->ota_auto),
+             s_sel == 1 ? ">" : " ", app_str(APP_STR_OTA_CHECK),
+             s_sel == 2 ? ">" : " ", app_str(APP_STR_OTA_INSTALL),
              app_ota_channel(),
              app_str(APP_STR_OTA_NOW), app_ota_cur_ver(),
              app_str(APP_STR_OTA_LATEST), latest,
@@ -311,9 +314,15 @@ static void paint_ota(char *out, size_t n)
 
 static void ota_choose(void)
 {
+    if (s_sel == 0) {
+        app_prefs_t *p = app_prefs();
+        p->ota_auto = !p->ota_auto;
+        app_prefs_save();
+        return;
+    }
     if (app_ota_busy()) return;
-    if (s_sel == 0) app_ota_check();
-    else if (s_sel == 1) app_ota_apply();
+    if (s_sel == 1) app_ota_check();
+    else if (s_sel == 2) app_ota_apply();
 }
 
 static void paint(void)
@@ -742,7 +751,7 @@ void app_meow_set_on_key(bsp_btn_t btn, bsp_btn_ev_t ev)
     if (s_id == MEOW_SET_WIFI) n = wifi_count();
     else if (s_id == MEOW_SET_BLE) n = 3 + s_peer_n + 1;
     else if (s_id == MEOW_SET_CLOCK) n = clock_rows();
-    else if (s_id == MEOW_SET_OTA) n = 2;
+    else if (s_id == MEOW_SET_OTA) n = 3;
     if (n < 1) n = 1;
 
     if (btn == BSP_BTN_UP) {

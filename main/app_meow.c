@@ -9,6 +9,7 @@
 #include "app_meow_run.h"
 #include "app_meow_match.h"
 #include "app_meow_set.h"
+#include "app_meow_web.h"
 #include "app_time.h"
 #include "app_tone.h"
 #include "app_ui.h"
@@ -520,6 +521,7 @@ static app_str_id_t stage_id(void);
 static int play_pad_w(void);
 static void draw_souv_ico(lv_layer_t *layer, int id, int x, int y, int sz);
 static void paint(void);
+static void name_from_web(void);
 
 static int pet_kind(void)
 {
@@ -2200,7 +2202,8 @@ static void stage_draw(lv_event_t *e)
     }
     draw_flash(layer, bx, by);
     if (s_mode == MODE_CARE && !app_meow_set_open_now() &&
-        (app_ota_prompt() || app_ota_state() == APP_OTA_APPLYING)) {
+        ((app_ota_prompt() && app_prefs()->ota_auto) ||
+         app_ota_state() == APP_OTA_APPLYING)) {
         const char *hint = app_ota_state() == APP_OTA_APPLYING
             ? app_str(APP_STR_OTA_HOLD) : app_str(APP_STR_OTA_READY);
         rrect(layer, bx + 16, by + 88, 208, 52, 12, COL_FACE);
@@ -2390,7 +2393,7 @@ static const char *status_text(void)
                  app_ota_progress());
         return s_line;
     }
-    if (app_ota_prompt() && s_mode == MODE_CARE) {
+    if (app_ota_prompt() && app_prefs()->ota_auto && s_mode == MODE_CARE) {
         snprintf(s_line, sizeof(s_line), app_str(APP_STR_OTA_NEW),
                  app_ota_new_ver());
         return s_line;
@@ -2432,7 +2435,10 @@ static const char *status_text(void)
     }
     if (s_pet.stage == APP_MEOW_DEAD) return app_str(APP_STR_MEOW_DEAD);
     if (s_pet.stage == APP_MEOW_EGG) return app_str(APP_STR_MEOW_HATCH);
-    if (s_pet.sleeping) return app_str(APP_STR_MEOW_SLEEP);
+    if (s_pet.sleeping) {
+        return app_str(s_pet.lights_off ? APP_STR_MEOW_SLEEP
+                                        : APP_STR_MEOW_SLEEP_NOW);
+    }
     if (s_pet.sick) {
         if (s_pet.ailment >= APP_MEOW_AI_WORM &&
             s_pet.ailment <= APP_MEOW_AI_COUGH) {
@@ -2490,8 +2496,7 @@ static void name_open(void)
 {
     s_name_edit = true;
     if (s_pet.name[0]) {
-        strncpy(s_name_buf, s_pet.name, sizeof(s_name_buf) - 1);
-        s_name_buf[sizeof(s_name_buf) - 1] = 0;
+        ui_pixel_utf8_copy(s_name_buf, sizeof(s_name_buf), s_pet.name);
     } else {
         s_name_buf[0] = 0;
     }
@@ -2500,12 +2505,20 @@ static void name_open(void)
     s_kb_hold_btn = -1;
     s_kb_hold_ms = 0;
     if (!s_kb_hold_tm) s_kb_hold_tm = lv_timer_create(kb_hold_tick, 80, NULL);
+    app_meow_web_set_target(s_name_buf, sizeof(s_name_buf), name_from_web);
+}
+
+static void name_close_web(void)
+{
+    app_meow_web_clear_target();
+    app_meow_web_qr_close();
 }
 
 static void name_cancel(void)
 {
     s_name_edit = false;
     kb_hold_stop();
+    name_close_web();
 }
 
 static void name_commit(void)
@@ -2514,8 +2527,15 @@ static void name_commit(void)
     s_pet.named = 1;
     s_name_edit = false;
     kb_hold_stop();
+    name_close_web();
     s_dirty = true;
     save_nvs();
+}
+
+static void name_from_web(void)
+{
+    if (s_name_buf[0]) name_commit();
+    paint();
 }
 
 static void paint(void)
@@ -3428,12 +3448,14 @@ static void do_act(void)
 static bool idle_hold(void)
 {
     if (minigame()) return true;
-    if (s_name_edit) return true;
+    if (s_name_edit || app_meow_web_qr_visible()) return true;
     if (s_mode == MODE_LINK || app_meow_link_busy()) return true;
     if (s_flash_left > 0) return true;
     if (app_meow_set_open_now() || app_meow_set_busy()) return true;
     if (bsp_ble_state() == BSP_BLE_PAIRING) return true;
-    if (app_ota_busy() || app_ota_prompt()) return true;
+    if (app_ota_busy() || (app_ota_prompt() && app_prefs()->ota_auto)) {
+        return true;
+    }
     return false;
 }
 
@@ -3487,13 +3509,15 @@ static void on_tick(lv_timer_t *t)
     trip_settle();
     poll_alerts();
     app_time_tick();
+    app_meow_web_poll();
     drain_ancs();
     if (s_mode == MODE_LINK) {
         int r = app_meow_link_poll(&s_pet);
         if (r != APP_MEOW_LINK_WAIT) finish_link(r);
     }
     {
-        bool allow = !s_asleep && !minigame() && s_mode == MODE_CARE &&
+        bool allow = app_prefs()->ota_auto &&
+                     !s_asleep && !minigame() && s_mode == MODE_CARE &&
                      !app_meow_set_open_now();
         app_ota_tick(allow);
     }
@@ -3577,6 +3601,7 @@ void app_meow_start(void)
     ble_off();
     app_ota_init();
     s_timer = lv_timer_create(on_tick, 250, NULL);
+    app_meow_web_init(s_scr);
     lv_screen_load(s_scr);
     paint();
 }
@@ -3596,6 +3621,12 @@ void app_meow_on_key(bsp_btn_t btn, bsp_btn_ev_t ev)
 
     if (s_wake_skip) {
         if (ev == BSP_BTN_CLICK) s_wake_skip = false;
+        return;
+    }
+
+    if (app_meow_web_qr_visible()) {
+        app_meow_web_qr_key(btn, ev);
+        paint();
         return;
     }
 
@@ -3619,7 +3650,8 @@ void app_meow_on_key(bsp_btn_t btn, bsp_btn_ev_t ev)
         }
         return;
     }
-    if (app_ota_prompt() && s_mode == MODE_CARE && !app_meow_set_open_now()) {
+    if (app_ota_prompt() && app_prefs()->ota_auto &&
+        s_mode == MODE_CARE && !app_meow_set_open_now()) {
         if (ev == BSP_BTN_CLICK && btn == BSP_BTN_OK) {
             app_ota_apply();
             flash(NULL, APP_TONE_CHIME);
@@ -3656,8 +3688,18 @@ void app_meow_on_key(bsp_btn_t btn, bsp_btn_ev_t ev)
         if (btn == BSP_BTN_OK) {
             int r = app_kb_click(s_name_buf, sizeof(s_name_buf),
                                  &s_kb_sel, &s_kb_set);
+            if (r == 1) {
+                char clip[APP_MEOW_NAME_MAX + 1];
+                app_meow_name_copy(clip, sizeof(clip), s_name_buf);
+                memcpy(s_name_buf, clip, sizeof(clip));
+            }
             if (r == 3) name_cancel();
             else if (r == 2) name_commit();
+            else if (r == 4) {
+                char url[36];
+                if (app_meow_web_url(url, sizeof(url))) app_meow_web_qr_open();
+                else flash_for(app_str(APP_STR_QR_NEED), APP_TONE_BEEP, 8);
+            }
             paint();
         }
         return;

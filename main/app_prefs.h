@@ -35,6 +35,7 @@ typedef struct {
     uint8_t walkie_mode;  // 0 = WebRTC/Wi-Fi, 1 = BLE
     uint8_t meow_bed;     // 0..23, default 21
     uint8_t meow_wake;    // 0..23, default 8; equal to bed = no night sleep
+    uint8_t ota_auto;     // 1 = check for updates in background
     uint8_t kw_n;
     app_kw_t kw[APP_KW_MAX];
 } app_prefs_t;

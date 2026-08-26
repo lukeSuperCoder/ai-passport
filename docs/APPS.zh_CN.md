@@ -130,7 +130,7 @@
 
 状态存在 NVS（宠物：命名空间 `app`，键 `meow`；设置同属 `app`；`ota_skip` 记住稍后的版本）。
 
-每个 demo 一条通道（`ota/channel`，本分支是 `demo/meow`）。设备只拉 `main` 上的 `ota/demo/meow/latest.json`，清单里的 `channel` 对不上就拒绝。打标签 `demo-meow-vX.Y.Z`（或在本分支跑 **Release firmware**）只构建、只回写这一份，不动其它 demo。Release 两份：`FoloToy-AI-Passport-demo-meow.bin`（OTA 应用分区，设置 → 更新装这份）和 `FoloToy-AI-Passport-demo-meow-factory.bin`（`0x0` 整片）。不要每个提交都发版。
+每个 demo 一条通道（`ota/channel`，本分支是 `demo/meow`）。设备只拉 `demo/meow` 分支上的 `ota/demo/meow/latest.json`，清单里的 `channel` 对不上就拒绝。打标签 `demo-meow-vX.Y.Z`（或在本分支跑 **Release firmware**）只构建、只回写这一份，不动其它 demo。Release 两份：`FoloToy-AI-Passport-demo-meow.bin`（OTA 应用分区，设置 → 更新装这份）和 `FoloToy-AI-Passport-demo-meow-factory.bin`（`0x0` 整片）。不要每个提交都发版。
 
 ## 设备休眠
 

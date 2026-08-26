@@ -50,6 +50,7 @@ static void set_defaults(void)
     s_p.walkie_mode = 0;
     s_p.meow_bed = 21;
     s_p.meow_wake = 8;
+    s_p.ota_auto = 0;
 }
 
 void app_prefs_load(void)
@@ -91,6 +92,7 @@ void app_prefs_load(void)
         if (nvs_get_u8(h, "wkmd", &u8) == ESP_OK && u8 <= 1) s_p.walkie_mode = u8;
         if (nvs_get_u8(h, "mbed", &u8) == ESP_OK && u8 <= 23) s_p.meow_bed = u8;
         if (nvs_get_u8(h, "mwake", &u8) == ESP_OK && u8 <= 23) s_p.meow_wake = u8;
+        if (nvs_get_u8(h, "otaa", &u8) == ESP_OK) s_p.ota_auto = u8 != 0;
     }
     size_t n = sizeof(s_p.kw);
     if (nvs_get_blob(h, "kw", s_p.kw, &n) == ESP_OK) {
@@ -190,6 +192,7 @@ void app_prefs_save(void)
     nvs_set_u8(h, "wkmd", s_p.walkie_mode);
     nvs_set_u8(h, "mbed", s_p.meow_bed);
     nvs_set_u8(h, "mwake", s_p.meow_wake);
+    nvs_set_u8(h, "otaa", s_p.ota_auto ? 1 : 0);
     nvs_set_u8(h, "kwn", s_p.kw_n);
     nvs_set_blob(h, "kw", s_p.kw, sizeof(s_p.kw));
     totp_write(h);

@@ -12,11 +12,20 @@
 #ifndef APP_OTA_CHANNEL
 #define APP_OTA_CHANNEL "demo/meow"
 #endif
+/* 清单在通道同名 git 分支上，不看 main。 */
+#ifndef APP_OTA_REF
+#define APP_OTA_REF APP_OTA_CHANNEL
+#endif
 
 #ifndef APP_OTA_MANIFEST_URL
 #define APP_OTA_MANIFEST_URL \
-    "https://raw.githubusercontent.com/pax-zhang/ai-passport/main/ota/" \
-    APP_OTA_CHANNEL "/latest.json"
+    "https://raw.githubusercontent.com/pax-zhang/ai-passport/" \
+    APP_OTA_REF "/ota/" APP_OTA_CHANNEL "/latest.json"
+#endif
+#ifndef APP_OTA_MANIFEST_URL_ALT
+#define APP_OTA_MANIFEST_URL_ALT \
+    "https://cdn.jsdelivr.net/gh/pax-zhang/ai-passport@" \
+    APP_OTA_REF "/ota/" APP_OTA_CHANNEL "/latest.json"
 #endif
 /* latest.json 的 url 必须是应用分区镜像。工厂包在 factory_url，设备不下载。 */
 

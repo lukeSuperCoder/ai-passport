@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 #include "app_meow.h"
@@ -56,6 +57,16 @@ int main(void)
     assert(strcmp(app_meow_name(&pet), "Mochi") == 0);
     app_meow_set_name(&pet, "   ");
     assert(app_meow_name(&pet)[0] == 0);
+    app_meow_set_name(&pet, "团团");
+    assert(strcmp(app_meow_name(&pet), "团团") == 0);
+    app_meow_set_name(&pet, "小小小小小");
+    assert(strcmp(app_meow_name(&pet), "小小小小小") == 0);
+    app_meow_set_name(&pet, "小小小小小小");
+    assert(strcmp(app_meow_name(&pet), "小小小小小") == 0);
+    app_meow_set_name(&pet, "HelloWorld");
+    assert(strcmp(app_meow_name(&pet), "HelloWorld") == 0);
+    app_meow_set_name(&pet, "HelloWorldX");
+    assert(strcmp(app_meow_name(&pet), "HelloWorld") == 0);
     assert(app_meow_good_cat(APP_MEOW_G_BURGER) == APP_MEOW_CAT_FOOD);
     assert(app_meow_good_cat(APP_MEOW_G_COLD) == APP_MEOW_CAT_MED);
     assert(app_meow_good_cat(APP_MEOW_G_SHOVEL) == APP_MEOW_CAT_GEAR);
@@ -784,6 +795,29 @@ int main(void)
         assert(app_meow_import(&q2, &pet, sizeof(pet)));
         assert(strcmp(app_meow_name(&q2), "Pip") == 0);
         assert(q2.named == 1);
+    }
+
+    {
+        app_meow_t src, q9;
+        uint8_t raw[128];
+        size_t name_off = offsetof(app_meow_t, name);
+        size_t old_gain_off = name_off + APP_MEOW_NAME_MAX_V9 + 1;
+        size_t old_n = old_gain_off + 2;
+
+        memcpy(&src, &pet, sizeof(src));
+        src.ver = APP_MEOW_VER9;
+        src.named = 1;
+        memset(src.name, 0, sizeof(src.name));
+        memcpy(src.name, "团团", 7);
+        src.trip_gain = 48;
+        memset(raw, 0, sizeof(raw));
+        memcpy(raw, &src, name_off);
+        memcpy(raw + name_off, src.name, APP_MEOW_NAME_MAX_V9 + 1);
+        memcpy(raw + old_gain_off, &src.trip_gain, 2);
+        assert(app_meow_import(&q9, raw, old_n));
+        assert(strcmp(app_meow_name(&q9), "团团") == 0);
+        assert(q9.named == 1);
+        assert(q9.trip_gain == 48);
     }
 
     pet.found = 0x7;

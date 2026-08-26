@@ -4,6 +4,7 @@
 
 _Static_assert(offsetof(app_meow_t, ailment) == APP_MEOW_VER2_SIZE, "v2 blob size");
 _Static_assert(offsetof(app_meow_t, ver) == 12, "ver offset");
+_Static_assert(offsetof(app_meow_t, name) == 97, "v9 name offset");
 _Static_assert(APP_MEOW_G_N == 16, "goods count");
 
 typedef struct {
@@ -733,24 +734,44 @@ const char *app_meow_name(const app_meow_t *p)
     return (p && p->name[0]) ? p->name : "";
 }
 
-void app_meow_set_name(app_meow_t *p, const char *name)
+static int utf8_w(unsigned char c)
 {
-    const char *s = name ? name : "";
-    size_t n;
+    if ((c & 0x80) == 0) return 1;
+    if ((c & 0xE0) == 0xC0) return 2;
+    if ((c & 0xF0) == 0xE0) return 3;
+    if ((c & 0xF8) == 0xF0) return 4;
+    return 1;
+}
 
-    if (!p) return;
+size_t app_meow_name_copy(char *dst, size_t dst_n, const char *src)
+{
+    const char *s = src ? src : "";
+    size_t n, o = 0;
+    int chars = 0;
+
+    if (!dst || dst_n == 0) return 0;
     while (*s == ' ' || *s == '\t') s++;
     n = strlen(s);
     while (n > 0 && (s[n - 1] == ' ' || s[n - 1] == '\t')) n--;
-    if (n > APP_MEOW_NAME_MAX) n = APP_MEOW_NAME_MAX;
-    while (n > 0 && ((unsigned char)s[n - 1] & 0xC0) == 0x80) n--;
-    if (n > 0 && (unsigned char)s[n - 1] >= 0xC0) {
-        unsigned char c = (unsigned char)s[n - 1];
-        int need = c < 0xE0 ? 2 : (c < 0xF0 ? 3 : 4);
-        if ((int)n - 1 + need > (int)APP_MEOW_NAME_MAX) n--;
+    if (dst_n > APP_MEOW_NAME_MAX + 1) dst_n = APP_MEOW_NAME_MAX + 1;
+    for (size_t i = 0; i < n && o + 1 < dst_n && chars < APP_MEOW_NAME_CHARS; ) {
+        int w = utf8_w((unsigned char)s[i]);
+        if (i + (size_t)w > n) break;
+        if (o + (size_t)w >= dst_n) break;
+        if (o + (size_t)w > APP_MEOW_NAME_MAX) break;
+        memcpy(dst + o, s + i, (size_t)w);
+        o += (size_t)w;
+        i += (size_t)w;
+        chars++;
     }
-    memcpy(p->name, s, n);
-    p->name[n] = 0;
+    dst[o] = 0;
+    return o;
+}
+
+void app_meow_set_name(app_meow_t *p, const char *name)
+{
+    if (!p) return;
+    app_meow_name_copy(p->name, sizeof(p->name), name);
 }
 
 int app_meow_owned_n(const app_meow_t *p, int cat)
@@ -1124,13 +1145,34 @@ bool app_meow_import(app_meow_t *p, const void *raw, size_t n)
     {
         uint8_t src_ver = p->ver;
 
-    if (p->ver == APP_MEOW_VER || p->ver == APP_MEOW_VER8 ||
-        p->ver == APP_MEOW_VER7 || p->ver == APP_MEOW_VER6) {
+    if (p->ver == APP_MEOW_VER) {
         if (n > APP_MEOW_VER2_SIZE) {
             size_t rest = n - APP_MEOW_VER2_SIZE;
             size_t room = sizeof(*p) - APP_MEOW_VER2_SIZE;
             if (rest > room) rest = room;
             memcpy((uint8_t *)p + APP_MEOW_VER2_SIZE, b + APP_MEOW_VER2_SIZE, rest);
+        }
+        p->ver = APP_MEOW_VER;
+    } else if (p->ver == APP_MEOW_VER9 || p->ver == APP_MEOW_VER8 ||
+               p->ver == APP_MEOW_VER7 || p->ver == APP_MEOW_VER6) {
+        /* v6–v9 的 name 只有 12 字节,后面紧跟 trip_gain。加长名字后不能整段 memcpy。 */
+        size_t name_off = offsetof(app_meow_t, name);
+        size_t old_gain_off = name_off + APP_MEOW_NAME_MAX_V9 + 1;
+        if (n > APP_MEOW_VER2_SIZE && name_off > APP_MEOW_VER2_SIZE) {
+            size_t mid = name_off - APP_MEOW_VER2_SIZE;
+            if (n - APP_MEOW_VER2_SIZE < mid) mid = n - APP_MEOW_VER2_SIZE;
+            memcpy((uint8_t *)p + APP_MEOW_VER2_SIZE, b + APP_MEOW_VER2_SIZE, mid);
+        }
+        memset(p->name, 0, sizeof(p->name));
+        if (n > name_off) {
+            size_t have = n - name_off;
+            if (have > APP_MEOW_NAME_MAX_V9) have = APP_MEOW_NAME_MAX_V9;
+            memcpy(p->name, b + name_off, have);
+            p->name[APP_MEOW_NAME_MAX] = 0;
+        }
+        p->trip_gain = 0;
+        if (n >= old_gain_off + sizeof(p->trip_gain)) {
+            memcpy(&p->trip_gain, b + old_gain_off, sizeof(p->trip_gain));
         }
         p->ver = APP_MEOW_VER;
     } else if (p->ver == 5) {
@@ -1191,7 +1233,7 @@ bool app_meow_import(app_meow_t *p, const void *raw, size_t n)
     } else {
         return false;
     }
-    if (src_ver && src_ver < APP_MEOW_VER) scale_legacy_stats(p);
+    if (src_ver && src_ver < APP_MEOW_VER6) scale_legacy_stats(p);
     }
     clamp(p);
     rot_reset();
