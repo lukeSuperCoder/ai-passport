@@ -13,7 +13,7 @@ Pins and BSP limits stay in the [README](../README.md) and the [AI Hardware Deve
 | Action | Effect |
 | --- | --- |
 | Short `UP` / `DOWN` | Bottom tabs: Home / Bag / Game / Dex / Set. After OK, move among that page's actions. In the bag and dex, move among entries in the current category |
-| Short `OK` | Open the current tab. Inside: do the highlighted act. Home shortcuts (icons only): Feed / Bath / Heal / Light. The first three cycle usable goods in catalog order (Feed includes drinks, Bath includes sweep). A toast shows `Used rice ball x1` plus Full/Clean/Health/Mood deltas. Light works while the pet sleeps; opening Home at night starts on the lamp. Settings has language, name, Wi-Fi, Bluetooth, clock, sleep hours, screen, sound, update, and Reset game (clears bag, finds, and scores; the pet is gone). Bag uses durable items by category. Game: UP/DOWN flips Catch Fish / Rhythm Master / Kitten Run / Match 3 / Bag Trip, OK starts; Bag Trip packs food then leaves. Minigames and a finished trip share one result page (rewards, one chime, screen on); OK leaves |
+| Short `OK` | Open the current tab. Inside: do the highlighted act. Home shortcuts (icons only): Feed / Bath / Heal / Light. The first three cycle usable goods in catalog order (Feed includes drinks, Bath includes sweep). A toast shows `Used rice ball x1` plus Full/Clean/Health/Mood deltas. Light works while the pet sleeps; opening Home at night starts on the lamp. Settings has language, name, sleep hours, Wi-Fi, Bluetooth, clock, screen, sound, update, and Reset game (clears bag, finds, and scores; the pet is gone). Bag uses durable items by category. Game: UP/DOWN flips Catch Fish / Rhythm Master / Kitten Run / Match 3 / Bag Trip, OK starts; Bag Trip packs food then leaves. Minigames and a finished trip share one result page (rewards, one chime, screen on); OK leaves |
 | Long `OK` | Leave the tab's inner selection, leave a settings page, or leave the play minigame |
 | Long `UP` / `DOWN` | In the bag, switch Food / Meds / Gear; in the dex, switch Pets / Goals / Items / Finds; in Bag Trip, long UP removes one packed copy, long DOWN leaves. On a keyboard (name or Wi-Fi password), hold to keep moving and then jump a row |
 | Catch-fish | `UP` = left, `DOWN` = right |
@@ -120,10 +120,10 @@ Last tab. Always available, including on the egg and after the pet is gone.
 | --- | --- |
 | Language | English / 简体中文 (default), saved to NVS |
 | Name | Change the pet name (empty GO uses the default baby name; hold OK back). The name stays after every evolve |
+| Sleep hours | Pet bedtime and wake (OK +1 hour; same hour = no scheduled sleep) |
 | Wi-Fi | Power, auto-reconnect, scan, join (3-key password), forget |
 | Bluetooth | Power, quiet, advertise, forget a bond |
 | Date & Time | NTP on/off (on by default, saved immediately) and server. With NTP off, dial year/month/day/hour/minute and **Set clock** |
-| Sleep hours | Pet bedtime and wake (OK +1 hour; same hour = no scheduled sleep) |
 | Screen | Brightness 10–100%; auto-sleep never / 15 / 30 / 60 / 120 s |
 | Sound | Mute; volume 0–100% |
 | Update | Current and latest version; Check; Install after confirm. Downloads the **app** image from `latest.json` (`url`, not `*-factory.bin`). Wi-Fi also checks in the background and shows **OK install / DOWN later**. Pet NVS is kept. First USB flash of this partition table: `idf.py flash` (do not erase), or the release `*-factory.bin` at `0x0`. |

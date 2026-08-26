@@ -446,11 +446,11 @@ static const int HOME_ICO[HOME_N] = {
 };
 #define SET_N 10
 #define SET_NAME 1
-#define SET_BED 5
+#define SET_BED 2
 #define SET_WIPE 9
 static const app_str_id_t SET_STR[SET_N] = {
-    APP_STR_LANGUAGE, APP_STR_MEOW_NAME, APP_STR_WIFI, APP_STR_BLUETOOTH,
-    APP_STR_DATETIME, APP_STR_PET_HOURS, APP_STR_SCREEN, APP_STR_SOUND,
+    APP_STR_LANGUAGE, APP_STR_MEOW_NAME, APP_STR_PET_HOURS, APP_STR_WIFI,
+    APP_STR_BLUETOOTH, APP_STR_DATETIME, APP_STR_SCREEN, APP_STR_SOUND,
     APP_STR_UPDATE, APP_STR_MEOW_WIPE
 };
 static const app_str_id_t BAG_CAT_STR[3] = {
@@ -3161,7 +3161,7 @@ static void do_act(void)
     }
     if (s_sel == TAB_SET) {
         static const meow_set_id_t MAP[] = {
-            MEOW_SET_WIFI, MEOW_SET_BLE, MEOW_SET_CLOCK, MEOW_SET_BED,
+            MEOW_SET_BED, MEOW_SET_WIFI, MEOW_SET_BLE, MEOW_SET_CLOCK,
             MEOW_SET_SCREEN, MEOW_SET_SOUND, MEOW_SET_OTA
         };
         if (s_sub == 0) {
