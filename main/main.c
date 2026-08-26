@@ -1,6 +1,6 @@
 #include "app_prefs.h"
-#include "app_tama_link.h"
-#include "app_tama_ui.h"
+#include "app_meow_link.h"
+#include "app_meow_ui.h"
 #include "app_time.h"
 #include "app_tone.h"
 #include "bsp_audio.h"
@@ -25,13 +25,13 @@ static void on_key(bsp_btn_t btn, bsp_btn_ev_t ev, void *user)
 {
     (void)user;
     if (!bsp_lvgl_lock(500)) return;
-    app_tama_on_key(btn, ev);
+    app_meow_on_key(btn, ev);
     bsp_lvgl_unlock();
 }
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "FoloToy AI Passport / Tamagotchi");
+    ESP_LOGI(TAG, "FoloToy AI Passport / Meow");
 
     esp_err_t e = nvs_flash_init();
     if (e == ESP_ERR_NVS_NO_FREE_PAGES || e == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -56,7 +56,7 @@ void app_main(void)
     s_ok[2] = (bsp_audio_init() == ESP_OK);
     s_ok[3] = (bsp_battery_init() == ESP_OK);
     s_ok[4] = (bsp_wifi_init() == ESP_OK);
-    app_tama_link_prepare();
+    app_meow_link_prepare();
     s_ok[5] = (bsp_ble_init() == ESP_OK);
 
     app_prefs_load();
@@ -67,7 +67,7 @@ void app_main(void)
     bsp_pm_init();
 
     if (bsp_lvgl_lock(1000)) {
-        app_tama_start();
+        app_meow_start();
         bsp_lvgl_unlock();
     }
 

@@ -12,9 +12,15 @@
 /* ---------- Date & Time ---------- */
 
 static lv_obj_t *s_clk_body;
+static lv_obj_t *s_clk_hint;
 static lv_timer_t *s_clk_timer;
 static int s_clk_sel;
 static int s_y, s_mo, s_d, s_h, s_mi;
+
+static int clk_rows(void)
+{
+    return app_prefs()->ntp_on ? 2 : 7;
+}
 
 static void clk_paint(void)
 {
@@ -23,29 +29,43 @@ static void clk_paint(void)
     app_time_now_text(now, sizeof(now));
     const app_prefs_t *p = app_prefs();
     char buf[420];
-    snprintf(buf, sizeof(buf),
-             "%s %s\n"
-             "%s %s  %s%s\n"
-             "%s %s  %s\n"
-             "%s %s  %d\n"
-             "%s %s  %d\n"
-             "%s %s  %d\n"
-             "%s %s  %d\n"
-             "%s %s  %02d\n"
-             "%s %s\n",
-             app_str(APP_STR_NOW), now,
-             s_clk_sel == 0 ? ">" : " ", app_str(APP_STR_NTP),
-             app_str_onoff(p->ntp_on),
-             (p->ntp_on && app_time_ntp_synced()) ? app_str(APP_STR_SYNC) : "",
-             s_clk_sel == 1 ? ">" : " ", app_str(APP_STR_SERVER),
-             app_ntp_server(p->ntp_server),
-             s_clk_sel == 2 ? ">" : " ", app_str(APP_STR_YEAR), s_y,
-             s_clk_sel == 3 ? ">" : " ", app_str(APP_STR_MONTH), s_mo,
-             s_clk_sel == 4 ? ">" : " ", app_str(APP_STR_DAY), s_d,
-             s_clk_sel == 5 ? ">" : " ", app_str(APP_STR_HOUR), s_h,
-             s_clk_sel == 6 ? ">" : " ", app_str(APP_STR_MINUTE), s_mi,
-             s_clk_sel == 7 ? ">" : " ", app_str(APP_STR_SAVE));
+    if (s_clk_sel >= clk_rows()) s_clk_sel = clk_rows() - 1;
+    if (p->ntp_on) {
+        snprintf(buf, sizeof(buf),
+                 "%s %s\n"
+                 "%s %s  %s%s\n"
+                 "%s %s  %s\n",
+                 app_str(APP_STR_NOW), now,
+                 s_clk_sel == 0 ? ">" : " ", app_str(APP_STR_NTP),
+                 app_str_onoff(p->ntp_on),
+                 app_time_ntp_synced() ? app_str(APP_STR_SYNC) : "",
+                 s_clk_sel == 1 ? ">" : " ", app_str(APP_STR_SERVER),
+                 app_ntp_server(p->ntp_server));
+    } else {
+        snprintf(buf, sizeof(buf),
+                 "%s %s\n"
+                 "%s %s  %s\n"
+                 "%s %s  %d\n"
+                 "%s %s  %d\n"
+                 "%s %s  %d\n"
+                 "%s %s  %d\n"
+                 "%s %s  %02d\n"
+                 "%s %s\n",
+                 app_str(APP_STR_NOW), now,
+                 s_clk_sel == 0 ? ">" : " ", app_str(APP_STR_NTP),
+                 app_str_onoff(p->ntp_on),
+                 s_clk_sel == 1 ? ">" : " ", app_str(APP_STR_YEAR), s_y,
+                 s_clk_sel == 2 ? ">" : " ", app_str(APP_STR_MONTH), s_mo,
+                 s_clk_sel == 3 ? ">" : " ", app_str(APP_STR_DAY), s_d,
+                 s_clk_sel == 4 ? ">" : " ", app_str(APP_STR_HOUR), s_h,
+                 s_clk_sel == 5 ? ">" : " ", app_str(APP_STR_MINUTE), s_mi,
+                 s_clk_sel == 6 ? ">" : " ", app_str(APP_STR_SET_CLOCK));
+    }
     lv_label_set_text(s_clk_body, buf);
+    if (s_clk_hint) {
+        lv_label_set_text(s_clk_hint,
+                          app_str(p->ntp_on ? APP_STR_CLOCK_HINT : APP_STR_CLOCK_SET_HINT));
+    }
 }
 
 static void clk_tick(lv_timer_t *t)
@@ -61,8 +81,7 @@ void app_clock_enter(lv_obj_t *p)
     s_clk_sel = 0;
     lv_obj_t *card = app_ui_card(p);
     app_ui_title(card, app_str(APP_STR_DATETIME));
-    lv_obj_t *h = app_ui_hint(card);
-    lv_label_set_text(h, app_str(APP_STR_CLOCK_HINT));
+    s_clk_hint = app_ui_hint(card);
     s_clk_body = app_ui_body(card, 44);
     s_clk_timer = lv_timer_create(clk_tick, 500, NULL);
     clk_paint();
@@ -72,35 +91,37 @@ void app_clock_exit(void)
 {
     if (s_clk_timer) { lv_timer_delete(s_clk_timer); s_clk_timer = NULL; }
     s_clk_body = NULL;
+    s_clk_hint = NULL;
 }
 
 void app_clock_key(bsp_btn_t btn, bsp_btn_ev_t ev)
 {
     if (ev != BSP_BTN_CLICK) return;
-    if (btn == BSP_BTN_UP) { app_ui_move(&s_clk_sel, 8, -1); clk_paint(); return; }
-    if (btn == BSP_BTN_DOWN) { app_ui_move(&s_clk_sel, 8, 1); clk_paint(); return; }
+    if (btn == BSP_BTN_UP) { app_ui_move(&s_clk_sel, clk_rows(), -1); clk_paint(); return; }
+    if (btn == BSP_BTN_DOWN) { app_ui_move(&s_clk_sel, clk_rows(), 1); clk_paint(); return; }
     if (btn != BSP_BTN_OK) return;
     app_prefs_t *p = app_prefs();
-    switch (s_clk_sel) {
-    case 0:
+    if (s_clk_sel == 0) {
         p->ntp_on = !p->ntp_on;
         app_prefs_save();
         app_time_ntp_restart();
-        break;
-    case 1:
-        p->ntp_server = (uint8_t)((p->ntp_server + 1) % APP_NTP_SERVER_N);
-        app_prefs_save();
-        app_time_ntp_restart();
-        break;
-    case 2: s_y++; if (s_y > 2038) s_y = 2024; break;
-    case 3: s_mo = s_mo >= 12 ? 1 : s_mo + 1; break;
-    case 4: s_d = s_d >= 31 ? 1 : s_d + 1; break;
-    case 5: s_h = (s_h + 1) % 24; break;
-    case 6: s_mi = (s_mi + 1) % 60; break;
-    case 7:
-        app_time_set(s_y, s_mo, s_d, s_h, s_mi);
-        break;
-    default: break;
+        s_clk_sel = 0;
+    } else if (p->ntp_on) {
+        if (s_clk_sel == 1) {
+            p->ntp_server = (uint8_t)((p->ntp_server + 1) % APP_NTP_SERVER_N);
+            app_prefs_save();
+            app_time_ntp_restart();
+        }
+    } else {
+        switch (s_clk_sel) {
+        case 1: s_y++; if (s_y > 2038) s_y = 2024; break;
+        case 2: s_mo = s_mo >= 12 ? 1 : s_mo + 1; break;
+        case 3: s_d = s_d >= 31 ? 1 : s_d + 1; break;
+        case 4: s_h = (s_h + 1) % 24; break;
+        case 5: s_mi = (s_mi + 1) % 60; break;
+        case 6: app_time_set(s_y, s_mo, s_d, s_h, s_mi); break;
+        default: break;
+        }
     }
     clk_paint();
 }

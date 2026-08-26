@@ -1,5 +1,5 @@
 # 按 ota/channel（与 git 分支一致）发对应固件。
-# 标签形如 demo-tamagotchi-v0.2.0，只回写 ota/<channel>/latest.json。
+# 标签形如 demo-meow-v0.2.0，只回写 ota/<channel>/latest.json。
 # 发两份：*.bin 是 OTA 应用分区（设备更新只拉这份）；*-factory.bin 是 0x0 整片。
 # latest.json 的 url/sha256/size 永远指向应用分区，不要把工厂包写进 url。
 # 不要每个提交都发版。

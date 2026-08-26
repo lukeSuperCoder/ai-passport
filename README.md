@@ -1,8 +1,8 @@
-# FoloToy AI Passport — Tamagotchi
+# FoloToy AI Passport — Meow
 
 English | [简体中文](README.zh_CN.md)
 
-**This `demo/tamagotchi` branch is a standalone pet game, not the Home-app firmware on `main`.** It boots into Tamagotchi only. Alerts, Walkie, Weather, and TOTP are not in this image. Language, Wi-Fi, Bluetooth, clock, screen, and sound are set **inside the game**. Wi-Fi and Bluetooth are for **Visit** and **Battle** under World (nearby BLE, or the same saved LAN). NTP from STA is used for the pet’s bedtime.
+**This `demo/meow` branch is a standalone pet game, not the Home-app firmware on `main`.** It boots into Meow only. Alerts, Walkie, Weather, and TOTP are not in this image. Language, Wi-Fi, Bluetooth, clock, screen, and sound are set **inside the game**. Wi-Fi and Bluetooth are for **Visit** and **Battle** under World (nearby BLE, or the same saved LAN). NTP from STA is used for the pet’s bedtime.
 
 Game controls: [English](docs/APPS.md) · [简体中文](docs/APPS.zh_CN.md)
 
@@ -181,24 +181,24 @@ cc -std=c11 -Wall -Wextra -Werror -Imain \
 /tmp/test_app_i18n
 
 cc -std=c11 -Wall -Wextra -Werror -Imain \
-  tests/test_app_tama.c main/app_tama_logic.c \
-  -o /tmp/test_app_tama
-/tmp/test_app_tama
+  tests/test_app_meow.c main/app_meow_logic.c \
+  -o /tmp/test_app_meow
+/tmp/test_app_meow
 
 cc -std=c11 -Wall -Wextra -Werror -Imain \
-  tests/test_app_tama_rhythm.c main/app_tama_rhythm.c \
-  -o /tmp/test_app_tama_rhythm
-/tmp/test_app_tama_rhythm
+  tests/test_app_meow_rhythm.c main/app_meow_rhythm.c \
+  -o /tmp/test_app_meow_rhythm
+/tmp/test_app_meow_rhythm
 
 cc -std=c11 -Wall -Wextra -Werror -Imain \
-  tests/test_app_tama_run.c main/app_tama_run.c \
-  -o /tmp/test_app_tama_run
-/tmp/test_app_tama_run
+  tests/test_app_meow_run.c main/app_meow_run.c \
+  -o /tmp/test_app_meow_run
+/tmp/test_app_meow_run
 
 cc -std=c11 -Wall -Wextra -Werror -Imain \
-  tests/test_app_tama_match.c main/app_tama_match.c \
-  -o /tmp/test_app_tama_match
-/tmp/test_app_tama_match
+  tests/test_app_meow_match.c main/app_meow_match.c \
+  -o /tmp/test_app_meow_match
+/tmp/test_app_meow_match
 
 cc -std=c11 -Wall -Wextra -Werror -Imain \
   tests/test_app_ota.c main/app_ota_logic.c \

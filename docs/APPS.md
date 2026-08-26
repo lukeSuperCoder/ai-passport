@@ -1,8 +1,8 @@
-# Tamagotchi (this firmware)
+# Meow (this firmware)
 
 English | [简体中文](APPS.zh_CN.md)
 
-This `demo/tamagotchi` image is a **standalone pet game**. It boots into the pet. Alerts, Walkie, Weather, and TOTP are not in this image. **Language, Wi-Fi, Bluetooth, clock, screen, sound, and firmware update are set inside the game** — do not flash `main` first. After the first flash, the first boot toasts **hold OK to go back**.
+This `demo/meow` image is a **standalone pet game**. It boots into the pet. Alerts, Walkie, Weather, and TOTP are not in this image. **Language, Wi-Fi, Bluetooth, clock, screen, sound, and firmware update are set inside the game** — do not flash `main` first. After the first flash, the first boot toasts **hold OK to go back**.
 
 Pins and BSP limits stay in the [README](../README.md) and the [AI Hardware Development Guide](AI_HARDWARE_DEVELOPMENT_GUIDE.md).
 
@@ -13,7 +13,7 @@ Pins and BSP limits stay in the [README](../README.md) and the [AI Hardware Deve
 | Action | Effect |
 | --- | --- |
 | Short `UP` / `DOWN` | Bottom tabs: Home / Bag / Game / Dex / Set. After OK, move among that page's actions. In the bag and dex, move among entries in the current category |
-| Short `OK` | Open the current tab. Inside: do the highlighted act. Home shortcuts (icons only): Feed / Bath / Heal / Light. The first three cycle usable goods in catalog order (Feed includes drinks, Bath includes sweep). A toast shows `Used rice ball x1` plus Full/Clean/Health/Mood deltas. Light works while the pet sleeps; opening Home at night starts on the lamp. Settings has language, name, Wi-Fi, Bluetooth, clock, screen, sound, update, and Reset game (clears bag, finds, and scores; the pet is gone). Bag uses durable items by category. Game: UP/DOWN flips Catch Fish / Rhythm Master / Kitten Run / Match 3 / Bag Trip, OK starts; Bag Trip packs food then leaves. Minigames and a finished trip share one result page (rewards, one chime, screen on); OK leaves |
+| Short `OK` | Open the current tab. Inside: do the highlighted act. Home shortcuts (icons only): Feed / Bath / Heal / Light. The first three cycle usable goods in catalog order (Feed includes drinks, Bath includes sweep). A toast shows `Used rice ball x1` plus Full/Clean/Health/Mood deltas. Light works while the pet sleeps; opening Home at night starts on the lamp. Settings has language, name, Wi-Fi, Bluetooth, clock, sleep hours, screen, sound, update, and Reset game (clears bag, finds, and scores; the pet is gone). Bag uses durable items by category. Game: UP/DOWN flips Catch Fish / Rhythm Master / Kitten Run / Match 3 / Bag Trip, OK starts; Bag Trip packs food then leaves. Minigames and a finished trip share one result page (rewards, one chime, screen on); OK leaves |
 | Long `OK` | Leave the tab's inner selection, leave a settings page, or leave the play minigame |
 | Long `UP` / `DOWN` | In the bag, switch Food / Meds / Gear; in the dex, switch Pets / Goals / Items / Finds; in Bag Trip, long UP removes one packed copy, long DOWN leaves. On a keyboard (name or Wi-Fi password), hold to keep moving and then jump a row |
 | Catch-fish | `UP` = left, `DOWN` = right |
@@ -62,7 +62,7 @@ Loot has four tiers: common (rice ball, water, tissue, trash bag), uncommon, rar
 
 Each danger (hunger, mood, HP, sick, poop, night-light) has **three call levels** at **50% / 30% / 10%**. Fullness, mood, and HP use those percentages directly. The device beeps once / twice / three times when a level is newly reached, shows e.g. `Hunger 30%`, and a red frame only while that toast is up. After the beep the panel can sleep; a 30% / 10% call wakes again every 3 minutes to beep, then sleeps.
 
-If the clock is valid (NTP or Date & Time in Settings), the pet sleeps **21:00–08:00**. Care except Light is refused while it sleeps. Leave the lights off at night or mood suffers.
+If the clock is valid (NTP or Date & Time in Settings), the pet sleeps in the window set under **Sleep hours** (**21:00–08:00** by default). Same hour for bedtime and wake turns scheduled sleep off. Care except Light is refused while it sleeps (**It's bedtime** toast); minigames still work. Bag Trip, Visit, and Battle need an awake pet. Leave the lights off at night or mood suffers.
 
 Power-off catch-up is capped at **8 real hours**.
 
@@ -122,23 +122,24 @@ Last tab. Always available, including on the egg and after the pet is gone.
 | Name | Change the pet name (empty GO uses the default baby name; hold OK back). The name stays after every evolve |
 | Wi-Fi | Power, auto-reconnect, scan, join (3-key password), forget |
 | Bluetooth | Power, quiet, advertise, forget a bond |
-| Date & Time | NTP on/off and server, or set year/month/day/hour/minute |
+| Date & Time | NTP on/off (on by default, saved immediately) and server. With NTP off, dial year/month/day/hour/minute and **Set clock** |
+| Sleep hours | Pet bedtime and wake (OK +1 hour; same hour = no scheduled sleep) |
 | Screen | Brightness 10–100%; auto-sleep never / 15 / 30 / 60 / 120 s |
 | Sound | Mute; volume 0–100% |
 | Update | Current and latest version; Check; Install after confirm. Downloads the **app** image from `latest.json` (`url`, not `*-factory.bin`). Wi-Fi also checks in the background and shows **OK install / DOWN later**. Pet NVS is kept. First USB flash of this partition table: `idf.py flash` (do not erase), or the release `*-factory.bin` at `0x0`. |
 
-State is stored in NVS (`app` / `tama` for the pet; the same `app` namespace for prefs; `ota_skip` remembers a deferred version).
+State is stored in NVS (`app` / `meow` for the pet; the same `app` namespace for prefs; `ota_skip` remembers a deferred version).
 
-Each demo has its own channel (`ota/channel`, this branch is `demo/tamagotchi`). Devices only fetch `ota/demo/tamagotchi/latest.json` from `main` and refuse a manifest whose `channel` does not match. Tag `demo-tamagotchi-vX.Y.Z` (or run **Release firmware** on this branch) builds this image only and updates that JSON — other demos are left alone. The release has two bins: `FoloToy-AI-Passport-demo-tamagotchi.bin` (OTA app, what Settings → Update installs) and `FoloToy-AI-Passport-demo-tamagotchi-factory.bin` (full flash at `0x0`). Do not release on every commit.
+Each demo has its own channel (`ota/channel`, this branch is `demo/meow`). Devices only fetch `ota/demo/meow/latest.json` from `main` and refuse a manifest whose `channel` does not match. Tag `demo-meow-vX.Y.Z` (or run **Release firmware** on this branch) builds this image only and updates that JSON — other demos are left alone. The release has two bins: `FoloToy-AI-Passport-demo-meow.bin` (OTA app, what Settings → Update installs) and `FoloToy-AI-Passport-demo-meow-factory.bin` (full flash at `0x0`). Do not release on every commit.
 
 ## Idle sleep (device)
 
 This is device light sleep, not the pet’s bedtime. After the auto-sleep interval from Settings (or never, if that was 0):
 
 - backlight off, panel sleep, LVGL tick stopped
-- Wi-Fi and Bluetooth radios off; waking a key does **not** reconnect Wi-Fi (open Wi-Fi / Update, or start Visit / Battle)
+- Wi-Fi and Bluetooth radios off; waking a key does **not** reconnect immediately. If the screen stays on for **30 s**, Wi-Fi resumes and reconnects to the saved network (opening Wi-Fi / Update still brings the radio up at once)
 - GPIO0 wakes the CPU; a 30% / 10% call can also wake to beep
 
 While the menu is idle the UI paints at 1 Hz and the CPU floor drops to 40 MHz. Minigames restore 4 Hz / 80 MHz.
 
-The device does **not** light-sleep while looking for a peer, while a call toast is still playing, while Wi-Fi is scanning/joining, while a firmware check/download is running, or while a BLE pairing code is waiting.
+The device does **not** light-sleep while a Settings subpage is open, while looking for a peer, while a call toast is still playing, while Wi-Fi is scanning/joining, while a firmware check/download is running, or while a BLE pairing code is waiting.

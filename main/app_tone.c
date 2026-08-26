@@ -11,6 +11,8 @@
 #include <stdlib.h>
 #include <stdint.h>
 
+#include "app_tone_meow.inc"
+
 #define SAMPLE_RATE 16000
 #define CHUNK       256
 /* codec open + I2S write needs the same 4 KB stack as demo_audio / walkie */
@@ -39,6 +41,22 @@ static void beep(int hz, int ms, int amp)
         }
         bsp_audio_write(s_pcm, (size_t)n * sizeof(int16_t));
         total -= n;
+    }
+}
+
+/* 预渲染 16 kHz 8-bit「miao」共振峰采样,避免 C3 无 FPU 时实时滑音。 */
+static void meow(void)
+{
+    int off = 0;
+    int ntot = (int)sizeof(s_meow);
+
+    while (off < ntot) {
+        int n = ntot - off;
+        if (n > CHUNK) n = CHUNK;
+        for (int i = 0; i < n; i++)
+            s_pcm[i] = (int16_t)(s_meow[off + i] * 56);
+        bsp_audio_write(s_pcm, (size_t)n * sizeof(int16_t));
+        off += n;
     }
 }
 
@@ -82,6 +100,9 @@ static void play_id(int id)
         beep(440, 160, 7000);
         beep(880, 160, 7000);
         beep(440, 200, 7000);
+        break;
+    case APP_TONE_MEOW:
+        meow();
         break;
     default:
         break;

@@ -1,4 +1,4 @@
-#include "app_tama_set.h"
+#include "app_meow_set.h"
 
 #include "app_i18n.h"
 #include "app_ota.h"
@@ -30,7 +30,7 @@ typedef enum { WIFI_LIST = 0, WIFI_KB } wifi_view_t;
 
 static lv_obj_t *s_box, *s_title, *s_hint, *s_body;
 static lv_timer_t *s_timer;
-static tama_set_id_t s_id;
+static meow_set_id_t s_id;
 static int s_sel;
 static int s_y, s_mo, s_d, s_h, s_mi;
 
@@ -187,14 +187,32 @@ static void paint_ble(char *out, size_t n)
     }
 }
 
+static int clock_rows(void)
+{
+    return app_prefs()->ntp_on ? 2 : 7;
+}
+
 static void paint_clock(char *out, size_t n)
 {
     char now[24];
     app_time_now_text(now, sizeof(now));
     const app_prefs_t *p = app_prefs();
+    if (s_sel >= clock_rows()) s_sel = clock_rows() - 1;
+    if (p->ntp_on) {
+        snprintf(out, n,
+                 "%s %s\n"
+                 "%s %s  %s%s\n"
+                 "%s %s  %s\n",
+                 app_str(APP_STR_NOW), now,
+                 s_sel == 0 ? ">" : " ", app_str(APP_STR_NTP),
+                 app_str_onoff(p->ntp_on),
+                 app_time_ntp_synced() ? app_str(APP_STR_SYNC) : "",
+                 s_sel == 1 ? ">" : " ", app_str(APP_STR_SERVER),
+                 app_ntp_server(p->ntp_server));
+        return;
+    }
     snprintf(out, n,
              "%s %s\n"
-             "%s %s  %s%s\n"
              "%s %s  %s\n"
              "%s %s  %d\n"
              "%s %s  %d\n"
@@ -205,15 +223,22 @@ static void paint_clock(char *out, size_t n)
              app_str(APP_STR_NOW), now,
              s_sel == 0 ? ">" : " ", app_str(APP_STR_NTP),
              app_str_onoff(p->ntp_on),
-             (p->ntp_on && app_time_ntp_synced()) ? app_str(APP_STR_SYNC) : "",
-             s_sel == 1 ? ">" : " ", app_str(APP_STR_SERVER),
-             app_ntp_server(p->ntp_server),
-             s_sel == 2 ? ">" : " ", app_str(APP_STR_YEAR), s_y,
-             s_sel == 3 ? ">" : " ", app_str(APP_STR_MONTH), s_mo,
-             s_sel == 4 ? ">" : " ", app_str(APP_STR_DAY), s_d,
-             s_sel == 5 ? ">" : " ", app_str(APP_STR_HOUR), s_h,
-             s_sel == 6 ? ">" : " ", app_str(APP_STR_MINUTE), s_mi,
-             s_sel == 7 ? ">" : " ", app_str(APP_STR_SAVE));
+             s_sel == 1 ? ">" : " ", app_str(APP_STR_YEAR), s_y,
+             s_sel == 2 ? ">" : " ", app_str(APP_STR_MONTH), s_mo,
+             s_sel == 3 ? ">" : " ", app_str(APP_STR_DAY), s_d,
+             s_sel == 4 ? ">" : " ", app_str(APP_STR_HOUR), s_h,
+             s_sel == 5 ? ">" : " ", app_str(APP_STR_MINUTE), s_mi,
+             s_sel == 6 ? ">" : " ", app_str(APP_STR_SET_CLOCK));
+}
+
+static void paint_bed(char *out, size_t n)
+{
+    const app_prefs_t *p = app_prefs();
+    snprintf(out, n,
+             "%s %s  %02d:00\n"
+             "%s %s  %02d:00\n",
+             s_sel == 0 ? ">" : " ", app_str(APP_STR_BEDTIME), (int)p->meow_bed,
+             s_sel == 1 ? ">" : " ", app_str(APP_STR_WAKE), (int)p->meow_wake);
 }
 
 static void paint_screen(char *out, size_t n)
@@ -241,7 +266,7 @@ static void paint_sound(char *out, size_t n)
 static const char *ota_err_str(void)
 {
     switch (app_ota_err()) {
-    case APP_OTA_E_WIFI: return app_str(APP_STR_TAMA_NEED_WIFI);
+    case APP_OTA_E_WIFI: return app_str(APP_STR_MEOW_NEED_WIFI);
     case APP_OTA_E_LOWBAT: return app_str(APP_STR_OTA_LOWBAT);
     case APP_OTA_E_HASH: return app_str(APP_STR_OTA_HASH);
     case APP_OTA_E_CANCEL: return app_str(APP_STR_OTA_FAIL);
@@ -296,11 +321,11 @@ static void paint(void)
     if (!s_box) return;
     s_still_ms = 0;
     app_str_id_t title = APP_STR_SETTINGS;
-    const char *hint = app_str(APP_STR_TAMA_SUB_HINT);
+    const char *hint = app_str(APP_STR_MEOW_SUB_HINT);
     char body[900];
     body[0] = 0;
     switch (s_id) {
-    case TAMA_SET_WIFI:
+    case MEOW_SET_WIFI:
         title = APP_STR_WIFI;
         if (!bsp_wifi_enabled()) hint = app_str(APP_STR_WIFI_OFF);
         else if (s_scanning) hint = app_str(APP_STR_SCANNING);
@@ -314,7 +339,7 @@ static void paint(void)
         else hint = app_str(APP_STR_OK_CHOOSE);
         paint_wifi(body, sizeof(body));
         break;
-    case TAMA_SET_BLE:
+    case MEOW_SET_BLE:
         title = APP_STR_BLUETOOTH;
         if (!bsp_ble_enabled()) hint = app_str(APP_STR_BT_OFF);
         else if (bsp_ble_state() == BSP_BLE_PAIRING && bsp_ble_passkey()) {
@@ -327,22 +352,27 @@ static void paint(void)
         }
         paint_ble(body, sizeof(body));
         break;
-    case TAMA_SET_CLOCK:
+    case MEOW_SET_CLOCK:
         title = APP_STR_DATETIME;
-        hint = app_str(APP_STR_CLOCK_HINT);
+        hint = app_str(app_prefs()->ntp_on ? APP_STR_CLOCK_HINT : APP_STR_CLOCK_SET_HINT);
         paint_clock(body, sizeof(body));
         break;
-    case TAMA_SET_SCREEN:
+    case MEOW_SET_BED:
+        title = APP_STR_PET_HOURS;
+        hint = app_str(APP_STR_BED_HINT);
+        paint_bed(body, sizeof(body));
+        break;
+    case MEOW_SET_SCREEN:
         title = APP_STR_SCREEN;
         hint = app_str(APP_STR_SCREEN_HINT);
         paint_screen(body, sizeof(body));
         break;
-    case TAMA_SET_SOUND:
+    case MEOW_SET_SOUND:
         title = APP_STR_SOUND;
         hint = app_str(APP_STR_SOUND_HINT);
         paint_sound(body, sizeof(body));
         break;
-    case TAMA_SET_OTA:
+    case MEOW_SET_OTA:
         title = APP_STR_UPDATE;
         if (app_ota_state() == APP_OTA_APPLYING) hint = app_str(APP_STR_OTA_HOLD);
         else if (app_ota_state() == APP_OTA_CHECKING) hint = app_str(APP_STR_OTA_CHECKING);
@@ -358,8 +388,7 @@ static void paint(void)
 static void on_tick(lv_timer_t *t)
 {
     (void)t;
-    if (s_scanning || app_tama_set_busy() ||
-        (s_id == TAMA_SET_WIFI && s_wifi_view == WIFI_KB)) {
+    if (s_scanning || app_meow_set_busy() || s_id == MEOW_SET_WIFI) {
         paint();
         s_still_ms = 0;
         return;
@@ -379,6 +408,7 @@ static void wifi_task(void *arg)
         if (req == 1) {
             s_req = 0;
             s_scanning = true;
+            bsp_wifi_radio_resume();
             int n = bsp_wifi_scan(s_aps, BSP_WIFI_SCAN_MAX);
             s_ap_n = n < 0 ? 0 : n;
             s_wifi_view = WIFI_LIST;
@@ -463,39 +493,52 @@ static void ble_choose(void)
 static void clock_choose(void)
 {
     app_prefs_t *p = app_prefs();
-    switch (s_sel) {
-    case 0:
+    if (s_sel == 0) {
         p->ntp_on = !p->ntp_on;
         app_prefs_save();
         app_time_ntp_restart();
-        break;
+        s_sel = 0;
+        return;
+    }
+    if (p->ntp_on) {
+        if (s_sel == 1) {
+            p->ntp_server = (uint8_t)((p->ntp_server + 1) % APP_NTP_SERVER_N);
+            app_prefs_save();
+            app_time_ntp_restart();
+        }
+        return;
+    }
+    switch (s_sel) {
     case 1:
-        p->ntp_server = (uint8_t)((p->ntp_server + 1) % APP_NTP_SERVER_N);
-        app_prefs_save();
-        app_time_ntp_restart();
-        break;
-    case 2:
         s_y++;
         if (s_y > 2038) s_y = 2024;
         break;
-    case 3:
+    case 2:
         s_mo = s_mo >= 12 ? 1 : s_mo + 1;
         break;
-    case 4:
+    case 3:
         s_d = s_d >= 31 ? 1 : s_d + 1;
         break;
-    case 5:
+    case 4:
         s_h = (s_h + 1) % 24;
         break;
-    case 6:
+    case 5:
         s_mi = (s_mi + 1) % 60;
         break;
-    case 7:
+    case 6:
         app_time_set(s_y, s_mo, s_d, s_h, s_mi);
         break;
     default:
         break;
     }
+}
+
+static void bed_choose(void)
+{
+    app_prefs_t *p = app_prefs();
+    if (s_sel == 0) p->meow_bed = (uint8_t)((p->meow_bed + 1) % 24);
+    else p->meow_wake = (uint8_t)((p->meow_wake + 1) % 24);
+    app_prefs_save();
 }
 
 static void screen_choose(void)
@@ -537,7 +580,7 @@ static void hold_tick(lv_timer_t *t)
     int dir, step;
 
     (void)t;
-    if (s_id != TAMA_SET_WIFI || s_wifi_view != WIFI_KB || s_hold_btn < 0) {
+    if (s_id != MEOW_SET_WIFI || s_wifi_view != WIFI_KB || s_hold_btn < 0) {
         return;
     }
     s_hold_ms += 80;
@@ -548,7 +591,7 @@ static void hold_tick(lv_timer_t *t)
     paint();
 }
 
-void app_tama_set_close(void)
+void app_meow_set_close(void)
 {
     s_req = 0;
     s_hold_btn = -1;
@@ -568,9 +611,9 @@ void app_tama_set_close(void)
     s_title = s_hint = s_body = NULL;
 }
 
-void app_tama_set_open(lv_obj_t *lcd, tama_set_id_t id)
+void app_meow_set_open(lv_obj_t *lcd, meow_set_id_t id)
 {
-    app_tama_set_close();
+    app_meow_set_close();
     if (!lcd) return;
     s_id = id;
     s_sel = 0;
@@ -610,11 +653,11 @@ void app_tama_set_open(lv_obj_t *lcd, tama_set_id_t id)
     lv_obj_set_width(s_body, w - 32);
     lv_label_set_long_mode(s_body, LV_LABEL_LONG_WRAP);
 
-    if (id == TAMA_SET_WIFI || id == TAMA_SET_OTA) {
+    if (id == MEOW_SET_WIFI || id == MEOW_SET_OTA) {
         bsp_wifi_radio_resume();
     }
-    if (id == TAMA_SET_WIFI) {
-        if (!s_task) xTaskCreate(wifi_task, "tama_wifi", 4096, NULL, 4, &s_task);
+    if (id == MEOW_SET_WIFI) {
+        if (!s_task) xTaskCreate(wifi_task, "meow_wifi", 4096, NULL, 4, &s_task);
         if (bsp_wifi_enabled()) s_req = 1;
     }
     s_hold_btn = -1;
@@ -624,35 +667,35 @@ void app_tama_set_open(lv_obj_t *lcd, tama_set_id_t id)
     paint();
 }
 
-bool app_tama_set_open_now(void)
+bool app_meow_set_open_now(void)
 {
     return s_box != NULL;
 }
 
-bool app_tama_set_busy(void)
+bool app_meow_set_busy(void)
 {
     if (s_scanning) return true;
-    if (s_id == TAMA_SET_WIFI && bsp_wifi_state() == BSP_WIFI_CONNECTING) return true;
+    if (s_id == MEOW_SET_WIFI && bsp_wifi_state() == BSP_WIFI_CONNECTING) return true;
     if (bsp_ble_state() == BSP_BLE_PAIRING) return true;
     if (app_ota_busy()) return true;
     return false;
 }
 
-void app_tama_set_tick(void)
+void app_meow_set_tick(void)
 {
     if (s_box) paint();
 }
 
-void app_tama_set_on_key(bsp_btn_t btn, bsp_btn_ev_t ev)
+void app_meow_set_on_key(bsp_btn_t btn, bsp_btn_ev_t ev)
 {
     if (!s_box) return;
     if (ev == BSP_BTN_LONG && btn == BSP_BTN_OK) {
-        if (s_id == TAMA_SET_OTA && app_ota_state() == APP_OTA_APPLYING) {
+        if (s_id == MEOW_SET_OTA && app_ota_state() == APP_OTA_APPLYING) {
             app_ota_cancel();
             paint();
             return;
         }
-        if (s_id == TAMA_SET_WIFI && s_wifi_view == WIFI_KB) {
+        if (s_id == MEOW_SET_WIFI && s_wifi_view == WIFI_KB) {
             s_wifi_view = WIFI_LIST;
             s_hold_btn = -1;
             s_hold_ms = 0;
@@ -660,10 +703,10 @@ void app_tama_set_on_key(bsp_btn_t btn, bsp_btn_ev_t ev)
             return;
         }
         if (app_ota_state() == APP_OTA_APPLYING) return;
-        app_tama_set_close();
+        app_meow_set_close();
         return;
     }
-    if (s_id == TAMA_SET_WIFI && s_wifi_view == WIFI_KB &&
+    if (s_id == MEOW_SET_WIFI && s_wifi_view == WIFI_KB &&
         (btn == BSP_BTN_UP || btn == BSP_BTN_DOWN)) {
         if (ev == BSP_BTN_PRESS) {
             s_hold_btn = (int)btn;
@@ -677,10 +720,10 @@ void app_tama_set_on_key(bsp_btn_t btn, bsp_btn_ev_t ev)
         return;
     }
     if (ev != BSP_BTN_CLICK) return;
-    if (s_id == TAMA_SET_WIFI && s_scanning) return;
-    if (s_id == TAMA_SET_OTA && app_ota_state() == APP_OTA_APPLYING) return;
+    if (s_id == MEOW_SET_WIFI && s_scanning) return;
+    if (s_id == MEOW_SET_OTA && app_ota_state() == APP_OTA_APPLYING) return;
 
-    if (s_id == TAMA_SET_WIFI && s_wifi_view == WIFI_KB) {
+    if (s_id == MEOW_SET_WIFI && s_wifi_view == WIFI_KB) {
         if (btn != BSP_BTN_OK) return;
         int r = app_kb_click(s_pass, sizeof(s_pass), &s_kb_sel, &s_kb_set);
         if (r == 2) {
@@ -696,10 +739,10 @@ void app_tama_set_on_key(bsp_btn_t btn, bsp_btn_ev_t ev)
     }
 
     int n = 2;
-    if (s_id == TAMA_SET_WIFI) n = wifi_count();
-    else if (s_id == TAMA_SET_BLE) n = 3 + s_peer_n + 1;
-    else if (s_id == TAMA_SET_CLOCK) n = 8;
-    else if (s_id == TAMA_SET_OTA) n = 2;
+    if (s_id == MEOW_SET_WIFI) n = wifi_count();
+    else if (s_id == MEOW_SET_BLE) n = 3 + s_peer_n + 1;
+    else if (s_id == MEOW_SET_CLOCK) n = clock_rows();
+    else if (s_id == MEOW_SET_OTA) n = 2;
     if (n < 1) n = 1;
 
     if (btn == BSP_BTN_UP) {
@@ -714,12 +757,13 @@ void app_tama_set_on_key(bsp_btn_t btn, bsp_btn_ev_t ev)
     }
     if (btn != BSP_BTN_OK) return;
     switch (s_id) {
-    case TAMA_SET_WIFI: wifi_choose(); break;
-    case TAMA_SET_BLE: ble_choose(); break;
-    case TAMA_SET_CLOCK: clock_choose(); break;
-    case TAMA_SET_SCREEN: screen_choose(); break;
-    case TAMA_SET_SOUND: sound_choose(); break;
-    case TAMA_SET_OTA: ota_choose(); break;
+    case MEOW_SET_WIFI: wifi_choose(); break;
+    case MEOW_SET_BLE: ble_choose(); break;
+    case MEOW_SET_CLOCK: clock_choose(); break;
+    case MEOW_SET_BED: bed_choose(); break;
+    case MEOW_SET_SCREEN: screen_choose(); break;
+    case MEOW_SET_SOUND: sound_choose(); break;
+    case MEOW_SET_OTA: ota_choose(); break;
     }
     paint();
 }

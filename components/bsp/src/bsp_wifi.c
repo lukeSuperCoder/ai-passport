@@ -26,6 +26,7 @@ static const char *TAG = "bsp_wifi";
 static bool s_inited;
 static volatile bsp_wifi_state_t s_state;
 static volatile bool s_scan_done;
+static volatile bool s_sta_up;
 static volatile bool s_want_connect;
 static bool s_enabled = true;
 static bool s_auto = true;
@@ -146,10 +147,15 @@ static void on_wifi(void *arg, esp_event_base_t base, int32_t id, void *data) {
         return;
     }
     if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START) {
+        s_sta_up = true;
         if (s_want_connect) {
             s_state = BSP_WIFI_CONNECTING;
             esp_wifi_connect();
         }
+        return;
+    }
+    if (base == WIFI_EVENT && id == WIFI_EVENT_STA_STOP) {
+        s_sta_up = false;
         return;
     }
     if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
@@ -279,8 +285,33 @@ static void copy_ssid(char *dst, const uint8_t *src) {
 }
 
 int bsp_wifi_scan(bsp_wifi_ap_t *out, int max) {
-    if (!s_inited || !s_started || !out || max <= 0) return -1;
+    if (!s_inited || !s_enabled || !out || max <= 0) return -1;
     if (max > BSP_WIFI_SCAN_MAX) max = BSP_WIFI_SCAN_MAX;
+
+    if (!s_started) {
+        esp_err_t st = esp_wifi_start();
+        if (st != ESP_OK && st != ESP_ERR_INVALID_STATE) {
+            ESP_LOGW(TAG, "扫描前 start 失败: %s", esp_err_to_name(st));
+            return -1;
+        }
+        s_started = true;
+        apply_ps();
+    }
+    for (int i = 0; i < 30 && !s_sta_up; i++) {
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+    if (!s_sta_up) {
+        ESP_LOGW(TAG, "扫描时 STA 未就绪");
+        return -1;
+    }
+
+    /* 连接过程中 scan_start 会失败;断开回调里的自动重连也会把扫描掐掉。 */
+    bool restore = s_want_connect;
+    s_want_connect = false;
+    if (s_state == BSP_WIFI_CONNECTING) {
+        esp_wifi_disconnect();
+        vTaskDelay(pdMS_TO_TICKS(150));
+    }
 
     wifi_scan_config_t cfg = {
         .ssid = NULL,
@@ -293,8 +324,20 @@ int bsp_wifi_scan(bsp_wifi_ap_t *out, int max) {
     };
     s_scan_done = false;
     esp_err_t e = esp_wifi_scan_start(&cfg, false);
+    if (e == ESP_ERR_WIFI_STATE) {
+        esp_wifi_disconnect();
+        vTaskDelay(pdMS_TO_TICKS(200));
+        s_scan_done = false;
+        e = esp_wifi_scan_start(&cfg, false);
+    }
     if (e != ESP_OK) {
         ESP_LOGW(TAG, "scan_start 失败: %s", esp_err_to_name(e));
+        s_want_connect = restore;
+        if (restore && s_ssid[0] && s_enabled) {
+            s_state = BSP_WIFI_CONNECTING;
+            apply_sta_config();
+            esp_wifi_connect();
+        }
         return -1;
     }
     for (int i = 0; i < 100 && !s_scan_done; i++) {
@@ -303,13 +346,27 @@ int bsp_wifi_scan(bsp_wifi_ap_t *out, int max) {
     if (!s_scan_done) {
         esp_wifi_scan_stop();
         ESP_LOGW(TAG, "扫描超时");
+        s_want_connect = restore;
+        if (restore && s_ssid[0] && s_enabled) {
+            s_state = BSP_WIFI_CONNECTING;
+            apply_sta_config();
+            esp_wifi_connect();
+        }
         return -1;
     }
 
     static wifi_ap_record_t raw[32];
     uint16_t got = sizeof(raw) / sizeof(raw[0]);
     e = esp_wifi_scan_get_ap_records(&got, raw);
-    if (e != ESP_OK) return -1;
+    if (e != ESP_OK) {
+        s_want_connect = restore;
+        if (restore && s_ssid[0] && s_enabled) {
+            s_state = BSP_WIFI_CONNECTING;
+            apply_sta_config();
+            esp_wifi_connect();
+        }
+        return -1;
+    }
 
     int count = 0;
     for (uint16_t i = 0; i < got; i++) {
@@ -328,7 +385,6 @@ int bsp_wifi_scan(bsp_wifi_ap_t *out, int max) {
             continue;
         }
         if (count >= max) {
-            // 已满则只替换比当前最弱还强的
             int weakest = 0;
             for (int j = 1; j < count; j++) {
                 if (out[j].rssi < out[weakest].rssi) weakest = j;
@@ -353,6 +409,13 @@ int bsp_wifi_scan(bsp_wifi_ap_t *out, int max) {
             j--;
         }
         out[j + 1] = key;
+    }
+
+    s_want_connect = restore;
+    if (restore && s_enabled && s_ssid[0] && s_state != BSP_WIFI_CONNECTED) {
+        s_state = BSP_WIFI_CONNECTING;
+        apply_sta_config();
+        esp_wifi_connect();
     }
 
     ESP_LOGI(TAG, "扫描到 %d 个网络", count);
@@ -524,6 +587,7 @@ esp_err_t bsp_wifi_radio_suspend(void)
     esp_wifi_disconnect();
     esp_wifi_stop();
     s_started = false;
+    s_sta_up = false;
     ESP_LOGI(TAG, "WiFi 射频暂停(息屏)");
     return ESP_OK;
 }

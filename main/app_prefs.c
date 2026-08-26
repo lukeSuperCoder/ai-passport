@@ -37,7 +37,7 @@ static void set_defaults(void)
     s_p.muted = 0;
     s_p.tone_msg = APP_TONE_BEEP;
     s_p.tone_alert = APP_TONE_ALARM;
-    s_p.ntp_on = 0;
+    s_p.ntp_on = 1;
     s_p.ntp_server = 0;
     s_p.auto_hide = 10;
     s_p.lang = APP_LANG_ZH;
@@ -48,6 +48,8 @@ static void set_defaults(void)
     s_p.wx_imperial = 0;
     s_p.walkie_ch = 1;
     s_p.walkie_mode = 0;
+    s_p.meow_bed = 21;
+    s_p.meow_wake = 8;
 }
 
 void app_prefs_load(void)
@@ -87,6 +89,8 @@ void app_prefs_load(void)
         if (nvs_get_u8(h, "wxu", &u8) == ESP_OK) s_p.wx_imperial = u8 != 0;
         if (nvs_get_u8(h, "wkch", &u8) == ESP_OK && u8 >= 1 && u8 <= 8) s_p.walkie_ch = u8;
         if (nvs_get_u8(h, "wkmd", &u8) == ESP_OK && u8 <= 1) s_p.walkie_mode = u8;
+        if (nvs_get_u8(h, "mbed", &u8) == ESP_OK && u8 <= 23) s_p.meow_bed = u8;
+        if (nvs_get_u8(h, "mwake", &u8) == ESP_OK && u8 <= 23) s_p.meow_wake = u8;
     }
     size_t n = sizeof(s_p.kw);
     if (nvs_get_blob(h, "kw", s_p.kw, &n) == ESP_OK) {
@@ -184,6 +188,8 @@ void app_prefs_save(void)
     nvs_set_u8(h, "wxu", s_p.wx_imperial);
     nvs_set_u8(h, "wkch", s_p.walkie_ch);
     nvs_set_u8(h, "wkmd", s_p.walkie_mode);
+    nvs_set_u8(h, "mbed", s_p.meow_bed);
+    nvs_set_u8(h, "mwake", s_p.meow_wake);
     nvs_set_u8(h, "kwn", s_p.kw_n);
     nvs_set_blob(h, "kw", s_p.kw, sizeof(s_p.kw));
     totp_write(h);

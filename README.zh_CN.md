@@ -1,8 +1,8 @@
-# FoloToy AI Passport — 拓麻歌子
+# FoloToy AI Passport — Meow
 
 [English](README.md) | 简体中文
 
-**当前 `demo/tamagotchi` 分支是独立宠物游戏固件，不是 `main` 上的首页应用。** 开机直接进入拓麻歌子，不包含通知、对讲机、天气、验证器。语言、Wi-Fi、蓝牙、时钟、屏幕、声音都在游戏里设置。Wi-Fi 和蓝牙用于「世界」里的**拜访**和**对战**（近距离蓝牙，或同一已保存局域网）。STA 上的 NTP 用来给宠物对时睡觉。
+**当前 `demo/meow` 分支是独立宠物游戏固件，不是 `main` 上的首页应用。** 开机直接进入 Meow，不包含通知、对讲机、天气、验证器。语言、Wi-Fi、蓝牙、时钟、屏幕、声音都在游戏里设置。Wi-Fi 和蓝牙用于「世界」里的**拜访**和**对战**（近距离蓝牙，或同一已保存局域网）。STA 上的 NTP 用来给宠物对时睡觉。
 
 游戏说明：[English](docs/APPS.md) · [简体中文](docs/APPS.zh_CN.md)
 
@@ -180,24 +180,24 @@ cc -std=c11 -Wall -Wextra -Werror -Imain \
 /tmp/test_app_i18n
 
 cc -std=c11 -Wall -Wextra -Werror -Imain \
-  tests/test_app_tama.c main/app_tama_logic.c \
-  -o /tmp/test_app_tama
-/tmp/test_app_tama
+  tests/test_app_meow.c main/app_meow_logic.c \
+  -o /tmp/test_app_meow
+/tmp/test_app_meow
 
 cc -std=c11 -Wall -Wextra -Werror -Imain \
-  tests/test_app_tama_rhythm.c main/app_tama_rhythm.c \
-  -o /tmp/test_app_tama_rhythm
-/tmp/test_app_tama_rhythm
+  tests/test_app_meow_rhythm.c main/app_meow_rhythm.c \
+  -o /tmp/test_app_meow_rhythm
+/tmp/test_app_meow_rhythm
 
 cc -std=c11 -Wall -Wextra -Werror -Imain \
-  tests/test_app_tama_run.c main/app_tama_run.c \
-  -o /tmp/test_app_tama_run
-/tmp/test_app_tama_run
+  tests/test_app_meow_run.c main/app_meow_run.c \
+  -o /tmp/test_app_meow_run
+/tmp/test_app_meow_run
 
 cc -std=c11 -Wall -Wextra -Werror -Imain \
-  tests/test_app_tama_match.c main/app_tama_match.c \
-  -o /tmp/test_app_tama_match
-/tmp/test_app_tama_match
+  tests/test_app_meow_match.c main/app_meow_match.c \
+  -o /tmp/test_app_meow_match
+/tmp/test_app_meow_match
 
 cc -std=c11 -Wall -Wextra -Werror -Imain \
   tests/test_app_ota.c main/app_ota_logic.c \

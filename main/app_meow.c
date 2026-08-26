@@ -1,14 +1,14 @@
-#include "app_tama_ui.h"
+#include "app_meow_ui.h"
 
 #include "app_i18n.h"
 #include "app_ota.h"
 #include "app_prefs.h"
-#include "app_tama.h"
-#include "app_tama_link.h"
-#include "app_tama_rhythm.h"
-#include "app_tama_run.h"
-#include "app_tama_match.h"
-#include "app_tama_set.h"
+#include "app_meow.h"
+#include "app_meow_link.h"
+#include "app_meow_rhythm.h"
+#include "app_meow_run.h"
+#include "app_meow_match.h"
+#include "app_meow_set.h"
 #include "app_time.h"
 #include "app_tone.h"
 #include "app_ui.h"
@@ -52,8 +52,6 @@
 #define DEX_ACH_N   8
 
 #define SUB_MAX  16
-#define PET_W    88
-#define PET_H    84
 
 #define COL_BG     0xFFF7EA
 #define COL_BG2    0x3A322C
@@ -74,8 +72,6 @@
 #define COL_LOCKX  0xB8A88E
 #define COL_RING   0xFFE9DF
 #define COL_WAIT   0xF0C050
-#define COL_PIX    0x2A2838
-#define COL_CREAM  0xF3E6B8
 #define COL_WHITE  0xFFFFFF
 #define COL_CARD   0xFFFFFF
 #define COL_BLUSH  0xE87878
@@ -98,6 +94,7 @@
 #define COL_MUZZ   0xFFF4E6
 #define COL_NOSE   0xC87878
 #define COL_CHEEK  0xF2A8A0
+#define COL_CREAM  0xF3E6B8
 #define COL_FACE   COL_CORAL
 #define COL_SEL    COL_CORAL
 #define COL_CLOUD  COL_WHITE
@@ -105,12 +102,12 @@
 #define COL_LCD2   COL_BG2
 #define COL_ALERT  0xE03030
 
-extern const lv_image_dsc_t app_tama_pet_img[11];
-extern const lv_image_dsc_t app_tama_ico_img[16];
-extern const lv_image_dsc_t app_tama_good_img[APP_TAMA_G_N];
-extern const lv_image_dsc_t app_tama_stage_img[5];
-extern const lv_image_dsc_t app_tama_haz_img[APP_TAMA_HAZ_N];
-extern const lv_image_dsc_t app_tama_souv_img[APP_TAMA_SOUV_N];
+extern const lv_image_dsc_t app_meow_pet_img[11];
+extern const lv_image_dsc_t app_meow_ico_img[16];
+extern const lv_image_dsc_t app_meow_good_img[APP_MEOW_G_N];
+extern const lv_image_dsc_t app_meow_stage_img[5];
+extern const lv_image_dsc_t app_meow_haz_img[APP_MEOW_HAZ_N];
+extern const lv_image_dsc_t app_meow_souv_img[APP_MEOW_SOUV_N];
 
 enum {
     ICO_HOME = 0, ICO_BAG, ICO_GAME, ICO_DEX, ICO_SET,
@@ -119,12 +116,13 @@ enum {
     ICO_LAMP
 };
 
-ESP_EVENT_DEFINE_BASE(TAMA_EVENT);
-#define TAMA_BLE_WAKE   1
-#define TAMA_ALERT_WAKE 2
+ESP_EVENT_DEFINE_BASE(MEOW_EVENT);
+#define MEOW_BLE_WAKE   1
+#define MEOW_ALERT_WAKE 2
 #define ALERT_RECALL_US (180LL * 1000000)
 #define IDLE_PERF_MS    2000u
 #define IDLE_PAINT_MS   1000u
+#define WIFI_WAKE_MS    30000u
 
 typedef enum {
     MODE_CARE = 0,
@@ -134,14 +132,16 @@ typedef enum {
     MODE_RUN,
     MODE_MATCH,
     MODE_RESULT
-} tama_mode_t;
+} meow_mode_t;
 
-static app_tama_t s_pet;
+static app_meow_t s_pet;
 static bool s_ready;
 static uint32_t s_saved_sec;
 static bool s_dirty;
 static bool s_asleep;
 static uint32_t s_idle_ms;
+static uint32_t s_awake_ms;
+static bool s_wifi_wait;
 static uint32_t s_still_ms;
 static uint32_t s_tick_ms = 250;
 static bool s_wake_skip;
@@ -154,7 +154,7 @@ static int s_menu = -1;
 static int s_sub;
 static int s_bag_cat;
 static int s_dex_cat;
-static tama_mode_t s_mode;
+static meow_mode_t s_mode;
 static char s_flash[48];
 static char s_flash2[48];
 static char s_line[48];
@@ -166,9 +166,9 @@ static int s_play_run;
 static int s_rhy_best;
 static int s_run_best;
 static int s_mat_best;
-static app_tama_rhy_t s_rhy;
-static app_tama_mat_t s_mat;
-static app_tama_run_t s_run;
+static app_meow_rhy_t s_rhy;
+static app_meow_mat_t s_mat;
+static app_meow_run_t s_run;
 static uint32_t s_run_t0;
 static uint32_t s_rhy_t0;
 static uint32_t s_mat_last;
@@ -182,14 +182,14 @@ static uint32_t s_catch_at;
 static int s_catch_x, s_catch_y;
 static int s_catch_pts;
 static int s_over_score;
-static uint8_t s_over_got[APP_TAMA_G_N];
+static uint8_t s_over_got[APP_MEOW_G_N];
 static uint8_t s_over_kind;
 static int s_over_souv = -1;
 static bool s_trip_edit;
-static uint8_t s_trip_take[APP_TAMA_G_N];
+static uint8_t s_trip_take[APP_MEOW_G_N];
 static bool s_want_back_hint;
 static bool s_name_edit;
-static char s_name_buf[APP_TAMA_NAME_MAX + 1];
+static char s_name_buf[APP_MEOW_NAME_MAX + 1];
 static int s_kb_sel, s_kb_set;
 static int s_kb_hold_btn = -1;
 static int s_kb_hold_ms;
@@ -222,7 +222,7 @@ static lv_timer_t *s_kb_hold_tm;
 static uint32_t now_sec(void)
 {
     time_t t = time(NULL);
-    if (t >= (time_t)APP_TAMA_WALL_SEC) return (uint32_t)t;
+    if (t >= (time_t)APP_MEOW_WALL_SEC) return (uint32_t)t;
     int64_t us = esp_timer_get_time();
     if (us < 0) us = 0;
     return 1u + (uint32_t)(us / 1000000);
@@ -236,7 +236,7 @@ static uint32_t now_ms(void)
 static int now_hour(void)
 {
     time_t t = time(NULL);
-    if (t < (time_t)APP_TAMA_WALL_SEC) return -1;
+    if (t < (time_t)APP_MEOW_WALL_SEC) return -1;
     struct tm tm;
     localtime_r(&t, &tm);
     return tm.tm_hour;
@@ -246,7 +246,7 @@ static void save_nvs(void)
 {
     nvs_handle_t h;
     if (nvs_open("app", NVS_READWRITE, &h) != ESP_OK) return;
-    nvs_set_blob(h, "tama", &s_pet, sizeof(s_pet));
+    nvs_set_blob(h, "meow", &s_pet, sizeof(s_pet));
     nvs_commit(h);
     nvs_close(h);
     s_saved_sec = s_pet.last_sec;
@@ -255,17 +255,17 @@ static void save_nvs(void)
 
 static void load_nvs(void)
 {
-    app_tama_reset(&s_pet, now_sec(), (uint8_t)(now_sec() ^ 0x5Au));
+    app_meow_reset(&s_pet, now_sec(), (uint8_t)(now_sec() ^ 0x5Au));
     nvs_handle_t h;
     if (nvs_open("app", NVS_READONLY, &h) != ESP_OK) return;
-    uint8_t raw[sizeof(app_tama_t)];
+    uint8_t raw[sizeof(app_meow_t)];
     size_t n = sizeof(raw);
-    if (nvs_get_blob(h, "tama", raw, &n) == ESP_OK) {
-        app_tama_import(&s_pet, raw, n);
+    if (nvs_get_blob(h, "meow", raw, &n) == ESP_OK) {
+        app_meow_import(&s_pet, raw, n);
     }
     nvs_close(h);
     if (s_pet.named && !s_pet.name[0]) {
-        app_tama_set_name(&s_pet, app_str(APP_STR_TAMA_SP1));
+        app_meow_set_name(&s_pet, app_str(APP_STR_MEOW_SP1));
         s_dirty = true;
     }
 }
@@ -296,13 +296,15 @@ static void sync_pet(void)
     uint32_t before = s_pet.last_sec;
     uint8_t st = s_pet.stage;
     uint8_t trip = s_pet.trip_st;
-    app_tama_advance(&s_pet, now_sec(), now_hour());
+    app_meow_advance_night(&s_pet, now_sec(), now_hour(),
+                           (int)app_prefs()->meow_bed,
+                           (int)app_prefs()->meow_wake);
     if (s_pet.last_sec != before || s_pet.stage != st) s_dirty = true;
-    if (trip == APP_TAMA_TRIP_AWAY && s_pet.trip_st == APP_TAMA_TRIP_BACK) {
+    if (trip == APP_MEOW_TRIP_AWAY && s_pet.trip_st == APP_MEOW_TRIP_BACK) {
         s_dirty = true;
     }
     if (s_dirty && (s_pet.last_sec - s_saved_sec >= 30 ||
-                    s_pet.stage == APP_TAMA_DEAD)) {
+                    s_pet.stage == APP_MEOW_DEAD)) {
         save_nvs();
     }
 }
@@ -437,25 +439,26 @@ static void draw_sick(lv_layer_t *layer, int x, int y)
 #define HOME_N 4
 #define HOME_LIGHT 3
 static const uint8_t HOME_ACT[HOME_N] = {
-    APP_TAMA_FEED, APP_TAMA_BATH, APP_TAMA_HEAL, APP_TAMA_LIGHT
+    APP_MEOW_FEED, APP_MEOW_BATH, APP_MEOW_HEAL, APP_MEOW_LIGHT
 };
 static const int HOME_ICO[HOME_N] = {
     ICO_FEED, ICO_BATH, ICO_HEAL, ICO_LAMP
 };
-#define SET_N 9
+#define SET_N 10
 #define SET_NAME 1
-#define SET_WIPE 8
+#define SET_BED 5
+#define SET_WIPE 9
 static const app_str_id_t SET_STR[SET_N] = {
-    APP_STR_LANGUAGE, APP_STR_TAMA_NAME, APP_STR_WIFI, APP_STR_BLUETOOTH,
-    APP_STR_DATETIME, APP_STR_SCREEN, APP_STR_SOUND, APP_STR_UPDATE,
-    APP_STR_TAMA_WIPE
+    APP_STR_LANGUAGE, APP_STR_MEOW_NAME, APP_STR_WIFI, APP_STR_BLUETOOTH,
+    APP_STR_DATETIME, APP_STR_PET_HOURS, APP_STR_SCREEN, APP_STR_SOUND,
+    APP_STR_UPDATE, APP_STR_MEOW_WIPE
 };
 static const app_str_id_t BAG_CAT_STR[3] = {
-    APP_STR_TAMA_IT_FOOD, APP_STR_TAMA_WEAR, APP_STR_TAMA_GEAR
+    APP_STR_MEOW_IT_FOOD, APP_STR_MEOW_WEAR, APP_STR_MEOW_GEAR
 };
 static const app_str_id_t DEX_CAT_STR[DEX_CAT_N] = {
-    APP_STR_TAMA_DEX_PET, APP_STR_TAMA_ACH, APP_STR_TAMA_DEX_ITM,
-    APP_STR_TAMA_DEX_COL
+    APP_STR_MEOW_DEX_PET, APP_STR_MEOW_ACH, APP_STR_MEOW_DEX_ITM,
+    APP_STR_MEOW_DEX_COL
 };
 
 static int dex_cat_n(int cat);
@@ -475,19 +478,19 @@ static int inner_n(void)
 {
     if (s_mode != MODE_CARE) return 0;
     if (s_sel == TAB_HOME) {
-        if (s_pet.stage == APP_TAMA_EGG) return 0;
-        if (s_pet.stage == APP_TAMA_DEAD) return 1;
-        if (s_pet.trip_st == APP_TAMA_TRIP_AWAY) return 0;
+        if (s_pet.stage == APP_MEOW_EGG) return 0;
+        if (s_pet.stage == APP_MEOW_DEAD) return 1;
+        if (s_pet.trip_st == APP_MEOW_TRIP_AWAY) return 0;
         return HOME_N;
     }
     if (s_sel == TAB_SET) return SET_N;
     if (s_sel == TAB_SHOP) {
-        int n = app_tama_owned_n(&s_pet, s_bag_cat);
+        int n = app_meow_owned_n(&s_pet, s_bag_cat);
         return n > 0 ? n : 1;
     }
     if (s_sel == TAB_GAME) {
         if (s_trip_edit) {
-            int n = app_tama_owned_n(&s_pet, APP_TAMA_CAT_FOOD);
+            int n = app_meow_owned_n(&s_pet, APP_MEOW_CAT_FOOD);
             return n > 0 ? n + 1 : 1;
         }
         return GAME_N;
@@ -498,7 +501,7 @@ static int inner_n(void)
 
 static void bag_cat_shift(int dir)
 {
-    s_bag_cat = (s_bag_cat + APP_TAMA_CAT_N + dir) % APP_TAMA_CAT_N;
+    s_bag_cat = (s_bag_cat + APP_MEOW_CAT_N + dir) % APP_MEOW_CAT_N;
     s_sub = 0;
 }
 
@@ -518,17 +521,17 @@ static void paint(void);
 
 static int pet_kind(void)
 {
-    if (s_pet.stage == APP_TAMA_EGG) return 0;
+    if (s_pet.stage == APP_MEOW_EGG) return 0;
     if (s_pet.species >= 1 && s_pet.species <= 10) return (int)s_pet.species;
-    if (s_pet.stage == APP_TAMA_BABY) return 1;
-    if (s_pet.stage == APP_TAMA_CHILD) return 2;
-    if (s_pet.stage == APP_TAMA_TEEN) return s_pet.form ? 4 : 3;
-    if (s_pet.stage == APP_TAMA_DEAD) return 10;
+    if (s_pet.stage == APP_MEOW_BABY) return 1;
+    if (s_pet.stage == APP_MEOW_CHILD) return 2;
+    if (s_pet.stage == APP_MEOW_TEEN) return s_pet.form ? 4 : 3;
+    if (s_pet.stage == APP_MEOW_DEAD) return 10;
     return 5;
 }
 
 static void draw_pet_img(lv_layer_t *layer, int x, int y, int w, int h,
-                         int kind, bool dead)
+                         int kind, bool dead, bool sleep)
 {
     lv_draw_image_dsc_t d;
     lv_area_t a;
@@ -536,7 +539,7 @@ static void draw_pet_img(lv_layer_t *layer, int x, int y, int w, int h,
     if (kind < 0) kind = 0;
     if (kind > 10) kind = 10;
     lv_draw_image_dsc_init(&d);
-    d.src = &app_tama_pet_img[kind];
+    d.src = &app_meow_pet_img[kind];
     /* dest 小于 84 时必须缩放,否则只画出立绘左上角一截。 */
     if (w != 84 || h != 84) {
         d.scale_x = w * 256 / 84;
@@ -547,6 +550,9 @@ static void draw_pet_img(lv_layer_t *layer, int x, int y, int w, int h,
     if (dead) {
         d.recolor = lv_color_hex(COL_GHOST);
         d.recolor_opa = LV_OPA_70;
+    } else if (sleep) {
+        d.recolor = lv_color_hex(COL_BG2);
+        d.recolor_opa = LV_OPA_30;
     }
     a.x1 = x;
     a.y1 = y;
@@ -563,7 +569,7 @@ static void draw_ico(lv_layer_t *layer, int x, int y, int w, int h, int id)
     if (id < 0) id = 0;
     if (id > 15) id = 15;
     lv_draw_image_dsc_init(&d);
-    d.src = &app_tama_ico_img[id];
+    d.src = &app_meow_ico_img[id];
     if (w != 24 || h != 24) {
         d.scale_x = w * 256 / 24;
         d.scale_y = h * 256 / 24;
@@ -583,7 +589,7 @@ static void draw_fish(lv_layer_t *layer, int x, int y, int w, int h, bool koi)
     lv_area_t a;
 
     lv_draw_image_dsc_init(&d);
-    d.src = &app_tama_ico_img[ICO_FISH];
+    d.src = &app_meow_ico_img[ICO_FISH];
     if (w != 24 || h != 24) {
         d.scale_x = w * 256 / 24;
         d.scale_y = h * 256 / 24;
@@ -605,38 +611,6 @@ static void draw_fish(lv_layer_t *layer, int x, int y, int w, int h, bool koi)
 static int pet_sprite_size(void)
 {
     return 84;
-}
-
-static void draw_stage_wear(lv_layer_t *layer, int ox, int oy, int sz)
-{
-    int cx = ox + sz / 2;
-
-    switch (s_pet.stage) {
-    case APP_TAMA_BABY:
-        oval(layer, cx - 16, oy + 4, 13, 10, COL_PINK);
-        oval(layer, cx + 3, oy + 4, 13, 10, COL_PINK);
-        oval(layer, cx - 5, oy + 8, 10, 8, COL_CORAL);
-        break;
-    case APP_TAMA_CHILD:
-        rrect(layer, cx - 2, oy + 2, 4, 12, 1, COL_LEAF2);
-        oval(layer, cx - 13, oy, 13, 10, COL_LEAF);
-        oval(layer, cx, oy, 13, 10, COL_LEAF);
-        break;
-    case APP_TAMA_TEEN:
-        oval(layer, ox + 6, oy + 8, 10, 10, COL_GOLD);
-        oval(layer, ox + 8, oy + 10, 4, 4, COL_WHITE);
-        oval(layer, ox + sz - 16, oy + 8, 10, 10, COL_CORAL);
-        oval(layer, ox + sz - 14, oy + 10, 4, 4, COL_WHITE);
-        break;
-    case APP_TAMA_ADULT:
-        rrect(layer, cx - 16, oy + 6, 32, 8, 2, COL_GOLD);
-        oval(layer, cx - 14, oy + 2, 8, 8, COL_GOLD);
-        oval(layer, cx - 4, oy - 2, 8, 10, COL_GOLD2);
-        oval(layer, cx + 6, oy + 2, 8, 8, COL_GOLD);
-        break;
-    default:
-        break;
-    }
 }
 
 static void draw_halo(lv_layer_t *layer, int cx, int oy)
@@ -661,41 +635,18 @@ static void draw_halo(lv_layer_t *layer, int cx, int oy)
     oval(layer, cx + 6, oy - 8, 10, 3, COL_WHITE);
 }
 
-static void hide_dead_eyes(lv_layer_t *layer, int ox, int oy, int sz)
-{
-    uint32_t face = mix(COL_GHOST, COL_WHITE, 3);
-
-    oval(layer, ox + sz * 20 / 84, oy + sz * 26 / 84, sz * 18 / 84,
-         sz * 12 / 84, face);
-    oval(layer, ox + sz * 46 / 84, oy + sz * 26 / 84, sz * 18 / 84,
-         sz * 12 / 84, face);
-}
-
 /* Ardot circular stickers: 0 egg, 1-10 species. */
-static void draw_pet(lv_layer_t *layer, int ox, int oy, int sz, bool blink)
+static void draw_pet(lv_layer_t *layer, int ox, int oy, int sz)
 {
     int cx = ox + sz / 2;
     int kind = pet_kind();
-    bool sleep = s_pet.sleeping && s_pet.stage != APP_TAMA_EGG;
-    bool dead = (s_pet.stage == APP_TAMA_DEAD);
+    bool sleep = s_pet.sleeping && s_pet.stage != APP_MEOW_EGG;
+    bool dead = (s_pet.stage == APP_MEOW_DEAD);
 
     if (sleep) oy += 4;
 
-    draw_pet_img(layer, ox, oy, sz, sz, kind, dead);
-    if (!dead) draw_stage_wear(layer, ox, oy, sz);
-
-    if (dead) {
-        hide_dead_eyes(layer, ox, oy, sz);
-        draw_halo(layer, cx, oy);
-        return;
-    }
-
-    if (kind != 0 && (sleep || blink)) {
-        oval(layer, ox + sz * 22 / 84, oy + sz * 28 / 84, sz * 16 / 84,
-             sz * 6 / 84, COL_PIX);
-        oval(layer, ox + sz * 46 / 84, oy + sz * 28 / 84, sz * 16 / 84,
-             sz * 6 / 84, COL_PIX);
-    }
+    draw_pet_img(layer, ox, oy, sz, sz, kind, dead, sleep);
+    if (dead) draw_halo(layer, cx, oy);
 }
 
 static void draw_txt(lv_layer_t *layer, int x, int y, int w, int h,
@@ -752,12 +703,12 @@ static void draw_good_sz(lv_layer_t *layer, int id, int x, int y, int sz)
     lv_draw_image_dsc_t d;
     lv_area_t a;
 
-    if (id < 0 || id >= APP_TAMA_G_N) {
+    if (id < 0 || id >= APP_MEOW_G_N) {
         ico_star(layer, x + (sz - 16) / 2, y + (sz - 16) / 2, COL_GOLD);
         return;
     }
     lv_draw_image_dsc_init(&d);
-    d.src = &app_tama_good_img[id];
+    d.src = &app_meow_good_img[id];
     if (sz != 28) {
         d.scale_x = sz * 256 / 28;
         d.scale_y = sz * 256 / 28;
@@ -778,12 +729,13 @@ static void draw_good(lv_layer_t *layer, int id, int x, int y)
 
 static const char *good_name(int id)
 {
-    if (id < 0 || id >= APP_TAMA_G_N) return "";
-    return app_str((app_str_id_t)(APP_STR_TAMA_GD0 + id));
+    if (id < 0 || id >= APP_MEOW_G_N) return "";
+    return app_str((app_str_id_t)(APP_STR_MEOW_GD0 + id));
 }
 
 static bool night_ui(void)
 {
+    if (minigame()) return false;
     return s_pet.lights_off && s_pet.sleeping;
 }
 
@@ -804,12 +756,12 @@ static uint32_t ui_card(void)
 
 static int pet_lv(void)
 {
-    return app_tama_level(&s_pet);
+    return app_meow_level(&s_pet);
 }
 
 static int xp_pct(void)
 {
-    return app_tama_xp_pct(&s_pet);
+    return app_meow_xp_pct(&s_pet);
 }
 
 static int fullness_pct(void)
@@ -824,7 +776,7 @@ static int mood_pct(void)
 
 static int clean_pct(void)
 {
-    return app_tama_clean(&s_pet);
+    return app_meow_clean(&s_pet);
 }
 
 static int health_pct(void)
@@ -834,18 +786,18 @@ static int health_pct(void)
 
 static bool dex_pet_on(int slot)
 {
-    if (s_pet.stage == APP_TAMA_DEAD) {
+    if (s_pet.stage == APP_MEOW_DEAD) {
         return slot == 0 || s_pet.species == (uint8_t)slot;
     }
     if (slot == 0) return true;
     if (slot >= 1 && slot <= 10) {
         if (s_pet.species == (uint8_t)slot) return true;
-        if (slot == 1 && s_pet.stage >= APP_TAMA_BABY) return true;
-        if (slot == 2 && s_pet.stage >= APP_TAMA_CHILD) return true;
-        if (slot == 3 && s_pet.stage >= APP_TAMA_TEEN && !s_pet.form) {
+        if (slot == 1 && s_pet.stage >= APP_MEOW_BABY) return true;
+        if (slot == 2 && s_pet.stage >= APP_MEOW_CHILD) return true;
+        if (slot == 3 && s_pet.stage >= APP_MEOW_TEEN && !s_pet.form) {
             return true;
         }
-        if (slot == 4 && s_pet.stage >= APP_TAMA_TEEN && s_pet.form) {
+        if (slot == 4 && s_pet.stage >= APP_MEOW_TEEN && s_pet.form) {
             return true;
         }
         return false;
@@ -855,13 +807,13 @@ static bool dex_pet_on(int slot)
 
 static bool dex_ach_on(int id)
 {
-    if (s_pet.stage == APP_TAMA_DEAD || s_pet.stage <= APP_TAMA_EGG) return false;
+    if (s_pet.stage == APP_MEOW_DEAD || s_pet.stage <= APP_MEOW_EGG) return false;
     if (id == 0) return true;
-    if (id == 1) return s_pet.happy >= APP_TAMA_STAT_MAX;
-    if (id == 2) return s_pet.stage == APP_TAMA_ADULT;
-    if (id == 3) return s_pet.hunger >= APP_TAMA_STAT_MAX;
+    if (id == 1) return s_pet.happy >= APP_MEOW_STAT_MAX;
+    if (id == 2) return s_pet.stage == APP_MEOW_ADULT;
+    if (id == 3) return s_pet.hunger >= APP_MEOW_STAT_MAX;
     if (id == 4) return s_pet.poop == 0 && s_pet.dirt == 0;
-    if (id == 5) return s_pet.health >= APP_TAMA_STAT_MAX && !s_pet.sick;
+    if (id == 5) return s_pet.health >= APP_MEOW_STAT_MAX && !s_pet.sick;
     if (id == 6) return s_play_best >= 100;
     if (id == 7) return s_rhy_best >= 100;
     return false;
@@ -869,20 +821,20 @@ static bool dex_ach_on(int id)
 
 static bool dex_itm_on(int id)
 {
-    return app_tama_inv(&s_pet, id) > 0;
+    return app_meow_inv(&s_pet, id) > 0;
 }
 
 static bool dex_col_on(int id)
 {
-    return app_tama_souv_on(&s_pet, id);
+    return app_meow_souv_on(&s_pet, id);
 }
 
 static int dex_cat_n(int cat)
 {
     if (cat == DEX_CAT_PET) return DEX_PET_N;
     if (cat == DEX_CAT_ACH) return DEX_ACH_N;
-    if (cat == DEX_CAT_ITM) return APP_TAMA_G_N;
-    return APP_TAMA_SOUV_N;
+    if (cat == DEX_CAT_ITM) return APP_MEOW_G_N;
+    return APP_MEOW_SOUV_N;
 }
 
 static bool dex_slot_on(int cat, int slot)
@@ -911,22 +863,22 @@ static bool dex_on(int slot)
 static const char *dex_blurb(int slot)
 {
     if (s_dex_cat == DEX_CAT_PET) {
-        if (slot == 0) return app_str(APP_STR_TAMA_DX_EGG);
+        if (slot == 0) return app_str(APP_STR_MEOW_DX_EGG);
         if (slot >= 1 && slot <= 10) {
-            return app_str((app_str_id_t)(APP_STR_TAMA_DX_SP1 + slot - 1));
+            return app_str((app_str_id_t)(APP_STR_MEOW_DX_SP1 + slot - 1));
         }
         return "";
     }
     if (s_dex_cat == DEX_CAT_ACH) {
         if (slot < 0 || slot >= DEX_ACH_N) return "";
-        return app_str((app_str_id_t)(APP_STR_TAMA_DX_AH0 + slot));
+        return app_str((app_str_id_t)(APP_STR_MEOW_DX_AH0 + slot));
     }
     if (s_dex_cat == DEX_CAT_ITM) {
-        if (slot < 0 || slot >= APP_TAMA_G_N) return "";
-        return app_str((app_str_id_t)(APP_STR_TAMA_DX_GD0 + slot));
+        if (slot < 0 || slot >= APP_MEOW_G_N) return "";
+        return app_str((app_str_id_t)(APP_STR_MEOW_DX_GD0 + slot));
     }
-    if (slot < 0 || slot >= APP_TAMA_SOUV_N) return "";
-    return app_str((app_str_id_t)(APP_STR_TAMA_DX_SV0 + slot));
+    if (slot < 0 || slot >= APP_MEOW_SOUV_N) return "";
+    return app_str((app_str_id_t)(APP_STR_MEOW_DX_SV0 + slot));
 }
 
 static void dex_blurb_split(int slot, char *a, size_t an, char *b, size_t bn)
@@ -1016,8 +968,8 @@ static void draw_pills(lv_layer_t *layer, int bx, int by)
 
 static const char *default_name(void)
 {
-    if (s_pet.stage == APP_TAMA_EGG && s_pet.species == 0) {
-        return app_str(APP_STR_TAMA_SP1);
+    if (s_pet.stage == APP_MEOW_EGG && s_pet.species == 0) {
+        return app_str(APP_STR_MEOW_SP1);
     }
     return app_str(species_id());
 }
@@ -1045,17 +997,17 @@ static void draw_header(lv_layer_t *layer, int bx, int by)
 
 static void draw_alert_edge(lv_layer_t *layer, int x, int y, int w, int h)
 {
-    uint8_t peak = app_tama_alert_peak(&s_pet);
+    uint8_t peak = app_meow_alert_peak(&s_pet);
     uint32_t c;
     int t;
 
     if (minigame() || s_sel == TAB_GAME) return;
     if (s_flash_left <= 0) return;
-    if (peak < APP_TAMA_ALERT_WARN) return;
-    if (peak >= APP_TAMA_ALERT_CRIT) {
+    if (peak < APP_MEOW_ALERT_WARN) return;
+    if (peak >= APP_MEOW_ALERT_CRIT) {
         c = s_blink ? COL_ALERT : mix(COL_ALERT, COL_CORAL, 4);
         t = s_blink ? 6 : 4;
-    } else if (peak >= APP_TAMA_ALERT_HIT) {
+    } else if (peak >= APP_MEOW_ALERT_HIT) {
         c = s_blink ? COL_ALERT : mix(COL_ALERT, COL_CORAL, 3);
         t = 5;
     } else {
@@ -1091,11 +1043,11 @@ static void draw_flash(lv_layer_t *layer, int bx, int by)
 static uint32_t stage_col(void)
 {
     switch (s_pet.stage) {
-    case APP_TAMA_EGG: return COL_SEED;
-    case APP_TAMA_BABY: return COL_PINK;
-    case APP_TAMA_CHILD: return COL_LEAF;
-    case APP_TAMA_TEEN: return COL_CORAL;
-    case APP_TAMA_ADULT: return COL_GOLD;
+    case APP_MEOW_EGG: return COL_SEED;
+    case APP_MEOW_BABY: return COL_PINK;
+    case APP_MEOW_CHILD: return COL_LEAF;
+    case APP_MEOW_TEEN: return COL_CORAL;
+    case APP_MEOW_ADULT: return COL_GOLD;
     default: return COL_LOCKX;
     }
 }
@@ -1106,12 +1058,12 @@ static void draw_stage_badge(lv_layer_t *layer, int bx, int by)
     lv_area_t a;
     int id;
 
-    if (s_pet.stage == APP_TAMA_DEAD) return;
+    if (s_pet.stage == APP_MEOW_DEAD) return;
     id = (int)s_pet.stage;
     if (id < 0) id = 0;
     if (id > 4) id = 4;
     lv_draw_image_dsc_init(&d);
-    d.src = &app_tama_stage_img[id];
+    d.src = &app_meow_stage_img[id];
     a.x1 = bx + 10;
     a.y1 = by + 32;
     a.x2 = a.x1 + 31;
@@ -1121,12 +1073,12 @@ static void draw_stage_badge(lv_layer_t *layer, int bx, int by)
     rrect(layer, bx + 7, by + 66, 38, 16, 8, COL_GOLD);
     draw_txt(layer, bx + 7, by + 66, 38, 16, s_line, COL_INK,
              LV_TEXT_ALIGN_CENTER);
-    if (s_pet.stage == APP_TAMA_EGG) {
+    if (s_pet.stage == APP_MEOW_EGG) {
         snprintf(s_line, sizeof(s_line), "%u/%u",
-                 (unsigned)s_pet.hatch_min, (unsigned)APP_TAMA_HATCH_SEC);
+                 (unsigned)s_pet.hatch_min, (unsigned)APP_MEOW_HATCH_SEC);
     } else {
         snprintf(s_line, sizeof(s_line), "%d/%d",
-                 app_tama_xp(&s_pet), app_tama_xp_need(pet_lv()));
+                 app_meow_xp(&s_pet), app_meow_xp_need(pet_lv()));
     }
     draw_txt(layer, bx + 2, by + 82, 48, 16, s_line, COL_MUTE,
              LV_TEXT_ALIGN_CENTER);
@@ -1146,33 +1098,28 @@ static void draw_pet_circle(lv_layer_t *layer, int bx, int by)
     draw_xp_ring(layer, bx + 120, by + 98, 54, xp_pct(), stage_col());
     rrect(layer, bx + 72, by + 50, 96, 96, 48, ui_card());
     int bob = 0, wob = 0;
-    if (s_pet.stage == APP_TAMA_EGG) wob = ((s_bob / 2) & 1) ? 2 : -2;
-    else if (!s_pet.sleeping && s_pet.stage != APP_TAMA_DEAD) {
+    if (s_pet.stage == APP_MEOW_EGG) wob = ((s_bob / 2) & 1) ? 2 : -2;
+    else if (!s_pet.sleeping && s_pet.stage != APP_MEOW_DEAD) {
         bob = (s_bob & 1) * 2;
     }
-    bool blink = (s_bob % 16 == 0) && !s_pet.sleeping &&
-                 s_pet.stage != APP_TAMA_DEAD;
     int sz = pet_sprite_size();
     int px = bx + 72 + (96 - sz) / 2 + wob;
     int py = by + 50 + (96 - sz) / 2 + bob;
-    if (s_pet.trip_st == APP_TAMA_TRIP_AWAY) {
-        draw_ico(layer, bx + 108, by + 86, 24, 24, ICO_BAG);
-        rrect(layer, bx + 88, by + 118, 64, 6, 3, COL_SLOT);
-        rrect(layer, bx + 88, by + 118, 16 + (s_bob % 5) * 8, 6, 3, COL_TEAL);
-    } else {
-        draw_pet(layer, px, py, sz, blink);
+    draw_pet(layer, px, py, sz);
+    if (s_pet.trip_st == APP_MEOW_TRIP_AWAY) {
+        draw_ico(layer, bx + 136, by + 114, 24, 24, ICO_BAG);
     }
     draw_stage_badge(layer, bx, by);
     draw_stage_pill(layer, bx + 86, by + 134, 68);
-    if (s_pet.sleeping && s_pet.stage != APP_TAMA_EGG &&
-        s_pet.stage != APP_TAMA_DEAD) {
+    if (s_pet.sleeping && s_pet.stage != APP_MEOW_EGG &&
+        s_pet.stage != APP_MEOW_DEAD) {
         draw_zzz(layer, px + sz - 8, py + 4 - ((s_bob / 2) & 1) * 3);
     }
-    if (s_pet.sick && s_pet.stage > APP_TAMA_EGG &&
-        s_pet.stage < APP_TAMA_DEAD) {
+    if (s_pet.sick && s_pet.stage > APP_MEOW_EGG &&
+        s_pet.stage < APP_MEOW_DEAD) {
         draw_sick(layer, px + sz - 10, py + 6);
     }
-    if (s_pet.poop && s_pet.stage != APP_TAMA_EGG) {
+    if (s_pet.poop && s_pet.stage != APP_MEOW_EGG) {
         draw_poop(layer, bx + 24, by + 130);
         if (s_pet.poop > 1) draw_poop(layer, bx + 48, by + 138);
     }
@@ -1182,15 +1129,15 @@ static void draw_home_btns(lv_layer_t *layer, int bx, int by)
 {
     int h = 32;
     int y = by + PAGE_H - h - 4;
-    if (s_pet.stage == APP_TAMA_DEAD) {
+    if (s_pet.stage == APP_MEOW_DEAD) {
         bool sel = focused() && s_sub == 0;
         rrect(layer, bx + 16, y, 208, h, 10, sel ? COL_CORAL : COL_WHITE);
-        draw_txt(layer, bx + 16, y + 8, 208, 16, app_str(APP_STR_TAMA_AGAIN),
+        draw_txt(layer, bx + 16, y + 8, 208, 16, app_str(APP_STR_MEOW_AGAIN),
                  sel ? COL_WHITE : COL_INK, LV_TEXT_ALIGN_CENTER);
         return;
     }
-    if (s_pet.stage == APP_TAMA_EGG) return;
-    if (s_pet.trip_st == APP_TAMA_TRIP_AWAY) return;
+    if (s_pet.stage == APP_MEOW_EGG) return;
+    if (s_pet.trip_st == APP_MEOW_TRIP_AWAY) return;
     int w = 46, gap = 8, ico = 24;
     int total = HOME_N * w + (HOME_N - 1) * gap;
     int x0 = bx + (LCD_W - total) / 2;
@@ -1225,13 +1172,13 @@ static void page_home(lv_layer_t *layer, int bx, int by)
         }
     }
     int my = by + 174;
-    draw_stat_row(layer, bx, my, app_str(APP_STR_TAMA_STAT_FOOD),
+    draw_stat_row(layer, bx, my, app_str(APP_STR_MEOW_STAT_FOOD),
                   fullness_pct(), COL_GOLD, (int)s_pet.hunger, 0);
-    draw_stat_row(layer, bx, my + 16, app_str(APP_STR_TAMA_STAT_CLEAN),
+    draw_stat_row(layer, bx, my + 16, app_str(APP_STR_MEOW_STAT_CLEAN),
                   clean_pct(), COL_BLUE, clean_pct(), 0);
-    draw_stat_row(layer, bx, my + 32, app_str(APP_STR_TAMA_STAT_HEALTH),
+    draw_stat_row(layer, bx, my + 32, app_str(APP_STR_MEOW_STAT_HEALTH),
                   health_pct(), COL_GREEN, (int)s_pet.health, 0);
-    draw_stat_row(layer, bx, my + 48, app_str(APP_STR_TAMA_D_HAPPY),
+    draw_stat_row(layer, bx, my + 48, app_str(APP_STR_MEOW_D_HAPPY),
                   mood_pct(), COL_CORAL, (int)s_pet.happy, 0);
     draw_home_btns(layer, bx, by);
 }
@@ -1264,6 +1211,10 @@ static void page_set(lv_layer_t *layer, int bx, int by)
             lab = s_line;
         } else if (idx == SET_NAME) {
             snprintf(s_line, sizeof(s_line), "%s  %s", lab, pet_title());
+            lab = s_line;
+        } else if (idx == SET_BED) {
+            snprintf(s_line, sizeof(s_line), "%s  %02d–%02d", lab,
+                     (int)app_prefs()->meow_bed, (int)app_prefs()->meow_wake);
             lab = s_line;
         }
         draw_txt(layer, bx + 26, y + 4, 188, 16, lab,
@@ -1327,9 +1278,9 @@ static void draw_grid_card(lv_layer_t *layer, int x, int y, int w, int h,
 static void draw_good_card(lv_layer_t *layer, int x, int y, int w, int h,
                            int id, bool sel, int take)
 {
-    int have = (int)app_tama_inv(&s_pet, id);
-    int dmax = app_tama_good_dur_max(id);
-    int dcur = (int)app_tama_dur(&s_pet, id);
+    int have = (int)app_meow_inv(&s_pet, id);
+    int dmax = app_meow_good_dur_max(id);
+    int dcur = (int)app_meow_dur(&s_pet, id);
     int pad = (h <= 68) ? 4 : 8;
 
     draw_grid_card(layer, x, y, w, h, sel, true);
@@ -1337,14 +1288,14 @@ static void draw_good_card(lv_layer_t *layer, int x, int y, int w, int h,
     draw_txt(layer, x + pad + 32, y + pad, w - pad - 36, 16, good_name(id),
              COL_INK, LV_TEXT_ALIGN_LEFT);
     if (take >= 0) {
-        snprintf(s_line, sizeof(s_line), app_str(APP_STR_TAMA_TRIP_PACK),
+        snprintf(s_line, sizeof(s_line), app_str(APP_STR_MEOW_TRIP_PACK),
                  take, have);
     } else {
         snprintf(s_line, sizeof(s_line), "x%u", (unsigned)have);
     }
     draw_txt(layer, x + pad + 32, y + pad + 16, w - pad - 36, 16, s_line,
              COL_COINX, LV_TEXT_ALIGN_LEFT);
-    snprintf(s_line, sizeof(s_line), app_str(APP_STR_TAMA_DUR), dcur, dmax);
+    snprintf(s_line, sizeof(s_line), app_str(APP_STR_MEOW_DUR), dcur, dmax);
     draw_txt(layer, x + pad, y + h - pad - 16, w - pad * 2, 16, s_line,
              COL_MUTE, LV_TEXT_ALIGN_LEFT);
 }
@@ -1362,11 +1313,11 @@ static void draw_score_pills(lv_layer_t *layer, int bx, int by, int best,
                              int run)
 {
     rrect(layer, bx + 16, by, 100, 20, 10, COL_COIN);
-    snprintf(s_line, sizeof(s_line), app_str(APP_STR_TAMA_BEST), best);
+    snprintf(s_line, sizeof(s_line), app_str(APP_STR_MEOW_BEST), best);
     draw_txt(layer, bx + 16, by + 2, 100, 16, s_line, COL_COINX,
              LV_TEXT_ALIGN_CENTER);
     rrect(layer, bx + 124, by, 100, 20, 10, COL_GEM);
-    snprintf(s_line, sizeof(s_line), app_str(APP_STR_TAMA_RUN), run);
+    snprintf(s_line, sizeof(s_line), app_str(APP_STR_MEOW_RUN), run);
     draw_txt(layer, bx + 124, by + 2, 100, 16, s_line, COL_GEMX,
              LV_TEXT_ALIGN_CENTER);
 }
@@ -1374,13 +1325,13 @@ static void draw_score_pills(lv_layer_t *layer, int bx, int by, int best,
 static void page_shop(lv_layer_t *layer, int bx, int by)
 {
     draw_header(layer, bx, by);
-    draw_cat_tabs(layer, bx, by, BAG_CAT_STR, APP_TAMA_CAT_N, s_bag_cat);
+    draw_cat_tabs(layer, bx, by, BAG_CAT_STR, APP_MEOW_CAT_N, s_bag_cat);
 
-    uint8_t ids[APP_TAMA_G_N];
-    int n = app_tama_owned_list(&s_pet, s_bag_cat, ids, APP_TAMA_G_N);
+    uint8_t ids[APP_MEOW_G_N];
+    int n = app_meow_owned_list(&s_pet, s_bag_cat, ids, APP_MEOW_G_N);
     if (n <= 0) {
         rrect(layer, bx + 16, by + 80, 208, 80, 16, COL_WHITE);
-        draw_txt(layer, bx + 16, by + 108, 208, 20, app_str(APP_STR_TAMA_BAG_EMPTY),
+        draw_txt(layer, bx + 16, by + 108, 208, 20, app_str(APP_STR_MEOW_BAG_EMPTY),
                  COL_MUTE, LV_TEXT_ALIGN_CENTER);
         return;
     }
@@ -1430,10 +1381,10 @@ static void draw_rhy_pop(lv_layer_t *layer, int cx, int cy, uint32_t age,
     int r, s;
     uint32_t fc;
 
-    if (age >= APP_TAMA_RHY_FX) return;
+    if (age >= APP_MEOW_RHY_FX) return;
     r = 12 + (int)age / 6;
     if (r > 40) r = 40;
-    fc = (grade == APP_TAMA_RHY_G_PERF) ? COL_GOLD : COL_WHITE;
+    fc = (grade == APP_MEOW_RHY_G_PERF) ? COL_GOLD : COL_WHITE;
     ring(layer, cx - r, cy - r, r * 2, r * 2, fc);
     if (age < 80) {
         ring(layer, cx - r + 6, cy - r + 6, r * 2 - 12, r * 2 - 12, COL_CORAL);
@@ -1474,7 +1425,7 @@ static void draw_run_pop(lv_layer_t *layer, int cx, int cy, int good,
 {
     int r, sz, lift;
 
-    if (age >= APP_TAMA_RUN_FX_MS) return;
+    if (age >= APP_MEOW_RUN_FX_MS) return;
     r = 12 + (int)age / 6;
     if (r > 40) r = 40;
     ring(layer, cx - r, cy - r, r * 2, r * 2, COL_GOLD);
@@ -1505,13 +1456,13 @@ static void page_rhythm(lv_layer_t *layer, int bx, int by)
                  LV_TEXT_ALIGN_RIGHT);
     }
     grade = s_rhy.last_grade;
-    if (grade == APP_TAMA_RHY_G_PERF) gstr = app_str(APP_STR_TAMA_PERF);
-    else if (grade == APP_TAMA_RHY_G_GOOD) gstr = app_str(APP_STR_TAMA_GOOD);
-    else if (grade == APP_TAMA_RHY_G_MISS) gstr = app_str(APP_STR_TAMA_MISS);
+    if (grade == APP_MEOW_RHY_G_PERF) gstr = app_str(APP_STR_MEOW_PERF);
+    else if (grade == APP_MEOW_RHY_G_GOOD) gstr = app_str(APP_STR_MEOW_GOOD);
+    else if (grade == APP_MEOW_RHY_G_MISS) gstr = app_str(APP_STR_MEOW_MISS);
     else gstr = "";
     if (gstr[0]) {
         draw_txt(layer, bx + 16, by + 28, 208, 16, gstr,
-                 (grade == APP_TAMA_RHY_G_MISS) ? COL_MUTE : COL_GOLD,
+                 (grade == APP_MEOW_RHY_G_MISS) ? COL_MUTE : COL_GOLD,
                  LV_TEXT_ALIGN_CENTER);
     }
 
@@ -1519,7 +1470,7 @@ static void page_rhythm(lv_layer_t *layer, int bx, int by)
           COL_GOLD2);
     for (i = 0; i < 2; i++) {
         int x = bx + LX[i];
-        bool near = app_tama_rhy_near(&s_rhy, i, now);
+        bool near = app_meow_rhy_near(&s_rhy, i, now);
         bool down = (s_rhy_held & (1u << i)) != 0;
         bool pop = false;
         int k;
@@ -1527,7 +1478,7 @@ static void page_rhythm(lv_layer_t *layer, int bx, int by)
 
         for (k = 0; k < s_rhy.n_n; k++) {
             if (s_rhy.n[k].lane == (uint8_t)i && s_rhy.fx_at[k] &&
-                now < s_rhy.fx_at[k] + APP_TAMA_RHY_FX) {
+                now < s_rhy.fx_at[k] + APP_MEOW_RHY_FX) {
                 pop = true;
                 break;
             }
@@ -1552,14 +1503,14 @@ static void page_rhythm(lv_layer_t *layer, int bx, int by)
     rrect(layer, bx + 22, by + RHY_HIT_Y + 6, 196, 3, 1, COL_INK);
 
     for (i = 0; i < s_rhy.n_n; i++) {
-        const app_tama_rhy_note_t *n = &s_rhy.n[i];
+        const app_meow_rhy_note_t *n = &s_rhy.n[i];
         int x = bx + LX[n->lane] + 12;
         int nw = RHY_LANE_W - 24;
         int y0, y1, h;
         uint32_t c;
 
-        if (s_rhy.st[i] == APP_TAMA_RHY_MISS) continue;
-        if (s_rhy.st[i] == APP_TAMA_RHY_HIT) {
+        if (s_rhy.st[i] == APP_MEOW_RHY_MISS) continue;
+        if (s_rhy.st[i] == APP_MEOW_RHY_HIT) {
             draw_rhy_pop(layer, x + nw / 2, by + RHY_HIT_Y + 8,
                          now - s_rhy.fx_at[i], s_rhy.fx_grade[i]);
             continue;
@@ -1572,15 +1523,15 @@ static void page_rhythm(lv_layer_t *layer, int bx, int by)
         if (y0 > by + LCD_H - 8) y0 = by + LCD_H - 8;
         h = y0 - y1;
         if (h < 18) h = 18;
-        c = (s_rhy.st[i] == APP_TAMA_RHY_OPEN) ? COL_GOLD
+        c = (s_rhy.st[i] == APP_MEOW_RHY_OPEN) ? COL_GOLD
             : (n->lane ? COL_BLUE : COL_CORAL);
         if (n->hold_ms) {
             rrect(layer, x + 6, y1, nw - 12, h, 6, c);
         }
         rrect(layer, x, y0 - 22, nw, 24, 12, c);
         oval(layer, x + nw / 2 - 5, y0 - 16, 10, 10, COL_WHITE);
-        if (s_rhy.st[i] == APP_TAMA_RHY_OPEN && s_rhy.fx_at[i] &&
-            now < s_rhy.fx_at[i] + APP_TAMA_RHY_FX) {
+        if (s_rhy.st[i] == APP_MEOW_RHY_OPEN && s_rhy.fx_at[i] &&
+            now < s_rhy.fx_at[i] + APP_MEOW_RHY_FX) {
             draw_rhy_pop(layer, x + nw / 2, by + RHY_HIT_Y + 8,
                          now - s_rhy.fx_at[i], s_rhy.fx_grade[i]);
         }
@@ -1590,11 +1541,11 @@ static void page_rhythm(lv_layer_t *layer, int bx, int by)
 
 static const char *result_game(void)
 {
-    if (s_over_kind == 1) return app_str(APP_STR_TAMA_BEAT);
-    if (s_over_kind == 2) return app_str(APP_STR_TAMA_KIT);
-    if (s_over_kind == 3) return app_str(APP_STR_TAMA_MAT);
-    if (s_over_kind == 4) return app_str(APP_STR_TAMA_TRIP);
-    return app_str(APP_STR_TAMA_FISH);
+    if (s_over_kind == 1) return app_str(APP_STR_MEOW_BEAT);
+    if (s_over_kind == 2) return app_str(APP_STR_MEOW_KIT);
+    if (s_over_kind == 3) return app_str(APP_STR_MEOW_MAT);
+    if (s_over_kind == 4) return app_str(APP_STR_MEOW_TRIP);
+    return app_str(APP_STR_MEOW_FISH);
 }
 
 static void page_result(lv_layer_t *layer, int bx, int by)
@@ -1608,22 +1559,22 @@ static void page_result(lv_layer_t *layer, int bx, int by)
 
     draw_header(layer, bx, by);
     snprintf(s_line, sizeof(s_line), "%s · %s", result_game(),
-             app_str(APP_STR_TAMA_RESULT));
+             app_str(APP_STR_MEOW_RESULT));
     draw_txt(layer, bx + 16, by + 32, 208, 20, s_line, COL_INK,
              LV_TEXT_ALIGN_CENTER);
     if (scored) {
         draw_score_pills(layer, bx, by + 54, best, s_over_score);
     }
 
-    for (i = 0; i < APP_TAMA_G_N; i++) {
+    for (i = 0; i < APP_MEOW_G_N; i++) {
         if (s_over_got[i]) kinds++;
     }
     if (s_over_souv >= 0) kinds++;
-    draw_txt(layer, bx + 16, by + 92, 208, 16, app_str(APP_STR_TAMA_REWARD),
+    draw_txt(layer, bx + 16, by + 92, 208, 16, app_str(APP_STR_MEOW_REWARD),
              COL_MUTE, LV_TEXT_ALIGN_CENTER);
     if (kinds <= 0) {
         rrect(layer, bx + 16, by + 112, 208, 86, 16, COL_WHITE);
-        draw_txt(layer, bx + 16, by + 146, 208, 20, app_str(APP_STR_TAMA_EMPTY),
+        draw_txt(layer, bx + 16, by + 146, 208, 20, app_str(APP_STR_MEOW_EMPTY),
                  COL_MUTE, LV_TEXT_ALIGN_CENTER);
     } else {
         int cols = (kinds <= 1) ? 1 : ((kinds == 2 || kinds == 4) ? 2 : 3);
@@ -1644,13 +1595,13 @@ static void page_result(lv_layer_t *layer, int bx, int by)
             rrect(layer, x, y, cw, ch, 12, COL_WHITE);
             draw_souv_ico(layer, s_over_souv, x + (cw - 28) / 2, gy, 28);
             draw_txt(layer, x + 2, ny, cw - 4, 16,
-                     app_str((app_str_id_t)(APP_STR_TAMA_SV0 + s_over_souv)),
+                     app_str((app_str_id_t)(APP_STR_MEOW_SV0 + s_over_souv)),
                      COL_INK, LV_TEXT_ALIGN_CENTER);
             draw_txt(layer, x + 2, ny + 16, cw - 4, 16, "x1", COL_COINX,
                      LV_TEXT_ALIGN_CENTER);
             k++;
         }
-        for (i = 0; i < APP_TAMA_G_N; i++) {
+        for (i = 0; i < APP_MEOW_G_N; i++) {
             int col, x, y, gy, ny;
             if (!s_over_got[i]) continue;
             col = k % cols;
@@ -1672,27 +1623,27 @@ static void page_result(lv_layer_t *layer, int bx, int by)
 
     rrect(layer, bx + 50, by + 276, 140, 36, 18,
           ok ? mix(COL_CORAL, COL_WHITE, 2) : COL_CORAL);
-    draw_txt(layer, bx + 50, by + 284, 140, 20, app_str(APP_STR_TAMA_CONFIRM),
+    draw_txt(layer, bx + 50, by + 284, 140, 20, app_str(APP_STR_MEOW_CONFIRM),
              COL_WHITE, LV_TEXT_ALIGN_CENTER);
 }
 
 static int trip_take_n(void)
 {
     int n = 0;
-    for (int i = 0; i < APP_TAMA_G_N; i++) n += (int)s_trip_take[i];
+    for (int i = 0; i < APP_MEOW_G_N; i++) n += (int)s_trip_take[i];
     return n;
 }
 
 static void trip_time_txt(char *out, size_t n, int sec)
 {
     if (sec < 0) sec = 0;
-    snprintf(out, n, app_str(APP_STR_TAMA_TRIP_AWAY), sec / 60, sec % 60);
+    snprintf(out, n, app_str(APP_STR_MEOW_TRIP_AWAY), sec / 60, sec % 60);
 }
 
 static void page_trip_pack(lv_layer_t *layer, int bx, int by)
 {
-    uint8_t ids[APP_TAMA_G_N];
-    int n = app_tama_owned_list(&s_pet, APP_TAMA_CAT_FOOD, ids, APP_TAMA_G_N);
+    uint8_t ids[APP_MEOW_G_N];
+    int n = app_meow_owned_list(&s_pet, APP_MEOW_CAT_FOOD, ids, APP_MEOW_G_N);
     int pack = trip_take_n();
     int vis = 4;
     int start = 0;
@@ -1700,12 +1651,12 @@ static void page_trip_pack(lv_layer_t *layer, int bx, int by)
     const char *go;
 
     draw_header(layer, bx, by);
-    draw_txt(layer, bx + 16, by + 36, 208, 16, app_str(APP_STR_TAMA_TRIP_HINT),
+    draw_txt(layer, bx + 16, by + 36, 208, 16, app_str(APP_STR_MEOW_TRIP_HINT),
              COL_MUTE, LV_TEXT_ALIGN_CENTER);
     if (n <= 0) {
         rrect(layer, bx + 16, by + 80, 208, 80, 16, COL_WHITE);
         draw_txt(layer, bx + 16, by + 108, 208, 20,
-                 app_str(APP_STR_TAMA_BAG_EMPTY), COL_MUTE,
+                 app_str(APP_STR_MEOW_BAG_EMPTY), COL_MUTE,
                  LV_TEXT_ALIGN_CENTER);
         return;
     }
@@ -1726,13 +1677,13 @@ static void page_trip_pack(lv_layer_t *layer, int bx, int by)
                        (int)s_trip_take[ids[idx]]);
     }
     if (pack > 0) {
-        int sec = app_tama_trip_sec(app_tama_trip_take_gain(s_trip_take));
+        int sec = app_meow_trip_sec(app_meow_trip_take_gain(s_trip_take));
         snprintf(s_line, sizeof(s_line), "%s  %d/%d  %d:%02d",
-                 app_str(APP_STR_TAMA_TRIP_GO), pack, APP_TAMA_TRIP_PACK_MAX,
+                 app_str(APP_STR_MEOW_TRIP_GO), pack, APP_MEOW_TRIP_PACK_MAX,
                  sec / 60, sec % 60);
         go = s_line;
     } else {
-        go = app_str(APP_STR_TAMA_TRIP_GO);
+        go = app_str(APP_STR_MEOW_TRIP_GO);
     }
     draw_go_pill(layer, bx, by, go, focused() && s_sub == n);
 }
@@ -1744,12 +1695,12 @@ static void draw_haz(lv_layer_t *layer, int x, int y, int sz, int id)
 
     int pulse = (s_bob & 1);
 
-    if (id < 0 || id >= APP_TAMA_HAZ_N) id = 0;
+    if (id < 0 || id >= APP_MEOW_HAZ_N) id = 0;
     oval(layer, x - 5 - pulse, y - 5 - pulse, sz + 10 + pulse * 2,
          sz + 10 + pulse * 2, 0xF07070);
     ring(layer, x - 3, y - 3, sz + 6, sz + 6, COL_ALERT);
     lv_draw_image_dsc_init(&d);
-    d.src = &app_tama_haz_img[id];
+    d.src = &app_meow_haz_img[id];
     if (sz != 28) {
         d.scale_x = sz * 256 / 28;
         d.scale_y = sz * 256 / 28;
@@ -1768,9 +1719,9 @@ static int run_lane_x(int bx, int lane)
     return bx + RUN_TRACK_X + lane * RUN_LANE_W;
 }
 
-static int run_obj_y(int by, const app_tama_run_obj_t *o, uint32_t now)
+static int run_obj_y(int by, const app_meow_run_obj_t *o, uint32_t now)
 {
-    int p = app_tama_run_prog(o, now);
+    int p = app_meow_run_prog(o, now);
     int span = RUN_KIT_Y - RUN_TOP;
 
     if (p < 0) p = 0;
@@ -1781,7 +1732,7 @@ static int run_obj_y(int by, const app_tama_run_obj_t *o, uint32_t now)
 static void page_run(lv_layer_t *layer, int bx, int by)
 {
     uint32_t now = now_ms() - s_run_t0;
-    int den = 6 * 10 / (10 + app_tama_run_spd_n(now));
+    int den = 6 * 10 / (10 + app_meow_run_spd_n(now));
     int off, i, y, lane;
     int kx, ky;
 
@@ -1790,40 +1741,40 @@ static void page_run(lv_layer_t *layer, int bx, int by)
     rrect(layer, bx, by, LCD_W, LCD_H, 0, COL_HILL);
     rrect(layer, bx + RUN_TRACK_X - 6, by + RUN_TOP - 8,
           RUN_TRACK_W + 12, LCD_H - RUN_TOP + 8, 10, COL_HILL2);
-    for (lane = 0; lane < APP_TAMA_RUN_LANES; lane++) {
+    for (lane = 0; lane < APP_MEOW_RUN_LANES; lane++) {
         rrect(layer, run_lane_x(bx, lane) + 4, by + RUN_TOP,
               RUN_LANE_W - 8, LCD_H - RUN_TOP - 8, 8, COL_CREAM);
     }
     for (y = by + RUN_TOP - off; y < by + LCD_H; y += 20) {
-        for (lane = 1; lane < APP_TAMA_RUN_LANES; lane++) {
+        for (lane = 1; lane < APP_MEOW_RUN_LANES; lane++) {
             rrect(layer, run_lane_x(bx, lane) - 2, y, 4, 10, 2, COL_WHITE);
         }
     }
     draw_score_pills(layer, bx, by + 8, s_run_best, (int)s_run.items);
     if (s_run.last_good >= 0 && now >= s_run.last_at &&
-        now - s_run.last_at < APP_TAMA_RUN_TIP_MS) {
+        now - s_run.last_at < APP_MEOW_RUN_TIP_MS) {
         snprintf(s_line, sizeof(s_line), "%s +1", good_name(s_run.last_good));
         rrect(layer, bx + 36, by + 30, 168, 18, 9, COL_GOLD);
         draw_txt(layer, bx + 40, by + 31, 160, 16, s_line, COL_INK,
                  LV_TEXT_ALIGN_CENTER);
     }
     for (i = 0; i < s_run.n; i++) {
-        const app_tama_run_obj_t *o = &s_run.o[i];
+        const app_meow_run_obj_t *o = &s_run.o[i];
         int ox, oy;
 
-        if (o->st != APP_TAMA_RUN_LIVE) continue;
+        if (o->st != APP_MEOW_RUN_LIVE) continue;
         ox = run_lane_x(bx, o->lane) + (RUN_LANE_W - RUN_OBJ_SZ) / 2;
         oy = run_obj_y(by, o, now);
-        if (o->kind == APP_TAMA_RUN_HAZ) {
+        if (o->kind == APP_MEOW_RUN_HAZ) {
             draw_haz(layer, ox, oy, RUN_OBJ_SZ, o->good);
         }
         else draw_good(layer, o->good, ox, oy);
     }
     kx = run_lane_x(bx, s_run.lane) + (RUN_LANE_W - RUN_KIT_SZ) / 2;
     ky = by + RUN_KIT_Y - (s_bob & 1) * 2;
-    draw_pet(layer, kx, ky, RUN_KIT_SZ, false);
+    draw_pet(layer, kx, ky, RUN_KIT_SZ);
     if (s_run.last_good >= 0 && now >= s_run.last_at &&
-        now - s_run.last_at < APP_TAMA_RUN_FX_MS) {
+        now - s_run.last_at < APP_MEOW_RUN_FX_MS) {
         int cx = run_lane_x(bx, s_run.last_lane) + RUN_LANE_W / 2;
         int cy = by + RUN_KIT_Y + RUN_KIT_SZ / 2;
         draw_run_pop(layer, cx, cy, s_run.last_good, now - s_run.last_at);
@@ -1832,16 +1783,16 @@ static void page_run(lv_layer_t *layer, int bx, int by)
 
 static void page_match(lv_layer_t *layer, int bx, int by)
 {
-    int board = MAT_CELL * APP_TAMA_MAT_W;
+    int board = MAT_CELL * APP_MEOW_MAT_W;
     int x0 = bx + (LCD_W - board) / 2;
     int y0 = by + MAT_TOP;
     int r, c;
-    int sec = app_tama_mat_sec(&s_mat);
+    int sec = app_meow_mat_sec(&s_mat);
     int tbar;
     uint32_t tc;
 
     draw_score_pills(layer, bx, by + 6, s_mat_best, s_mat.score);
-    tbar = sec * 100 / (APP_TAMA_MAT_TIME0 / 1000);
+    tbar = sec * 100 / (APP_MEOW_MAT_TIME0 / 1000);
     if (tbar > 100) tbar = 100;
     tc = (sec <= 5) ? COL_ALERT : COL_TEAL;
     rrect(layer, bx + 16, by + 30, 168, 16, 8, COL_SLOT);
@@ -1854,17 +1805,17 @@ static void page_match(lv_layer_t *layer, int bx, int by)
     draw_txt(layer, bx + 184, by + 30, 40, 16, s_line, tc, LV_TEXT_ALIGN_RIGHT);
 
     {
-        int vanish = (s_mat.anim == APP_TAMA_MAT_ST_VANISH);
-        int falling = (s_mat.anim == APP_TAMA_MAT_ST_FALL);
+        int vanish = (s_mat.anim == APP_MEOW_MAT_ST_VANISH);
+        int falling = (s_mat.anim == APP_MEOW_MAT_ST_FALL);
         int at = 0;
-        int dur = vanish ? APP_TAMA_MAT_VANISH_MS : APP_TAMA_MAT_FALL_MS;
+        int dur = vanish ? APP_MEOW_MAT_VANISH_MS : APP_MEOW_MAT_FALL_MS;
 
         if ((vanish || falling) && dur > 0) {
             at = (int)s_mat.anim_ms * 256 / dur;
             if (at > 256) at = 256;
         }
-        for (r = 0; r < APP_TAMA_MAT_H; r++) {
-            for (c = 0; c < APP_TAMA_MAT_W; c++) {
+        for (r = 0; r < APP_MEOW_MAT_H; r++) {
+            for (c = 0; c < APP_MEOW_MAT_W; c++) {
                 int x = x0 + c * MAT_CELL;
                 int y = y0 + r * MAT_CELL;
                 int id = (int)s_mat.cell[r][c];
@@ -1882,7 +1833,7 @@ static void page_match(lv_layer_t *layer, int bx, int by)
                     rrect(layer, x + 1, y + MAT_CELL - 4, MAT_CELL - 2, 3, 1,
                           COL_CORAL);
                 }
-                if (id < 0 || id >= APP_TAMA_MAT_KIND) continue;
+                if (id < 0 || id >= APP_MEOW_MAT_KIND) continue;
                 if (marked) {
                     iz = MAT_ICON * (256 - at) / 256;
                     if (iz < 2) continue;
@@ -1893,12 +1844,12 @@ static void page_match(lv_layer_t *layer, int bx, int by)
                     iy -= (int)s_mat.fall[r][c] * MAT_CELL * (256 - at) / 256;
                     if (iy + iz <= y0) continue;
                 }
-                draw_good_sz(layer, app_tama_mat_good(&s_mat, id), ix, iy, iz);
+                draw_good_sz(layer, app_meow_mat_good(&s_mat, id), ix, iy, iz);
             }
         }
     }
     draw_txt(layer, bx + 8, by + 274, 224, 36,
-             app_str(APP_STR_TAMA_MAT_HINT), COL_MUTE, LV_TEXT_ALIGN_CENTER);
+             app_str(APP_STR_MEOW_MAT_HINT), COL_MUTE, LV_TEXT_ALIGN_CENTER);
 }
 
 static void page_game(lv_layer_t *layer, int bx, int by)
@@ -1959,23 +1910,23 @@ static void page_game(lv_layer_t *layer, int bx, int by)
     draw_score_pills(layer, bx, by + 40, best, s_play_run);
 
     rrect(layer, bx + 16, by + 68, 208, 118, 16, COL_RING);
-    if (trip) title = app_str(APP_STR_TAMA_TRIP);
-    else if (rhy) title = app_str(APP_STR_TAMA_BEAT);
-    else if (kit) title = app_str(APP_STR_TAMA_KIT);
-    else if (mat) title = app_str(APP_STR_TAMA_MAT);
-    else title = app_str(APP_STR_TAMA_FISH);
+    if (trip) title = app_str(APP_STR_MEOW_TRIP);
+    else if (rhy) title = app_str(APP_STR_MEOW_BEAT);
+    else if (kit) title = app_str(APP_STR_MEOW_KIT);
+    else if (mat) title = app_str(APP_STR_MEOW_MAT);
+    else title = app_str(APP_STR_MEOW_FISH);
     draw_txt(layer, bx + 36, by + 74, 168, 18, title, COL_INK,
              LV_TEXT_ALIGN_CENTER);
     if (trip) {
         int hop = (s_bob * 4) % 36;
         int psz = 48;
         int bob = (s_bob & 1) * 2;
-        draw_pet(layer, bx + 40 + hop, by + 104 - bob, psz, false);
+        draw_pet(layer, bx + 40 + hop, by + 104 - bob, psz);
         rrect(layer, bx + 40, by + 160, 160, 6, 3, COL_SLOT);
         rrect(layer, bx + 40, by + 160, 20 + hop * 3, 6, 3, COL_TEAL);
-        if (s_pet.trip_st == APP_TAMA_TRIP_AWAY) {
+        if (s_pet.trip_st == APP_MEOW_TRIP_AWAY) {
             trip_time_txt(s_line, sizeof(s_line),
-                          app_tama_trip_sec_left(&s_pet, now_sec()));
+                          app_meow_trip_sec_left(&s_pet, now_sec()));
             draw_txt(layer, bx + 36, by + 170, 168, 16, s_line, COL_TEAL,
                      LV_TEXT_ALIGN_CENTER);
         }
@@ -1991,10 +1942,10 @@ static void page_game(lv_layer_t *layer, int bx, int by)
         rrect(layer, bx + 40, by + 98, 48, 70, 8, COL_CREAM);
         rrect(layer, bx + 96, by + 98, 48, 70, 8, COL_CREAM);
         rrect(layer, bx + 152, by + 98, 48, 70, 8, COL_CREAM);
-        draw_good(layer, APP_TAMA_G_ONIGIRI, bx + 106, by + 104 + hop / 2);
+        draw_good(layer, APP_MEOW_G_ONIGIRI, bx + 106, by + 104 + hop / 2);
         draw_haz(layer, bx + 158, by + 108, 28, 2);
         draw_haz(layer, bx + 52, by + 118, 28, 0);
-        draw_pet(layer, bx + 88, by + 128 - bob, 48, false);
+        draw_pet(layer, bx + 88, by + 128 - bob, 48);
     } else if (mat) {
         int gr, gc;
         for (gr = 0; gr < 3; gr++) {
@@ -2002,7 +1953,7 @@ static void page_game(lv_layer_t *layer, int bx, int by)
                 int gx = bx + 72 + gc * 32;
                 int gy = by + 98 + gr * 28;
                 rrect(layer, gx, gy, 28, 26, 6, COL_WHITE);
-                draw_good_sz(layer, (gr + gc) % APP_TAMA_MAT_KIND, gx + 2, gy - 1, 24);
+                draw_good_sz(layer, (gr + gc) % APP_MEOW_MAT_KIND, gx + 2, gy - 1, 24);
             }
         }
     } else {
@@ -2024,16 +1975,16 @@ static void page_game(lv_layer_t *layer, int bx, int by)
         oval(layer, bx + 86 + i * 14, by + 190, 8, 8, dc);
     }
 
-    if (trip && s_pet.trip_st == APP_TAMA_TRIP_AWAY) {
+    if (trip && s_pet.trip_st == APP_MEOW_TRIP_AWAY) {
         go = s_line;
         trip_time_txt(s_line, sizeof(s_line),
-                      app_tama_trip_sec_left(&s_pet, now_sec()));
-    } else if (trip && s_pet.trip_st == APP_TAMA_TRIP_BACK) {
-        go = app_str(APP_STR_TAMA_TRIP_BACK);
+                      app_meow_trip_sec_left(&s_pet, now_sec()));
+    } else if (trip && s_pet.trip_st == APP_MEOW_TRIP_BACK) {
+        go = app_str(APP_STR_MEOW_TRIP_BACK);
     } else if (trip) {
-        go = app_str(APP_STR_TAMA_TRIP_GO);
+        go = app_str(APP_STR_MEOW_TRIP_GO);
     } else {
-        go = app_str(APP_STR_TAMA_START);
+        go = app_str(APP_STR_MEOW_START);
     }
     draw_go_pill(layer, bx, by, go, focused());
 }
@@ -2044,9 +1995,9 @@ static void draw_souv_ico(lv_layer_t *layer, int id, int x, int y, int sz)
     lv_area_t a;
     int s = sz > 0 ? sz : 28;
 
-    if (id < 0 || id >= APP_TAMA_SOUV_N) return;
+    if (id < 0 || id >= APP_MEOW_SOUV_N) return;
     lv_draw_image_dsc_init(&d);
-    d.src = &app_tama_souv_img[id];
+    d.src = &app_meow_souv_img[id];
     if (s != 28) {
         d.scale_x = s * 256 / 28;
         d.scale_y = s * 256 / 28;
@@ -2070,11 +2021,22 @@ static void draw_ach_ico(lv_layer_t *layer, int id, int x, int y, int sz)
     int ico;
 
     if (id == 2) {
-        rrect(layer, x, y, s, s, s / 2, COL_BLUE);
-        rrect(layer, x + s * 8 / 28, y + s * 6 / 28, s * 12 / 28, s * 14 / 28,
-              2, COL_WHITE);
-        rrect(layer, x + s * 11 / 28, y + s * 18 / 28, s * 6 / 28, s * 4 / 28,
-              1, COL_WHITE);
+        lv_draw_image_dsc_t d;
+        lv_area_t a;
+
+        lv_draw_image_dsc_init(&d);
+        d.src = &app_meow_stage_img[APP_MEOW_ADULT];
+        if (s != 32) {
+            d.scale_x = s * 256 / 32;
+            d.scale_y = s * 256 / 32;
+            d.pivot.x = 0;
+            d.pivot.y = 0;
+        }
+        a.x1 = x;
+        a.y1 = y;
+        a.x2 = x + 31;
+        a.y2 = y + 31;
+        lv_draw_image(layer, &d, &a);
         return;
     }
     ico = s > 4 ? s - 4 : s;
@@ -2132,16 +2094,17 @@ static void page_dex(lv_layer_t *layer, int bx, int by)
             draw_txt(layer, x, y + (ch - 16) / 2, cw, 16, "?", COL_LOCKX,
                      LV_TEXT_ALIGN_CENTER);
         } else {
-            iy = y + (s_dex_cat == DEX_CAT_ITM ? 4 : (ch - ico) / 2);
+            int sz = (s_dex_cat == DEX_CAT_PET) ? 36 : ico;
+            iy = y + (s_dex_cat == DEX_CAT_ITM ? 4 : (ch - sz) / 2);
             if (s_dex_cat == DEX_CAT_PET) {
-                draw_pet_img(layer, x + (cw - ico) / 2, iy, ico, ico, idx,
-                             false);
+                draw_pet_img(layer, x + (cw - sz) / 2, iy, sz, sz, idx,
+                             false, false);
             } else if (s_dex_cat == DEX_CAT_ACH) {
-                draw_ach_ico(layer, idx, x + (cw - ico) / 2, iy, ico);
+                draw_ach_ico(layer, idx, x + (cw - sz) / 2, iy, sz);
             } else if (s_dex_cat == DEX_CAT_ITM) {
                 draw_good_sz(layer, idx, x + (cw - ico) / 2, iy, ico);
                 snprintf(s_line, sizeof(s_line), "x%u",
-                         (unsigned)app_tama_inv(&s_pet, idx));
+                         (unsigned)app_meow_inv(&s_pet, idx));
                 draw_txt(layer, x, y + ch - 15, cw, 14, s_line,
                          sel ? COL_INK : COL_MUTE, LV_TEXT_ALIGN_CENTER);
             } else {
@@ -2158,7 +2121,7 @@ static void page_dex(lv_layer_t *layer, int bx, int by)
 static void ibar_draw(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_DRAW_MAIN) return;
-    if (app_tama_set_open_now()) return;
+    if (app_meow_set_open_now()) return;
     lv_obj_t *obj = lv_event_get_target(e);
     lv_layer_t *layer = lv_event_get_layer(e);
     lv_area_t box;
@@ -2185,9 +2148,9 @@ static void page_name(lv_layer_t *layer, int bx, int by)
     int kw = 36, kh = 22, gap = 0;
     int x0 = bx + 12, y0 = by + 78;
 
-    draw_txt(layer, bx + 16, by + 10, 208, 18, app_str(APP_STR_TAMA_NAME),
+    draw_txt(layer, bx + 16, by + 10, 208, 18, app_str(APP_STR_MEOW_NAME),
              ui_ink(), LV_TEXT_ALIGN_CENTER);
-    draw_txt(layer, bx + 16, by + 28, 208, 16, app_str(APP_STR_TAMA_NAME_HINT),
+    draw_txt(layer, bx + 16, by + 28, 208, 16, app_str(APP_STR_MEOW_NAME_HINT),
              COL_MUTE, LV_TEXT_ALIGN_CENTER);
     rrect(layer, bx + 16, by + 46, 208, 24, 12, COL_WHITE);
     draw_txt(layer, bx + 24, by + 50, 192, 16, shown,
@@ -2206,7 +2169,7 @@ static void page_name(lv_layer_t *layer, int bx, int by)
 static void stage_draw(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_DRAW_MAIN) return;
-    if (app_tama_set_open_now()) return;
+    if (app_meow_set_open_now()) return;
     lv_obj_t *obj = lv_event_get_target(e);
     lv_layer_t *layer = lv_event_get_layer(e);
     lv_area_t box;
@@ -2234,7 +2197,7 @@ static void stage_draw(lv_event_t *e)
         }
     }
     draw_flash(layer, bx, by);
-    if (s_mode == MODE_CARE && !app_tama_set_open_now() &&
+    if (s_mode == MODE_CARE && !app_meow_set_open_now() &&
         (app_ota_prompt() || app_ota_state() == APP_OTA_APPLYING)) {
         const char *hint = app_ota_state() == APP_OTA_APPLYING
             ? app_str(APP_STR_OTA_HOLD) : app_str(APP_STR_OTA_READY);
@@ -2258,7 +2221,7 @@ static void alert_tm_cb(void *arg);
 
 static void arm_alert_recall(void)
 {
-    if (app_tama_alert_peak(&s_pet) < APP_TAMA_ALERT_HIT) {
+    if (app_meow_alert_peak(&s_pet) < APP_MEOW_ALERT_HIT) {
         if (s_alert_tm) esp_timer_stop(s_alert_tm);
         return;
     }
@@ -2266,7 +2229,7 @@ static void arm_alert_recall(void)
         const esp_timer_create_args_t a = {
             .callback = alert_tm_cb,
             .dispatch_method = ESP_TIMER_TASK,
-            .name = "tama_alert",
+            .name = "meow_alert",
         };
         if (esp_timer_create(&a, &s_alert_tm) != ESP_OK) return;
     }
@@ -2284,6 +2247,8 @@ static void sleep_now(void)
     if (s_asleep) return;
     if (s_dirty) save_nvs();
     s_asleep = true;
+    s_wifi_wait = false;
+    s_awake_ms = 0;
     ble_off();
     bsp_display_backlight(0);
     lv_refr_now(NULL);
@@ -2304,6 +2269,8 @@ static void wake_now(void)
     disarm_alert_recall();
     if (!s_asleep) return;
     s_asleep = false;
+    s_awake_ms = 0;
+    s_wifi_wait = true;
     bsp_pm_set_perf(true);
     bsp_pm_set_sleeping(false);
     bsp_button_sleep_gpio(false);
@@ -2339,31 +2306,31 @@ static void on_ble_evt(void *h, esp_event_base_t b, int32_t id, void *d)
 static void on_ble_activity(void)
 {
     if (!s_asleep) return;
-    esp_event_post(TAMA_EVENT, TAMA_BLE_WAKE, NULL, 0, 0);
+    esp_event_post(MEOW_EVENT, MEOW_BLE_WAKE, NULL, 0, 0);
 }
 
 static void alert_tm_cb(void *arg)
 {
     (void)arg;
-    esp_event_post(TAMA_EVENT, TAMA_ALERT_WAKE, NULL, 0, 0);
+    esp_event_post(MEOW_EVENT, MEOW_ALERT_WAKE, NULL, 0, 0);
 }
 
 static app_str_id_t stage_id(void)
 {
     switch (s_pet.stage) {
-    case APP_TAMA_EGG: return APP_STR_TAMA_EGG;
-    case APP_TAMA_BABY: return APP_STR_TAMA_BABY;
-    case APP_TAMA_CHILD: return APP_STR_TAMA_CHILD;
-    case APP_TAMA_TEEN: return APP_STR_TAMA_TEEN;
-    case APP_TAMA_ADULT: return APP_STR_TAMA_ADULT;
-    default: return APP_STR_TAMA_DEAD;
+    case APP_MEOW_EGG: return APP_STR_MEOW_EGG;
+    case APP_MEOW_BABY: return APP_STR_MEOW_BABY;
+    case APP_MEOW_CHILD: return APP_STR_MEOW_CHILD;
+    case APP_MEOW_TEEN: return APP_STR_MEOW_TEEN;
+    case APP_MEOW_ADULT: return APP_STR_MEOW_ADULT;
+    default: return APP_STR_MEOW_DEAD;
     }
 }
 
 static app_str_id_t species_id(void)
 {
     if (s_pet.species >= 1 && s_pet.species <= 10) {
-        return (app_str_id_t)(APP_STR_TAMA_SP1 + s_pet.species - 1);
+        return (app_str_id_t)(APP_STR_MEOW_SP1 + s_pet.species - 1);
     }
     return stage_id();
 }
@@ -2388,50 +2355,50 @@ static const char *status_text(void)
         return pair;
     }
     if (s_mode == MODE_RESULT) return "";
-    if (s_mode == MODE_PLAY) return app_str(APP_STR_TAMA_PLAY_HINT);
-    if (s_mode == MODE_RHYTHM) return app_str(APP_STR_TAMA_BEAT_HINT);
-    if (s_mode == MODE_RUN) return app_str(APP_STR_TAMA_KIT_HINT);
-    if (s_mode == MODE_MATCH) return app_str(APP_STR_TAMA_MAT_HINT);
-    if (s_mode == MODE_LINK) return app_str(APP_STR_TAMA_LOOK);
-    if (s_pet.trip_st == APP_TAMA_TRIP_BACK) return app_str(APP_STR_TAMA_TRIP_BACK);
-    if (s_pet.trip_st == APP_TAMA_TRIP_AWAY) {
+    if (s_mode == MODE_PLAY) return app_str(APP_STR_MEOW_PLAY_HINT);
+    if (s_mode == MODE_RHYTHM) return app_str(APP_STR_MEOW_BEAT_HINT);
+    if (s_mode == MODE_RUN) return app_str(APP_STR_MEOW_KIT_HINT);
+    if (s_mode == MODE_MATCH) return app_str(APP_STR_MEOW_MAT_HINT);
+    if (s_mode == MODE_LINK) return app_str(APP_STR_MEOW_LOOK);
+    if (s_pet.trip_st == APP_MEOW_TRIP_BACK) return app_str(APP_STR_MEOW_TRIP_BACK);
+    if (s_pet.trip_st == APP_MEOW_TRIP_AWAY) {
         trip_time_txt(s_line, sizeof(s_line),
-                      app_tama_trip_sec_left(&s_pet, now_sec()));
+                      app_meow_trip_sec_left(&s_pet, now_sec()));
         return s_line;
     }
-    int peak = app_tama_alert_peak(&s_pet);
-    if (peak >= APP_TAMA_ALERT_WARN) {
+    int peak = app_meow_alert_peak(&s_pet);
+    if (peak >= APP_MEOW_ALERT_WARN) {
         int d = 0, best = 0;
-        for (int i = 0; i < APP_TAMA_D_N; i++) {
-            int v = app_tama_danger_lv(&s_pet, i);
+        for (int i = 0; i < APP_MEOW_D_N; i++) {
+            int v = app_meow_danger_lv(&s_pet, i);
             if (v > best) {
                 best = v;
                 d = i;
             }
         }
         snprintf(s_line, sizeof(s_line), "%s %d%%",
-                 app_str((app_str_id_t)(APP_STR_TAMA_D_HUNGER + d)),
-                 best >= APP_TAMA_ALERT_CRIT ? APP_TAMA_ALERT_PCT_CRIT :
-                 (best >= APP_TAMA_ALERT_HIT ? APP_TAMA_ALERT_PCT_HIT :
-                  APP_TAMA_ALERT_PCT_WARN));
+                 app_str((app_str_id_t)(APP_STR_MEOW_D_HUNGER + d)),
+                 best >= APP_MEOW_ALERT_CRIT ? APP_MEOW_ALERT_PCT_CRIT :
+                 (best >= APP_MEOW_ALERT_HIT ? APP_MEOW_ALERT_PCT_HIT :
+                  APP_MEOW_ALERT_PCT_WARN));
         return s_line;
     }
-    if (s_pet.stage == APP_TAMA_DEAD) return app_str(APP_STR_TAMA_DEAD);
-    if (s_pet.stage == APP_TAMA_EGG) return app_str(APP_STR_TAMA_HATCH);
-    if (s_pet.sleeping) return app_str(APP_STR_TAMA_SLEEP);
+    if (s_pet.stage == APP_MEOW_DEAD) return app_str(APP_STR_MEOW_DEAD);
+    if (s_pet.stage == APP_MEOW_EGG) return app_str(APP_STR_MEOW_HATCH);
+    if (s_pet.sleeping) return app_str(APP_STR_MEOW_SLEEP);
     if (s_pet.sick) {
-        if (s_pet.ailment >= APP_TAMA_AI_WORM &&
-            s_pet.ailment <= APP_TAMA_AI_COUGH) {
-            return app_str((app_str_id_t)(APP_STR_TAMA_AI_WORM +
+        if (s_pet.ailment >= APP_MEOW_AI_WORM &&
+            s_pet.ailment <= APP_MEOW_AI_COUGH) {
+            return app_str((app_str_id_t)(APP_STR_MEOW_AI_WORM +
                                           s_pet.ailment - 1));
         }
-        return app_str(APP_STR_TAMA_SICK);
+        return app_str(APP_STR_MEOW_SICK);
     }
-    if (s_pet.poop) return app_str(APP_STR_TAMA_POOP);
-    if (s_pet.hunger == 0) return app_str(APP_STR_TAMA_HUNGRY);
-    if (s_pet.happy == 0) return app_str(APP_STR_TAMA_SAD);
-    if (s_pet.lights_off) return app_str(APP_STR_TAMA_DARK);
-    return app_str(APP_STR_TAMA_OK);
+    if (s_pet.poop) return app_str(APP_STR_MEOW_POOP);
+    if (s_pet.hunger == 0) return app_str(APP_STR_MEOW_HUNGRY);
+    if (s_pet.happy == 0) return app_str(APP_STR_MEOW_SAD);
+    if (s_pet.lights_off) return app_str(APP_STR_MEOW_DARK);
+    return app_str(APP_STR_MEOW_OK);
 }
 
 static void hide_obj(lv_obj_t *o, bool hid)
@@ -2496,7 +2463,7 @@ static void name_cancel(void)
 
 static void name_commit(void)
 {
-    app_tama_set_name(&s_pet, s_name_buf[0] ? s_name_buf : default_name());
+    app_meow_set_name(&s_pet, s_name_buf[0] ? s_name_buf : default_name());
     s_pet.named = 1;
     s_name_edit = false;
     kb_hold_stop();
@@ -2507,12 +2474,12 @@ static void name_commit(void)
 static void paint(void)
 {
     if (!s_lcd) return;
-    if (s_pet.stage == APP_TAMA_EGG && focused() && inner_n() == 0) {
+    if (s_pet.stage == APP_MEOW_EGG && focused() && inner_n() == 0) {
         close_menu();
     }
     int n = inner_n();
     if (focused() && n > 0 && s_sub >= n) s_sub = 0;
-    bool set = app_tama_set_open_now();
+    bool set = app_meow_set_open_now();
     bool play = minigame();
     hide_obj(s_ibar, set || play || s_name_edit);
     hide_obj(s_stage, set);
@@ -2534,19 +2501,19 @@ static void poll_alerts(void)
 {
     int d = 0, lv = 0;
     if (minigame()) return;
-    if (!app_tama_alert_poll(&s_pet, &d, &lv)) return;
+    if (!app_meow_alert_poll(&s_pet, &d, &lv)) return;
     s_dirty = true;
-    if (lv < APP_TAMA_ALERT_WARN || d < 0) return;
+    if (lv < APP_MEOW_ALERT_WARN || d < 0) return;
     snprintf(s_flash, sizeof(s_flash), "%s %d%%",
-             app_str((app_str_id_t)(APP_STR_TAMA_D_HUNGER + d)),
-             lv >= APP_TAMA_ALERT_CRIT ? APP_TAMA_ALERT_PCT_CRIT :
-             (lv >= APP_TAMA_ALERT_HIT ? APP_TAMA_ALERT_PCT_HIT :
-              APP_TAMA_ALERT_PCT_WARN));
+             app_str((app_str_id_t)(APP_STR_MEOW_D_HUNGER + d)),
+             lv >= APP_MEOW_ALERT_CRIT ? APP_MEOW_ALERT_PCT_CRIT :
+             (lv >= APP_MEOW_ALERT_HIT ? APP_MEOW_ALERT_PCT_HIT :
+              APP_MEOW_ALERT_PCT_WARN));
     s_flash2[0] = 0;
     s_flash_left = 8;
     int tone = APP_TONE_BEEP;
-    if (lv >= APP_TAMA_ALERT_CRIT) tone = APP_TONE_TRIPLE;
-    else if (lv >= APP_TAMA_ALERT_HIT) tone = APP_TONE_DOUBLE;
+    if (lv >= APP_MEOW_ALERT_CRIT) tone = APP_TONE_TRIPLE;
+    else if (lv >= APP_MEOW_ALERT_HIT) tone = APP_TONE_DOUBLE;
     app_tone_play(tone);
 }
 
@@ -2554,21 +2521,21 @@ static void call_now(void)
 {
     int d = 0, best = 0;
 
-    for (int i = 0; i < APP_TAMA_D_N; i++) {
-        int v = app_tama_danger_lv(&s_pet, i);
+    for (int i = 0; i < APP_MEOW_D_N; i++) {
+        int v = app_meow_danger_lv(&s_pet, i);
         if (v > best) {
             best = v;
             d = i;
         }
     }
-    if (best < APP_TAMA_ALERT_HIT) return;
+    if (best < APP_MEOW_ALERT_HIT) return;
     snprintf(s_flash, sizeof(s_flash), "%s %d%%",
-             app_str((app_str_id_t)(APP_STR_TAMA_D_HUNGER + d)),
-             best >= APP_TAMA_ALERT_CRIT ? APP_TAMA_ALERT_PCT_CRIT :
-             APP_TAMA_ALERT_PCT_HIT);
+             app_str((app_str_id_t)(APP_STR_MEOW_D_HUNGER + d)),
+             best >= APP_MEOW_ALERT_CRIT ? APP_MEOW_ALERT_PCT_CRIT :
+             APP_MEOW_ALERT_PCT_HIT);
     s_flash2[0] = 0;
     s_flash_left = 8;
-    app_tone_play(best >= APP_TAMA_ALERT_CRIT ? APP_TONE_TRIPLE : APP_TONE_DOUBLE);
+    app_tone_play(best >= APP_MEOW_ALERT_CRIT ? APP_TONE_TRIPLE : APP_TONE_DOUBLE);
     paint();
 }
 
@@ -2605,6 +2572,33 @@ static void flash(const char *s, int tone)
     flash_for(s, tone, 2);
 }
 
+static const char *cant_txt(void)
+{
+    if (s_pet.trip_st == APP_MEOW_TRIP_AWAY) {
+        trip_time_txt(s_line, sizeof(s_line),
+                      app_meow_trip_sec_left(&s_pet, now_sec()));
+        return s_line;
+    }
+    if (s_pet.stage == APP_MEOW_EGG) return app_str(APP_STR_MEOW_HATCH);
+    if (s_pet.stage == APP_MEOW_DEAD) return app_str(APP_STR_MEOW_DEAD);
+    if (s_pet.sleeping) return app_str(APP_STR_MEOW_SLEEP_NOW);
+    return app_str(APP_STR_MEOW_REFUSE);
+}
+
+static const char *act_fail_txt(app_meow_res_t r)
+{
+    if (r == APP_MEOW_SLEEP) return app_str(APP_STR_MEOW_SLEEP_NOW);
+    if (r == APP_MEOW_EGG_WAIT) return app_str(APP_STR_MEOW_HATCH);
+    if (r == APP_MEOW_GONE) return app_str(APP_STR_MEOW_DEAD);
+    if (r == APP_MEOW_FULL) return app_str(APP_STR_MEOW_FULL);
+    if (r == APP_MEOW_EMPTY) return app_str(APP_STR_MEOW_EMPTY);
+    if (r == APP_MEOW_NONE) {
+        if (s_pet.trip_st == APP_MEOW_TRIP_AWAY) return cant_txt();
+        return app_str(APP_STR_MEOW_NONE);
+    }
+    return app_str(APP_STR_MEOW_REFUSE);
+}
+
 static void flash_lines(const char *a, const char *b, int tone, int ticks)
 {
     s_flash2[0] = 0;
@@ -2633,22 +2627,22 @@ static void flash_use_ok(int good, int nuse, uint8_t hung, uint8_t hap,
     int n = 0;
 
     if (nuse <= 0) nuse = 1;
-    snprintf(s_flash, sizeof(s_flash), app_str(APP_STR_TAMA_USED),
+    snprintf(s_flash, sizeof(s_flash), app_str(APP_STR_MEOW_USED),
              good_name(good), nuse);
     s_flash2[0] = 0;
     n = append_delta(s_flash2, (int)sizeof(s_flash2), n,
-                     app_str(APP_STR_TAMA_STAT_FOOD),
+                     app_str(APP_STR_MEOW_STAT_FOOD),
                      (int)s_pet.hunger - (int)hung);
     n = append_delta(s_flash2, (int)sizeof(s_flash2), n,
-                     app_str(APP_STR_TAMA_STAT_CLEAN),
-                     app_tama_clean(&s_pet) - clean0);
+                     app_str(APP_STR_MEOW_STAT_CLEAN),
+                     app_meow_clean(&s_pet) - clean0);
     n = append_delta(s_flash2, (int)sizeof(s_flash2), n,
-                     app_str(APP_STR_TAMA_STAT_HEALTH),
+                     app_str(APP_STR_MEOW_STAT_HEALTH),
                      (int)s_pet.health - (int)hp);
     append_delta(s_flash2, (int)sizeof(s_flash2), n,
-                 app_str(APP_STR_TAMA_D_HAPPY),
+                 app_str(APP_STR_MEOW_D_HAPPY),
                  (int)s_pet.happy - (int)hap);
-    flash_for(s_flash, APP_TONE_CHIME, 8);
+    flash_for(s_flash, APP_TONE_MEOW, 8);
 }
 
 static void flash_loot(int it, const char *prefix, int tone)
@@ -2660,7 +2654,7 @@ static void flash_loot(int it, const char *prefix, int tone)
     if (prefix && prefix[0]) {
         snprintf(s_line, sizeof(s_line), "%s  %s", prefix, good_name(it));
     } else {
-        snprintf(s_line, sizeof(s_line), "%s %s", app_str(APP_STR_TAMA_GOT),
+        snprintf(s_line, sizeof(s_line), "%s %s", app_str(APP_STR_MEOW_GOT),
                  good_name(it));
     }
     flash(s_line, tone);
@@ -2668,12 +2662,12 @@ static void flash_loot(int it, const char *prefix, int tone)
 
 static int play_pad_w(void)
 {
-    return PAD_W * (10 - app_tama_play_tier(s_play_run)) / 10;
+    return PAD_W * (10 - app_meow_play_tier(s_play_run)) / 10;
 }
 
 static int play_fish_v(void)
 {
-    return FISH_V0 * (10 + app_tama_play_tier(s_play_run)) / 10;
+    return FISH_V0 * (10 + app_meow_play_tier(s_play_run)) / 10;
 }
 
 static void play_clamp_fish(void)
@@ -2703,7 +2697,7 @@ static void play_clamp_pad(void)
 static void play_spawn(void)
 {
     int room = LCD_W - PLAY_MARG * 2 - FISH_SZ;
-    int pct = app_tama_play_swim_pct(s_play_run);
+    int pct = app_meow_play_swim_pct(s_play_run);
 
     if (room < 1) room = 1;
     s_pet.rng = (uint8_t)(s_pet.rng * 37u + 17u);
@@ -2717,7 +2711,7 @@ static void play_spawn(void)
             s_fish_vx = (s_pet.rng & 1u) ? FISH_SWIM : -FISH_SWIM;
         }
     }
-    pct = app_tama_play_koi_pct(s_play_run);
+    pct = app_meow_play_koi_pct(s_play_run);
     if (pct > 0) {
         s_pet.rng = (uint8_t)(s_pet.rng * 37u + 17u);
         if ((int)(s_pet.rng % 100u) < pct) s_fish_koi = true;
@@ -2750,7 +2744,7 @@ static void show_result(int kind, int score)
     set_tick_ms(250);
     s_over_kind = (uint8_t)kind;
     s_over_score = score;
-    app_tama_last_prizes(s_over_got);
+    app_meow_last_prizes(s_over_got);
     if (kind != 4) s_over_souv = -1;
     s_play_run = 0;
     s_mode = MODE_RESULT;
@@ -2766,10 +2760,10 @@ static void show_result(int kind, int score)
 
 static void trip_settle(void)
 {
-    if (s_pet.trip_st != APP_TAMA_TRIP_BACK) return;
+    if (s_pet.trip_st != APP_MEOW_TRIP_BACK) return;
     if (minigame() || s_mode == MODE_LINK) return;
-    app_tama_trip_claim(&s_pet);
-    s_over_souv = app_tama_last_souv();
+    app_meow_trip_claim(&s_pet);
+    s_over_souv = app_meow_last_souv();
     s_dirty = true;
     save_nvs();
     show_result(4, 0);
@@ -2779,9 +2773,9 @@ static void mini_finish(int score, int missed)
 {
     uint8_t kind = (s_mode == MODE_RHYTHM) ? 1 : 0;
 
-    if (score > 0) app_tama_play_apply(&s_pet, 1);
-    else if (missed) app_tama_play_apply(&s_pet, 0);
-    app_tama_play_prize(&s_pet, score);
+    if (score > 0) app_meow_play_apply(&s_pet, 1);
+    else if (missed) app_meow_play_apply(&s_pet, 0);
+    app_meow_play_prize(&s_pet, score);
     s_dirty = true;
     save_nvs();
     show_result(kind, score);
@@ -2791,7 +2785,7 @@ static void result_exit(void)
 {
     s_mode = MODE_CARE;
     s_sel = TAB_GAME;
-    s_menu = -1;
+    s_menu = TAB_GAME;
     s_sub = s_over_kind;
     paint();
     trip_settle();
@@ -2806,7 +2800,7 @@ static void play_finish(int missed)
 static void rhy_begin(void)
 {
     s_pet.rng = (uint8_t)(s_pet.rng * 37u + 17u);
-    app_tama_rhy_make(&s_rhy, s_pet.rng);
+    app_meow_rhy_make(&s_rhy, s_pet.rng);
     s_rhy_t0 = (uint32_t)(esp_timer_get_time() / 1000);
     s_rhy_held = 0;
     s_play_run = 0;
@@ -2836,7 +2830,7 @@ static void rhy_quit(void)
 static void run_begin(void)
 {
     s_pet.rng = (uint8_t)(s_pet.rng * 37u + 17u);
-    app_tama_run_make(&s_run, s_pet.rng);
+    app_meow_run_make(&s_run, s_pet.rng);
     s_run_t0 = now_ms();
     s_play_run = 0;
     s_over_kind = 2;
@@ -2852,12 +2846,12 @@ static void run_begin(void)
 
 static void run_finish(int crashed)
 {
-    int n = app_tama_run_got_n(&s_run);
+    int n = app_meow_run_got_n(&s_run);
 
     if (n > s_run_best) s_run_best = n;
-    if (n > 0) app_tama_play_apply(&s_pet, 1);
-    else if (crashed) app_tama_play_apply(&s_pet, 0);
-    app_tama_run_prize(&s_pet, s_run.got);
+    if (n > 0) app_meow_play_apply(&s_pet, 1);
+    else if (crashed) app_meow_play_apply(&s_pet, 0);
+    app_meow_run_prize(&s_pet, s_run.got);
     s_dirty = true;
     save_nvs();
     show_result(2, n);
@@ -2871,11 +2865,11 @@ static void run_tick(void)
     if (s_mode != MODE_RUN) return;
     now = now_ms() - s_run_t0;
     /* 16 种商品等概率，不走玩耍掉落权重。 */
-    ev = app_tama_run_step(&s_run, now, -1);
+    ev = app_meow_run_step(&s_run, now, -1);
     s_play_run = (int)s_run.items;
     if (s_play_run > s_run_best) s_run_best = s_play_run;
-    if (ev == APP_TAMA_RUN_EV_ITEM) app_tone_play(APP_TONE_CHIME);
-    if (ev == APP_TAMA_RUN_EV_HAZ) {
+    if (ev == APP_MEOW_RUN_EV_ITEM) app_tone_play(APP_TONE_CHIME);
+    if (ev == APP_MEOW_RUN_EV_HAZ) {
         app_tone_play(APP_TONE_BEEP);
         run_finish(1);
     }
@@ -2884,7 +2878,7 @@ static void run_tick(void)
 static void mat_begin(void)
 {
     s_pet.rng = (uint8_t)(s_pet.rng * 37u + 17u);
-    app_tama_mat_make(&s_mat, s_pet.rng);
+    app_meow_mat_make(&s_mat, s_pet.rng);
     s_play_run = 0;
     s_over_kind = 3;
     s_flash[0] = 0;
@@ -2903,9 +2897,9 @@ static void mat_finish(int timed_out)
     int score = s_mat.score;
 
     if (score > s_mat_best) s_mat_best = score;
-    if (score > 0) app_tama_play_apply(&s_pet, 1);
-    else if (timed_out) app_tama_play_apply(&s_pet, 0);
-    app_tama_play_prize(&s_pet, score);
+    if (score > 0) app_meow_play_apply(&s_pet, 1);
+    else if (timed_out) app_meow_play_apply(&s_pet, 0);
+    app_meow_play_prize(&s_pet, score);
     s_dirty = true;
     save_nvs();
     show_result(3, score);
@@ -2924,10 +2918,10 @@ static void mat_tick(void)
     if (dt > 200) dt = 200;
     s_play_run = s_mat.score;
     if (s_play_run > s_mat_best) s_mat_best = s_play_run;
-    ev = app_tama_mat_tick(&s_mat, dt);
-    if (ev == APP_TAMA_MAT_EV_OVER) {
+    ev = app_meow_mat_tick(&s_mat, dt);
+    if (ev == APP_MEOW_MAT_EV_OVER) {
         mat_finish(1);
-    } else if (ev == APP_TAMA_MAT_EV_CLEAR || ev == APP_TAMA_MAT_EV_NEXT) {
+    } else if (ev == APP_MEOW_MAT_EV_CLEAR || ev == APP_MEOW_MAT_EV_NEXT) {
         app_tone_play(APP_TONE_CHIME);
     }
 }
@@ -2939,12 +2933,12 @@ static void rhy_tick(void)
 
     if (s_mode != MODE_RHYTHM) return;
     now = rhy_now();
-    app_tama_rhy_tick(&s_rhy, now);
-    p = app_tama_rhy_poll_cue(&s_rhy, now);
-    if (p >= 0) app_tone_note(app_tama_rhy_hz(p), 55);
+    app_meow_rhy_tick(&s_rhy, now);
+    p = app_meow_rhy_poll_cue(&s_rhy, now);
+    if (p >= 0) app_tone_note(app_meow_rhy_hz(p), 55);
     s_play_run = s_rhy.score;
     if (s_play_run > s_rhy_best) s_rhy_best = s_play_run;
-    if (app_tama_rhy_done(&s_rhy, now)) {
+    if (app_meow_rhy_done(&s_rhy, now)) {
         rhy_finish(s_rhy.hits == 0);
     }
 }
@@ -3002,12 +2996,12 @@ static void drain_ancs(void)
 
 static void __attribute__((unused)) begin_link(int kind)
 {
-    if (!app_tama_can_link(&s_pet)) {
-        flash(app_str(APP_STR_TAMA_REFUSE), APP_TONE_BEEP);
+    if (!app_meow_can_link(&s_pet)) {
+        flash(cant_txt(), APP_TONE_BEEP);
         return;
     }
-    if (!app_tama_link_seek(&s_pet, kind)) {
-        flash(app_str(APP_STR_TAMA_REFUSE), APP_TONE_BEEP);
+    if (!app_meow_link_seek(&s_pet, kind)) {
+        flash(app_str(APP_STR_MEOW_REFUSE), APP_TONE_BEEP);
         return;
     }
     s_mode = MODE_LINK;
@@ -3022,45 +3016,45 @@ static void finish_link(int r)
     s_mode = MODE_CARE;
     close_menu();
     ble_off();
-    if (r == APP_TAMA_LINK_VISIT) {
-        int it = app_tama_loot(&s_pet, APP_TAMA_LOOT_VISIT);
+    if (r == APP_MEOW_LINK_VISIT) {
+        int it = app_meow_loot(&s_pet, APP_MEOW_LOOT_VISIT);
         s_dirty = true;
         save_nvs();
-        flash_loot(it, app_str(APP_STR_TAMA_GUEST), APP_TONE_CHIME);
+        flash_loot(it, app_str(APP_STR_MEOW_GUEST), APP_TONE_CHIME);
         return;
     }
-    if (r == APP_TAMA_LINK_WIN) {
-        int it = app_tama_loot(&s_pet, APP_TAMA_LOOT_WIN);
+    if (r == APP_MEOW_LINK_WIN) {
+        int it = app_meow_loot(&s_pet, APP_MEOW_LOOT_WIN);
         s_dirty = true;
         save_nvs();
-        flash_loot(it, app_str(APP_STR_TAMA_WIN), APP_TONE_CHIME);
+        flash_loot(it, app_str(APP_STR_MEOW_WIN), APP_TONE_CHIME);
         return;
     }
-    if (r == APP_TAMA_LINK_LOSE) {
+    if (r == APP_MEOW_LINK_LOSE) {
         s_dirty = true;
         save_nvs();
-        flash(app_str(APP_STR_TAMA_LOSE), APP_TONE_BEEP);
+        flash(app_str(APP_STR_MEOW_LOSE), APP_TONE_BEEP);
         return;
     }
-    if (r == APP_TAMA_LINK_DRAW) {
-        int it = app_tama_loot(&s_pet, APP_TAMA_LOOT_DRAW);
+    if (r == APP_MEOW_LINK_DRAW) {
+        int it = app_meow_loot(&s_pet, APP_MEOW_LOOT_DRAW);
         s_dirty = true;
         save_nvs();
-        flash_loot(it, app_str(APP_STR_TAMA_DRAW), APP_TONE_BEEP);
+        flash_loot(it, app_str(APP_STR_MEOW_DRAW), APP_TONE_BEEP);
         return;
     }
-    if (r == APP_TAMA_LINK_NONE) {
-        flash(app_str(APP_STR_TAMA_NO_PEER), APP_TONE_BEEP);
+    if (r == APP_MEOW_LINK_NONE) {
+        flash(app_str(APP_STR_MEOW_NO_PEER), APP_TONE_BEEP);
         return;
     }
-    flash(app_str(APP_STR_TAMA_REFUSE), APP_TONE_BEEP);
+    flash(app_str(APP_STR_MEOW_REFUSE), APP_TONE_BEEP);
 }
 
-static void run_care(app_tama_act_t act)
+static void run_care(app_meow_act_t act)
 {
-    if (act == APP_TAMA_PLAY) {
-        if (!app_tama_can(&s_pet, APP_TAMA_PLAY)) {
-            flash(app_str(APP_STR_TAMA_REFUSE), APP_TONE_BEEP);
+    if (act == APP_MEOW_PLAY) {
+        if (!app_meow_can(&s_pet, APP_MEOW_PLAY)) {
+            flash(cant_txt(), APP_TONE_BEEP);
             return;
         }
         close_menu();
@@ -3069,35 +3063,26 @@ static void run_care(app_tama_act_t act)
         paint();
         return;
     }
-    int gid = app_tama_pick(&s_pet, act);
+    int gid = app_meow_pick(&s_pet, act);
     uint8_t hung = s_pet.hunger;
     uint8_t hap = s_pet.happy;
     uint8_t hp = s_pet.health;
-    int clean0 = app_tama_clean(&s_pet);
-    app_tama_res_t r = app_tama_act(&s_pet, act);
+    int clean0 = app_meow_clean(&s_pet);
+    app_meow_res_t r = app_meow_act(&s_pet, act);
     const char *msg = NULL;
     int tone = APP_TONE_BEEP;
-    if (r == APP_TAMA_SLEEP || r == APP_TAMA_EGG_WAIT || r == APP_TAMA_GONE) {
-        msg = app_str(APP_STR_TAMA_REFUSE);
-    } else if (r == APP_TAMA_FULL) {
-        msg = app_str(APP_STR_TAMA_FULL);
-    } else if (r == APP_TAMA_EMPTY) {
-        msg = app_str(APP_STR_TAMA_EMPTY);
-    } else if (r == APP_TAMA_NONE) {
-        msg = app_str(APP_STR_TAMA_NONE);
-        tone = -1;
-    } else if (r == APP_TAMA_OK) {
+    if (r == APP_MEOW_OK) {
         s_dirty = true;
-        if (act == APP_TAMA_WALK) {
-            int it = app_tama_loot(&s_pet, APP_TAMA_LOOT_WALK);
+        if (act == APP_MEOW_WALK) {
+            int it = app_meow_loot(&s_pet, APP_MEOW_LOOT_WALK);
             save_nvs();
             flash_loot(it, NULL, APP_TONE_CHIME);
             return;
         }
-        if (act == APP_TAMA_LIGHT) {
+        if (act == APP_MEOW_LIGHT) {
             save_nvs();
-            flash(app_str(s_pet.lights_off ? APP_STR_TAMA_DARK :
-                          APP_STR_TAMA_LIT), APP_TONE_CHIME);
+            flash(app_str(s_pet.lights_off ? APP_STR_MEOW_DARK :
+                          APP_STR_MEOW_LIT), APP_TONE_CHIME);
             return;
         }
         save_nvs();
@@ -3106,6 +3091,11 @@ static void run_care(app_tama_act_t act)
             return;
         }
         tone = APP_TONE_CHIME;
+    } else {
+        msg = act_fail_txt(r);
+        if (r == APP_MEOW_NONE && s_pet.trip_st != APP_MEOW_TRIP_AWAY) {
+            tone = -1;
+        }
     }
     flash(msg, tone);
 }
@@ -3139,7 +3129,7 @@ static void do_act(void)
         return;
     }
     if (!focused()) {
-        if (s_sel == TAB_HOME && s_pet.stage == APP_TAMA_EGG) {
+        if (s_sel == TAB_HOME && s_pet.stage == APP_MEOW_EGG) {
             s_sel = TAB_SET;
             s_menu = TAB_SET;
             s_sub = 0;
@@ -3157,8 +3147,8 @@ static void do_act(void)
         return;
     }
     if (s_sel == TAB_HOME) {
-        if (s_pet.stage == APP_TAMA_DEAD) {
-            app_tama_reset(&s_pet, now_sec(), (uint8_t)(s_pet.rng + 1));
+        if (s_pet.stage == APP_MEOW_DEAD) {
+            app_meow_reset(&s_pet, now_sec(), (uint8_t)(s_pet.rng + 1));
             s_sel = 0;
             close_menu();
             s_dirty = true;
@@ -3166,13 +3156,13 @@ static void do_act(void)
             paint();
             return;
         }
-        if (s_sub >= 0 && s_sub < HOME_N) run_care((app_tama_act_t)HOME_ACT[s_sub]);
+        if (s_sub >= 0 && s_sub < HOME_N) run_care((app_meow_act_t)HOME_ACT[s_sub]);
         return;
     }
     if (s_sel == TAB_SET) {
-        static const tama_set_id_t MAP[] = {
-            TAMA_SET_WIFI, TAMA_SET_BLE, TAMA_SET_CLOCK,
-            TAMA_SET_SCREEN, TAMA_SET_SOUND, TAMA_SET_OTA
+        static const meow_set_id_t MAP[] = {
+            MEOW_SET_WIFI, MEOW_SET_BLE, MEOW_SET_CLOCK, MEOW_SET_BED,
+            MEOW_SET_SCREEN, MEOW_SET_SOUND, MEOW_SET_OTA
         };
         if (s_sub == 0) {
             cycle_lang();
@@ -3183,15 +3173,15 @@ static void do_act(void)
             paint();
             return;
         }
-        if (s_sub >= 2 && s_sub <= 7) {
-            app_tama_set_open(s_lcd, MAP[s_sub - 2]);
+        if (s_sub >= 2 && s_sub <= 8) {
+            app_meow_set_open(s_lcd, MAP[s_sub - 2]);
             paint();
             return;
         }
         if (s_sub == SET_WIPE) {
             uint8_t rng = (uint8_t)(s_pet.rng + 1);
 
-            app_tama_wipe(&s_pet, now_sec(), rng);
+            app_meow_wipe(&s_pet, now_sec(), rng);
             s_play_best = 0;
             s_play_run = 0;
             s_rhy_best = 0;
@@ -3203,17 +3193,17 @@ static void do_act(void)
             close_menu();
             s_dirty = true;
             save_nvs();
-            flash(app_str(APP_STR_TAMA_DEAD), APP_TONE_BEEP);
+            flash(app_str(APP_STR_MEOW_DEAD), APP_TONE_BEEP);
             return;
         }
         paint();
         return;
     }
     if (s_sel == TAB_SHOP) {
-        uint8_t ids[APP_TAMA_G_N];
-        int n = app_tama_owned_list(&s_pet, s_bag_cat, ids, APP_TAMA_G_N);
+        uint8_t ids[APP_MEOW_G_N];
+        int n = app_meow_owned_list(&s_pet, s_bag_cat, ids, APP_MEOW_G_N);
         if (n <= 0) {
-            flash(app_str(APP_STR_TAMA_BAG_EMPTY), APP_TONE_BEEP);
+            flash(app_str(APP_STR_MEOW_BAG_EMPTY), APP_TONE_BEEP);
             return;
         }
         if (s_sub < 0 || s_sub >= n) return;
@@ -3221,30 +3211,21 @@ static void do_act(void)
         uint8_t hung = s_pet.hunger;
         uint8_t hap = s_pet.happy;
         uint8_t hp = s_pet.health;
-        int clean0 = app_tama_clean(&s_pet);
-        app_tama_res_t r = app_tama_use(&s_pet, id);
+        int clean0 = app_meow_clean(&s_pet);
+        app_meow_res_t r = app_meow_use(&s_pet, id);
         const char *msg = NULL;
         int tone = APP_TONE_BEEP;
-        if (r == APP_TAMA_SLEEP || r == APP_TAMA_EGG_WAIT || r == APP_TAMA_GONE) {
-            msg = app_str(APP_STR_TAMA_REFUSE);
-        } else if (r == APP_TAMA_FULL) {
-            msg = app_str(APP_STR_TAMA_FULL);
-        } else if (r == APP_TAMA_EMPTY) {
-            msg = app_str(APP_STR_TAMA_EMPTY);
-        } else if (r == APP_TAMA_NONE) {
-            msg = app_str(APP_STR_TAMA_NONE);
-            tone = -1;
-        } else if (r == APP_TAMA_OK) {
+        if (r == APP_MEOW_OK) {
             s_dirty = true;
             save_nvs();
-            if (app_tama_good_use(id) == APP_TAMA_USE_DIG) {
-                int got = app_tama_last_got();
+            if (app_meow_good_use(id) == APP_MEOW_USE_DIG) {
+                int got = app_meow_last_got();
                 flash_use_ok(id, 1, hung, hap, hp, clean0);
                 if (got >= 0) {
                     int used = (int)strlen(s_flash2);
                     snprintf(s_flash2 + used, sizeof(s_flash2) - (size_t)used,
                              "%s%s %s", used ? " " : "",
-                             app_str(APP_STR_TAMA_GOT), good_name(got));
+                             app_str(APP_STR_MEOW_GOT), good_name(got));
                     paint();
                 }
                 return;
@@ -3252,41 +3233,45 @@ static void do_act(void)
             flash_use_ok(id, 1, hung, hap, hp, clean0);
             return;
         }
+        msg = act_fail_txt(r);
+        if (r == APP_MEOW_NONE && s_pet.trip_st != APP_MEOW_TRIP_AWAY) {
+            tone = -1;
+        }
         flash(msg, tone);
         return;
     }
     if (s_sel == TAB_GAME) {
         if (s_trip_edit) {
-            uint8_t ids[APP_TAMA_G_N];
-            int n = app_tama_owned_list(&s_pet, APP_TAMA_CAT_FOOD, ids,
-                                       APP_TAMA_G_N);
+            uint8_t ids[APP_MEOW_G_N];
+            int n = app_meow_owned_list(&s_pet, APP_MEOW_CAT_FOOD, ids,
+                                       APP_MEOW_G_N);
             if (n <= 0) {
-                flash(app_str(APP_STR_TAMA_BAG_EMPTY), APP_TONE_BEEP);
+                flash(app_str(APP_STR_MEOW_BAG_EMPTY), APP_TONE_BEEP);
                 return;
             }
             if (s_sub == n) {
-                app_tama_res_t r;
+                app_meow_res_t r;
                 if (trip_take_n() <= 0) {
-                    flash(app_str(APP_STR_TAMA_EMPTY), APP_TONE_BEEP);
+                    flash(app_str(APP_STR_MEOW_EMPTY), APP_TONE_BEEP);
                     return;
                 }
-                r = app_tama_trip_start(&s_pet, s_trip_take);
-                if (r == APP_TAMA_OK) {
+                r = app_meow_trip_start(&s_pet, s_trip_take);
+                if (r == APP_MEOW_OK) {
                     s_trip_edit = false;
                     s_sub = 4;
                     s_dirty = true;
                     save_nvs();
-                    flash(app_str(APP_STR_TAMA_TRIP), APP_TONE_CHIME);
+                    flash(app_str(APP_STR_MEOW_TRIP), APP_TONE_CHIME);
                     return;
                 }
-                flash(app_str(APP_STR_TAMA_REFUSE), APP_TONE_BEEP);
+                flash(act_fail_txt(r), APP_TONE_BEEP);
                 return;
             }
             if (s_sub >= 0 && s_sub < n) {
                 int id = (int)ids[s_sub];
-                int have = (int)app_tama_inv(&s_pet, id);
+                int have = (int)app_meow_inv(&s_pet, id);
                 if (s_trip_take[id] < have &&
-                    trip_take_n() < APP_TAMA_TRIP_PACK_MAX) {
+                    trip_take_n() < APP_MEOW_TRIP_PACK_MAX) {
                     s_trip_take[id]++;
                 }
                 paint();
@@ -3294,49 +3279,52 @@ static void do_act(void)
             return;
         }
         if (s_sub == 0) {
-            run_care(APP_TAMA_PLAY);
+            run_care(APP_MEOW_PLAY);
             s_sel = TAB_GAME;
             return;
         }
         if (s_sub == 1) {
-            if (!app_tama_can(&s_pet, APP_TAMA_PLAY)) {
-                flash(app_str(APP_STR_TAMA_REFUSE), APP_TONE_BEEP);
+            if (!app_meow_can(&s_pet, APP_MEOW_PLAY)) {
+                flash(cant_txt(), APP_TONE_BEEP);
                 return;
             }
             rhy_begin();
             return;
         }
         if (s_sub == 2) {
-            if (!app_tama_can(&s_pet, APP_TAMA_PLAY)) {
-                flash(app_str(APP_STR_TAMA_REFUSE), APP_TONE_BEEP);
+            if (!app_meow_can(&s_pet, APP_MEOW_PLAY)) {
+                flash(cant_txt(), APP_TONE_BEEP);
                 return;
             }
             run_begin();
             return;
         }
         if (s_sub == 3) {
-            if (!app_tama_can(&s_pet, APP_TAMA_PLAY)) {
-                flash(app_str(APP_STR_TAMA_REFUSE), APP_TONE_BEEP);
+            if (!app_meow_can(&s_pet, APP_MEOW_PLAY)) {
+                flash(cant_txt(), APP_TONE_BEEP);
                 return;
             }
             mat_begin();
             return;
         }
         if (s_sub == 4) {
-            if (s_pet.trip_st == APP_TAMA_TRIP_BACK) {
+            if (s_pet.trip_st == APP_MEOW_TRIP_BACK) {
                 trip_settle();
                 return;
             }
-            if (s_pet.trip_st == APP_TAMA_TRIP_AWAY) {
+            if (s_pet.trip_st == APP_MEOW_TRIP_AWAY) {
                 trip_time_txt(s_line, sizeof(s_line),
-                              app_tama_trip_sec_left(&s_pet, now_sec()));
+                              app_meow_trip_sec_left(&s_pet, now_sec()));
                 flash(s_line, APP_TONE_BEEP);
                 return;
             }
-            if (!app_tama_trip_can(&s_pet)) {
-                flash(app_tama_owned_n(&s_pet, APP_TAMA_CAT_FOOD) ?
-                      app_str(APP_STR_TAMA_REFUSE) :
-                      app_str(APP_STR_TAMA_BAG_EMPTY), APP_TONE_BEEP);
+            if (!app_meow_trip_can(&s_pet)) {
+                flash((s_pet.sleeping || s_pet.stage == APP_MEOW_EGG ||
+                       s_pet.stage == APP_MEOW_DEAD) ?
+                      cant_txt() :
+                      (app_meow_owned_n(&s_pet, APP_MEOW_CAT_FOOD) ?
+                       app_str(APP_STR_MEOW_REFUSE) :
+                       app_str(APP_STR_MEOW_BAG_EMPTY)), APP_TONE_BEEP);
                 return;
             }
             memset(s_trip_take, 0, sizeof(s_trip_take));
@@ -3353,7 +3341,7 @@ static void do_act(void)
             dex_blurb_split(s_sub, a, sizeof(a), b, sizeof(b));
             flash_lines(a, b, APP_TONE_BEEP, 12);
         } else {
-            flash(app_str(APP_STR_TAMA_NONE), APP_TONE_BEEP);
+            flash(app_str(APP_STR_MEOW_NONE), APP_TONE_BEEP);
         }
     }
 }
@@ -3362,9 +3350,9 @@ static bool idle_hold(void)
 {
     if (minigame()) return true;
     if (s_name_edit) return true;
-    if (s_mode == MODE_LINK || app_tama_link_busy()) return true;
+    if (s_mode == MODE_LINK || app_meow_link_busy()) return true;
     if (s_flash_left > 0) return true;
-    if (app_tama_set_busy()) return true;
+    if (app_meow_set_open_now() || app_meow_set_busy()) return true;
     if (bsp_ble_state() == BSP_BLE_PAIRING) return true;
     if (app_ota_busy() || app_ota_prompt()) return true;
     return false;
@@ -3378,7 +3366,7 @@ static uint32_t tick_ms(void)
 static bool ui_live(void)
 {
     return minigame() || s_mode == MODE_LINK || s_name_edit ||
-           s_flash_left > 0 || app_ota_busy() || app_tama_set_busy();
+           s_flash_left > 0 || app_ota_busy() || app_meow_set_busy();
 }
 
 static void tune_pm(void)
@@ -3405,7 +3393,7 @@ static void on_tick(lv_timer_t *t)
     if (s_ready && s_want_back_hint) {
         s_want_back_hint = false;
         back_hint_mark();
-        flash_for(app_str(APP_STR_TAMA_HOLD_BACK), APP_TONE_CHIME, 16);
+        flash_for(app_str(APP_STR_MEOW_HOLD_BACK), APP_TONE_CHIME, 16);
     }
     play_tick();
     rhy_tick();
@@ -3420,15 +3408,16 @@ static void on_tick(lv_timer_t *t)
     app_time_tick();
     drain_ancs();
     if (s_mode == MODE_LINK) {
-        int r = app_tama_link_poll(&s_pet);
-        if (r != APP_TAMA_LINK_WAIT) finish_link(r);
+        int r = app_meow_link_poll(&s_pet);
+        if (r != APP_MEOW_LINK_WAIT) finish_link(r);
     }
     {
         bool allow = !s_asleep && !minigame() && s_mode == MODE_CARE &&
-                     !app_tama_set_open_now();
+                     !app_meow_set_open_now();
         app_ota_tick(allow);
     }
     if (!s_asleep) {
+        s_awake_ms += dt;
         if (ui_live() || flash_tick) {
             paint();
             s_still_ms = 0;
@@ -3442,6 +3431,15 @@ static void on_tick(lv_timer_t *t)
     }
 
     uint16_t lim = app_prefs()->sleep_sec;
+    if (!s_asleep && s_wifi_wait && s_awake_ms >= WIFI_WAKE_MS) {
+        bool hold = idle_hold();
+        bool will_sleep = (lim != 0) && !hold &&
+                          (s_idle_ms + dt >= (uint32_t)lim * 1000);
+        if (!will_sleep) {
+            s_wifi_wait = false;
+            if (bsp_wifi_enabled()) bsp_wifi_radio_resume();
+        }
+    }
     if (lim == 0 || s_asleep) {
         tune_pm();
         return;
@@ -3456,7 +3454,7 @@ static void on_tick(lv_timer_t *t)
     if (s_idle_ms >= (uint32_t)lim * 1000) sleep_now();
 }
 
-void app_tama_start(void)
+void app_meow_start(void)
 {
     s_scr = lv_obj_create(NULL);
     ui_pixel_strip_theme(s_scr);
@@ -3491,9 +3489,9 @@ void app_tama_start(void)
     s_still_ms = 0;
     bsp_button_set_wake_cb(on_gpio_wake);
     bsp_ble_set_activity_cb(on_ble_activity);
-    esp_event_handler_register(TAMA_EVENT, TAMA_BLE_WAKE, on_ble_evt, NULL);
-    esp_event_handler_register(TAMA_EVENT, TAMA_ALERT_WAKE, on_alert_wake, NULL);
-    app_tama_link_start();
+    esp_event_handler_register(MEOW_EVENT, MEOW_BLE_WAKE, on_ble_evt, NULL);
+    esp_event_handler_register(MEOW_EVENT, MEOW_ALERT_WAKE, on_alert_wake, NULL);
+    app_meow_link_start();
     ble_off();
     app_ota_init();
     s_timer = lv_timer_create(on_tick, 250, NULL);
@@ -3501,7 +3499,7 @@ void app_tama_start(void)
     paint();
 }
 
-void app_tama_on_key(bsp_btn_t btn, bsp_btn_ev_t ev)
+void app_meow_on_key(bsp_btn_t btn, bsp_btn_ev_t ev)
 {
     if (s_asleep) {
         if (ev == BSP_BTN_PRESS || ev == BSP_BTN_CLICK) {
@@ -3532,14 +3530,14 @@ void app_tama_on_key(bsp_btn_t btn, bsp_btn_ev_t ev)
         }
     }
 
-    if (app_ota_state() == APP_OTA_APPLYING && !app_tama_set_open_now()) {
+    if (app_ota_state() == APP_OTA_APPLYING && !app_meow_set_open_now()) {
         if (ev == BSP_BTN_LONG && btn == BSP_BTN_OK) {
             app_ota_cancel();
             flash(NULL, APP_TONE_BEEP);
         }
         return;
     }
-    if (app_ota_prompt() && s_mode == MODE_CARE && !app_tama_set_open_now()) {
+    if (app_ota_prompt() && s_mode == MODE_CARE && !app_meow_set_open_now()) {
         if (ev == BSP_BTN_CLICK && btn == BSP_BTN_OK) {
             app_ota_apply();
             flash(NULL, APP_TONE_CHIME);
@@ -3583,8 +3581,8 @@ void app_tama_on_key(bsp_btn_t btn, bsp_btn_ev_t ev)
         return;
     }
 
-    if (app_tama_set_open_now()) {
-        app_tama_set_on_key(btn, ev);
+    if (app_meow_set_open_now()) {
+        app_meow_set_on_key(btn, ev);
         paint();
         return;
     }
@@ -3610,34 +3608,34 @@ void app_tama_on_key(bsp_btn_t btn, bsp_btn_ev_t ev)
     }
     if (s_mode == MODE_MATCH) {
         if (ev == BSP_BTN_LONG && btn == BSP_BTN_OK) {
-            if (app_tama_mat_busy(&s_mat)) return;
-            if (app_tama_mat_selected(&s_mat)) {
-                app_tama_mat_unsel(&s_mat);
+            if (app_meow_mat_busy(&s_mat)) return;
+            if (app_meow_mat_selected(&s_mat)) {
+                app_meow_mat_unsel(&s_mat);
                 paint();
             } else {
                 mat_finish(0);
             }
             return;
         }
-        if (app_tama_mat_busy(&s_mat)) return;
+        if (app_meow_mat_busy(&s_mat)) return;
         if (ev == BSP_BTN_LONG && (btn == BSP_BTN_UP || btn == BSP_BTN_DOWN)) {
-            app_tama_mat_move(&s_mat, btn == BSP_BTN_UP ? 0 : 1, 1);
+            app_meow_mat_move(&s_mat, btn == BSP_BTN_UP ? 0 : 1, 1);
             paint();
             return;
         }
         if (ev == BSP_BTN_CLICK) {
             int evm;
 
-            if (btn == BSP_BTN_UP) app_tama_mat_move(&s_mat, 0, 0);
-            else if (btn == BSP_BTN_DOWN) app_tama_mat_move(&s_mat, 1, 0);
+            if (btn == BSP_BTN_UP) app_meow_mat_move(&s_mat, 0, 0);
+            else if (btn == BSP_BTN_DOWN) app_meow_mat_move(&s_mat, 1, 0);
             else if (btn == BSP_BTN_OK) {
-                evm = app_tama_mat_ok(&s_mat);
-                if (evm == APP_TAMA_MAT_EV_CLEAR ||
-                    evm == APP_TAMA_MAT_EV_NEXT) {
+                evm = app_meow_mat_ok(&s_mat);
+                if (evm == APP_MEOW_MAT_EV_CLEAR ||
+                    evm == APP_MEOW_MAT_EV_NEXT) {
                     s_play_run = s_mat.score;
                     if (s_play_run > s_mat_best) s_mat_best = s_play_run;
                     app_tone_play(APP_TONE_CHIME);
-                } else if (evm == APP_TAMA_MAT_EV_REVERT) {
+                } else if (evm == APP_MEOW_MAT_EV_REVERT) {
                     app_tone_play(APP_TONE_BEEP);
                 }
             }
@@ -3651,8 +3649,8 @@ void app_tama_on_key(bsp_btn_t btn, bsp_btn_ev_t ev)
             return;
         }
         if (ev == BSP_BTN_PRESS) {
-            if (btn == BSP_BTN_UP) app_tama_run_move(&s_run, -1);
-            else if (btn == BSP_BTN_DOWN) app_tama_run_move(&s_run, 1);
+            if (btn == BSP_BTN_UP) app_meow_run_move(&s_run, -1);
+            else if (btn == BSP_BTN_DOWN) app_meow_run_move(&s_run, 1);
             paint();
         }
         return;
@@ -3668,12 +3666,12 @@ void app_tama_on_key(bsp_btn_t btn, bsp_btn_ev_t ev)
         if (lane >= 0) {
             if (ev == BSP_BTN_PRESS) {
                 s_rhy_held |= (uint8_t)(1u << lane);
-                app_tama_rhy_press(&s_rhy, lane, rhy_now());
+                app_meow_rhy_press(&s_rhy, lane, rhy_now());
                 s_play_run = s_rhy.score;
                 paint();
             } else if (ev == BSP_BTN_RELEASE) {
                 s_rhy_held &= (uint8_t)~(1u << lane);
-                app_tama_rhy_release(&s_rhy, lane, rhy_now());
+                app_meow_rhy_release(&s_rhy, lane, rhy_now());
                 s_play_run = s_rhy.score;
                 paint();
             }
@@ -3691,26 +3689,26 @@ void app_tama_on_key(bsp_btn_t btn, bsp_btn_ev_t ev)
         }
         if (s_mode == MODE_CARE && focused() && s_trip_edit &&
             (btn == BSP_BTN_UP || btn == BSP_BTN_DOWN)) {
-            uint8_t ids[APP_TAMA_G_N];
-            int n = app_tama_owned_list(&s_pet, APP_TAMA_CAT_FOOD, ids,
-                                       APP_TAMA_G_N);
+            uint8_t ids[APP_MEOW_G_N];
+            int n = app_meow_owned_list(&s_pet, APP_MEOW_CAT_FOOD, ids,
+                                       APP_MEOW_G_N);
             if (btn == BSP_BTN_DOWN) {
-                app_tama_res_t r;
+                app_meow_res_t r;
 
                 if (trip_take_n() <= 0) {
-                    flash(app_str(APP_STR_TAMA_EMPTY), APP_TONE_BEEP);
+                    flash(app_str(APP_STR_MEOW_EMPTY), APP_TONE_BEEP);
                     return;
                 }
-                r = app_tama_trip_start(&s_pet, s_trip_take);
-                if (r == APP_TAMA_OK) {
+                r = app_meow_trip_start(&s_pet, s_trip_take);
+                if (r == APP_MEOW_OK) {
                     s_trip_edit = false;
                     s_sub = 4;
                     s_dirty = true;
                     save_nvs();
-                    flash(app_str(APP_STR_TAMA_TRIP), APP_TONE_CHIME);
+                    flash(app_str(APP_STR_MEOW_TRIP), APP_TONE_CHIME);
                     return;
                 }
-                flash(app_str(APP_STR_TAMA_REFUSE), APP_TONE_BEEP);
+                flash(act_fail_txt(r), APP_TONE_BEEP);
                 return;
             }
             if (s_sub >= 0 && s_sub < n) {
@@ -3736,7 +3734,7 @@ void app_tama_on_key(bsp_btn_t btn, bsp_btn_ev_t ev)
 
     if (s_mode == MODE_LINK) {
         if (btn == BSP_BTN_OK) {
-            app_tama_link_cancel();
+            app_meow_link_cancel();
             s_mode = MODE_CARE;
             ble_off();
             paint();
@@ -3752,7 +3750,7 @@ void app_tama_on_key(bsp_btn_t btn, bsp_btn_ev_t ev)
             return;
         }
         if (s_sel == TAB_SHOP) {
-            int n = app_tama_owned_n(&s_pet, s_bag_cat);
+            int n = app_meow_owned_n(&s_pet, s_bag_cat);
             if (btn == BSP_BTN_UP) {
                 if (n > 0) s_sub = (s_sub + n - 1) % n;
                 paint();

@@ -1,4 +1,4 @@
-#include "app_tama_link.h"
+#include "app_meow_link.h"
 
 #include "bsp_ble.h"
 #include "bsp_wifi.h"
@@ -21,21 +21,21 @@
 #include <string.h>
 #include <unistd.h>
 
-static const char *TAG = "tama_link";
+static const char *TAG = "meow_link";
 
-#define WIRE_MAGIC 0x32414D54u
+#define WIRE_MAGIC 0x324F454Du
 #define UDP_PORT   19511
 #define SEEK_US    8000000ll
 
-static const ble_uuid128_t UUID_TM = BLE_UUID128_INIT(
-    0x01, 0x00, 0x41, 0x4d, 0x41, 0x54, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x54, 0x4d, 0x41, 0x46);
+static const ble_uuid128_t UUID_MW = BLE_UUID128_INIT(
+    0x01, 0x00, 0x57, 0x4f, 0x45, 0x4d, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x4d, 0x45, 0x4f, 0x57);
 static const ble_uuid128_t UUID_TX = BLE_UUID128_INIT(
-    0x02, 0x00, 0x41, 0x4d, 0x41, 0x54, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x54, 0x4d, 0x41, 0x46);
+    0x02, 0x00, 0x57, 0x4f, 0x45, 0x4d, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x4d, 0x45, 0x4f, 0x57);
 static const ble_uuid128_t UUID_RX = BLE_UUID128_INIT(
-    0x03, 0x00, 0x41, 0x4d, 0x41, 0x54, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x54, 0x4d, 0x41, 0x46);
+    0x03, 0x00, 0x57, 0x4f, 0x45, 0x4d, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x4d, 0x45, 0x4f, 0x57);
 
 typedef struct __attribute__((packed)) {
     uint32_t magic;
@@ -102,7 +102,7 @@ static int access_cb(uint16_t conn, uint16_t attr, struct ble_gatt_access_ctxt *
 static const struct ble_gatt_svc_def s_svcs[] = {
     {
         .type = BLE_GATT_SVC_TYPE_PRIMARY,
-        .uuid = &UUID_TM.u,
+        .uuid = &UUID_MW.u,
         .characteristics = (struct ble_gatt_chr_def[]) {
             {
                 .uuid = &UUID_TX.u,
@@ -144,11 +144,11 @@ static void set_beacon(bool looking)
     bsp_ble_refresh_adv();
 }
 
-static void fill_tx(const app_tama_t *pet)
+static void fill_tx(const app_meow_t *pet)
 {
-    app_tama_snap_t s;
+    app_meow_snap_t s;
     memset(&s_tx, 0, sizeof(s_tx));
-    app_tama_snap(pet, &s);
+    app_meow_snap(pet, &s);
     s_tx.magic = WIRE_MAGIC;
     s_tx.type = (uint8_t)s_kind;
     s_tx.stage = s.stage;
@@ -207,7 +207,7 @@ static int disc_svc_cb(uint16_t conn, const struct ble_gatt_error *err,
         return 0;
     }
     if (!svc || (err && err->status != 0)) return 0;
-    if (ble_uuid_cmp(&svc->uuid.u, &UUID_TM.u) == 0) {
+    if (ble_uuid_cmp(&svc->uuid.u, &UUID_MW.u) == 0) {
         s_svc_lo = svc->start_handle;
         s_svc_hi = svc->end_handle;
     }
@@ -262,7 +262,7 @@ static int cent_event(struct ble_gap_event *event, void *arg)
 static bool uuid_in_fields(const struct ble_hs_adv_fields *f)
 {
     for (int i = 0; i < f->num_uuids128; i++) {
-        if (ble_uuid_cmp(&f->uuids128[i].u, &UUID_TM.u) == 0) return true;
+        if (ble_uuid_cmp(&f->uuids128[i].u, &UUID_MW.u) == 0) return true;
     }
     return false;
 }
@@ -407,16 +407,16 @@ static void stop_seek(void)
     udp_close();
 }
 
-static int apply_rx(app_tama_t *pet)
+static int apply_rx(app_meow_t *pet)
 {
     if (s_rx.magic != WIRE_MAGIC || s_rx.type != (uint8_t)s_kind) {
-        return APP_TAMA_LINK_FAIL;
+        return APP_MEOW_LINK_FAIL;
     }
-    if (s_kind == APP_TAMA_KIND_VISIT) {
-        if (app_tama_visit(pet) != APP_TAMA_OK) return APP_TAMA_LINK_FAIL;
-        return APP_TAMA_LINK_VISIT;
+    if (s_kind == APP_MEOW_KIND_VISIT) {
+        if (app_meow_visit(pet) != APP_MEOW_OK) return APP_MEOW_LINK_FAIL;
+        return APP_MEOW_LINK_VISIT;
     }
-    app_tama_snap_t you = {
+    app_meow_snap_t you = {
         .stage = s_rx.stage,
         .hunger = s_rx.hunger,
         .happy = s_rx.happy,
@@ -428,11 +428,11 @@ static int apply_rx(app_tama_t *pet)
         .rng = s_rx.rng,
         .age_min = s_rx.age_min,
     };
-    int r = app_tama_fight(pet, &you);
-    if (r > 0) return APP_TAMA_LINK_WIN;
-    if (r == 0) return APP_TAMA_LINK_DRAW;
-    if (r == -1) return APP_TAMA_LINK_LOSE;
-    return APP_TAMA_LINK_FAIL;
+    int r = app_meow_fight(pet, &you);
+    if (r > 0) return APP_MEOW_LINK_WIN;
+    if (r == 0) return APP_MEOW_LINK_DRAW;
+    if (r == -1) return APP_MEOW_LINK_LOSE;
+    return APP_MEOW_LINK_FAIL;
 }
 
 static void start_scan(void)
@@ -455,14 +455,14 @@ static void start_scan(void)
     }
 }
 
-void app_tama_link_prepare(void)
+void app_meow_link_prepare(void)
 {
     bsp_ble_set_extra_svcs(s_svcs);
-    bsp_ble_set_scan_uuid128(UUID_TM.value);
+    bsp_ble_set_scan_uuid128(UUID_MW.value);
     bsp_ble_set_gap_cb(on_gap);
 }
 
-void app_tama_link_start(void)
+void app_meow_link_start(void)
 {
     esp_read_mac(s_own, ESP_MAC_BT);
     s_kind = 0;
@@ -470,11 +470,11 @@ void app_tama_link_start(void)
     if (bsp_ble_enabled()) bsp_ble_ensure_advertising();
 }
 
-bool app_tama_link_seek(app_tama_t *pet, int kind)
+bool app_meow_link_seek(app_meow_t *pet, int kind)
 {
-    if (s_busy) app_tama_link_cancel();
-    if (!pet || (kind != APP_TAMA_KIND_VISIT && kind != APP_TAMA_KIND_FIGHT)) return false;
-    if (!app_tama_can_link(pet)) return false;
+    if (s_busy) app_meow_link_cancel();
+    if (!pet || (kind != APP_MEOW_KIND_VISIT && kind != APP_MEOW_KIND_FIGHT)) return false;
+    if (!app_meow_can_link(pet)) return false;
     bool wifi_ok = bsp_wifi_enabled() && bsp_wifi_state() == BSP_WIFI_CONNECTED;
     if (!bsp_ble_enabled()) {
         (void)bsp_ble_set_enabled(true);
@@ -498,20 +498,20 @@ bool app_tama_link_seek(app_tama_t *pet, int kind)
     return true;
 }
 
-void app_tama_link_cancel(void)
+void app_meow_link_cancel(void)
 {
     s_got = 0;
     stop_seek();
 }
 
-bool app_tama_link_busy(void)
+bool app_meow_link_busy(void)
 {
     return s_busy;
 }
 
-int app_tama_link_poll(app_tama_t *pet)
+int app_meow_link_poll(app_meow_t *pet)
 {
-    if (!s_busy) return APP_TAMA_LINK_IDLE;
+    if (!s_busy) return APP_MEOW_LINK_IDLE;
     udp_recv();
     if (s_got) {
         int r = apply_rx(pet);
@@ -522,7 +522,7 @@ int app_tama_link_poll(app_tama_t *pet)
     }
     if (esp_timer_get_time() - s_t0 > SEEK_US) {
         stop_seek();
-        return APP_TAMA_LINK_NONE;
+        return APP_MEOW_LINK_NONE;
     }
     if (esp_timer_get_time() - s_udp_last > 400000) {
         s_udp_last = esp_timer_get_time();
@@ -530,5 +530,5 @@ int app_tama_link_poll(app_tama_t *pet)
         send_pkt();
         if (!s_cent && !s_have_want) start_scan();
     }
-    return APP_TAMA_LINK_WAIT;
+    return APP_MEOW_LINK_WAIT;
 }
