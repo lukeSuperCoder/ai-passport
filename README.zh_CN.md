@@ -1,6 +1,10 @@
-# FoloToy AI Passport
+# FoloToy AI Passport — Meow
 
 [English](README.md) | 简体中文
+
+**当前 `demo/meow` 分支是独立宠物游戏固件，不是 `main` 上的首页应用。** 开机直接进入 Meow，不包含通知、对讲机、天气、验证器。语言、Wi-Fi、蓝牙、时钟、屏幕、声音都在游戏里设置。Wi-Fi 和蓝牙用于「世界」里的**拜访**和**对战**（近距离蓝牙，或同一已保存局域网）。STA 上的 NTP 用来给宠物对时睡觉。
+
+游戏说明：[English](docs/APPS.md) · [简体中文](docs/APPS.zh_CN.md)
 
 FoloToy AI Passport 是一个面向 AI agent 的开放式可穿戴 AI 硬件，本仓库是这款 AI 硬件的开发基线。它不只展示“板子能运行什么”，还把 agent 开发应用所需的**硬件事实、稳定接口、资源边界、参考实现和验收方法**放在同一仓库中。
 
@@ -49,12 +53,14 @@ FoloToy AI Passport 是一个面向 AI agent 的开放式可穿戴 AI 硬件，�
 | 输入 | `UP` / `DOWN` / `OK` 三键，共用 GPIO0 的 ADC 电阻分压 | `bsp_button_init()`、`bsp_button_read_mv()` | 回调运行在 button 组件任务中，不能阻塞；不能再创建第二个 ADC1 unit |
 | 音频 | ES8311，I2S0 全双工 PCM，可播放和麦克风录音 | `bsp_audio_*` | PCM 读写为阻塞调用，应放工作任务；格式切换必须保留 BSP 内的 close/open 流程 |
 | 电池 | CW2017 的 SOC 与电压读取 | `bsp_battery_*` | 是可缺省能力；读数精度取决于电芯与 profile，不能等同于已标定结果 |
+| Wi-Fi | 2.4 GHz STA：扫描、加入、NVS 记忆并自动重连 | `bsp_wifi_*` | 仅 STA（SoftAP 已关闭）；扫描和连接必须放工作任务；凭据在拿到 IP 后写入 NVS；天线、射频和共存表现必须实机测量 |
+| BLE / ANCS | NimBLE 外设 + Apple 通知中心客户端 | `bsp_ble_*` | 最多同时 2 路连接、6 个绑定；ANCS 仅 iPhone；需配对并打开“分享通知”；关键字在板上匹配；界面用 12px 回退字体显示中文；射频距离和与 Wi-Fi 共存必须实机测量 |
 | 共享总线 | ES8311 与 CW2017 共用 I2C0 | `bsp_i2c_*` | 所有设备复用 BSP 持有的总线；不能为扫描或新设备再创建同端口总线 |
 | 日志与烧录 | ESP32-C3 原生 USB Serial/JTAG | ESP-IDF console | GPIO18/19 保留给 USB；UART0 默认 TX GPIO21 与背光冲突 |
 
 所有引脚、地址、面板参数和按键电压窗口只在 [`components/bsp/include/bsp_pins.h`](components/bsp/include/bsp_pins.h) 定义。应用代码不得复制这些常量。完整引脚表、面板初始化、ADC 阈值、I2C 地址规则、音频时钟和内存说明见 [AI 硬件开发指南](docs/AI_HARDWARE_DEVELOPMENT_GUIDE.md)。
 
-应用也可以使用 ESP-IDF 提供的定时器、FreeRTOS 任务和内部 Flash/NVS；番茄钟分支提供了 NVS 示例。ESP32-C3 芯片支持 2.4 GHz Wi-Fi 和 Bluetooth LE，但当前 BSP 没有为无线能力提供封装，`main` 也不初始化无线栈；`demo/claude-buddy-port` 只能作为 BLE 应用架构参考，不能替代对当前板卡天线、射频表现、功耗和共存行为的实测。所有 FoloToy AI Passport 均配备 8 MB Flash，默认固件配置也以 8 MB 为准。
+应用也可以使用 ESP-IDF 提供的定时器、FreeRTOS 任务和内部 Flash/NVS；番茄钟分支提供了额外的 NVS 示例。BSP 已通过 `bsp_wifi_*` 封装 2.4 GHz Wi-Fi STA，通过 `bsp_ble_*` 封装 BLE ANCS。ESP32-C3 没有经典蓝牙。`demo/claude-buddy-port` 仍可作为 BLE 应用架构参考，不能替代对当前板卡天线、射频表现、功耗和与 Wi-Fi 共存的实测。所有 FoloToy AI Passport 均配备 8 MB Flash，默认固件配置也以 8 MB 为准。
 
 ### 不属于当前能力契约的事项
 
@@ -162,6 +168,41 @@ cc -std=c11 -Wall -Wextra -Werror -Imain \
   tests/test_ui_pixel_math.c main/ui_pixel_math.c \
   -o /tmp/test_ui_pixel_math
 /tmp/test_ui_pixel_math
+
+cc -std=c11 -Wall -Wextra -Werror -Imain \
+  tests/test_ble_filter.c main/ble_filter.c \
+  -o /tmp/test_ble_filter
+/tmp/test_ble_filter
+
+cc -std=c11 -Wall -Wextra -Werror -Imain \
+  tests/test_app_i18n.c main/app_i18n.c \
+  -o /tmp/test_app_i18n
+/tmp/test_app_i18n
+
+cc -std=c11 -Wall -Wextra -Werror -Imain \
+  tests/test_app_meow.c main/app_meow_logic.c \
+  -o /tmp/test_app_meow
+/tmp/test_app_meow
+
+cc -std=c11 -Wall -Wextra -Werror -Imain \
+  tests/test_app_meow_rhythm.c main/app_meow_rhythm.c \
+  -o /tmp/test_app_meow_rhythm
+/tmp/test_app_meow_rhythm
+
+cc -std=c11 -Wall -Wextra -Werror -Imain \
+  tests/test_app_meow_run.c main/app_meow_run.c \
+  -o /tmp/test_app_meow_run
+/tmp/test_app_meow_run
+
+cc -std=c11 -Wall -Wextra -Werror -Imain \
+  tests/test_app_meow_match.c main/app_meow_match.c \
+  -o /tmp/test_app_meow_match
+/tmp/test_app_meow_match
+
+cc -std=c11 -Wall -Wextra -Werror -Imain \
+  tests/test_app_ota.c main/app_ota_logic.c \
+  -o /tmp/test_app_ota
+/tmp/test_app_ota
 ```
 
 不同示例分支可能提供自己的 host test 命令，应以该分支 README 为准。
@@ -175,6 +216,9 @@ cc -std=c11 -Wall -Wextra -Werror -Imain \
 - `UP` / `DOWN` / `OK` 的目标事件和长按返回正确；
 - 音频采样速度、播放、非零录音和页面退出正确；
 - 电池读数合理，CW2017 缺失时应用能安全降级；
+- Wi-Fi 页能扫描、加入网络，复位后用已存凭据自动重连，并且可以忘记网络；
+- BLE 页能广播、与 iPhone 以及另一台主机（如 Mac 或另一台 Passport，最多 2 路同时在线）配对、接收 ANCS 通知，并显示关键字匹配的短信（或抽出的验证码）；
+- 对讲机页能以 WebRTC/Wi-Fi 或蓝牙启动，按住上键说话、确定停止；同一频道的两台设备能互相听到；同一局域网的手机可打开扫码页上的 `http://<ip>:8080/`（普通 HTTP，不要用 80 端口）；麦克风页 `/w`、`/rtc` 会跳到 `https://<ip>:8443/`（需接受自签证书）；不要用微信内置浏览器，用 Safari 或 Chrome 打开；Passport 只做信令；
 - 重复进出页面和并发操作后没有任务、对象或堆持续泄漏。
 
 agent 的最终交付应明确区分：
@@ -192,10 +236,12 @@ Unverified: 仍需板卡、仪器或用户确认的事项
 
 ```text
 components/bsp/include/  BSP 公开 API 与 bsp_pins.h 硬件事实
-components/bsp/src/      显示、按键、音频、电池、共享 I2C 实现
+components/bsp/src/      显示、按键、音频、电池、Wi-Fi、BLE、共享 I2C 实现
 main/                    最小菜单、LVGL UI 与独立硬件演示页
 tests/                   可脱离硬件运行的轻量逻辑测试源
-docs/                    agent 硬件开发指南与扩展文档
-sdkconfig.defaults       ESP32-C3、USB console、Flash、LVGL 默认配置
+docs/                    agent 硬件指南、机上应用/设置说明与扩展文档
+docs/APPS.zh_CN.md       首页应用、设置项与 NVS 键
+sdkconfig.defaults       ESP32-C3、USB console、Flash、LVGL、Wi-Fi STA、NimBLE 默认配置
+partitions.csv           8 MB Flash 分区，双 OTA 槽各约 3.9 MB
 AGENTS.md                agent 在本仓库的编码、验证和提交规则
 ```

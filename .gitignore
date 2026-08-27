@@ -1,7 +1,10 @@
 build/
+.DS_Store
 sdkconfig
 sdkconfig.old
 managed_components/
 dependencies.lock
 simulator/build/
+meow-simulator-save.bin
 .vscode/
+/FoloToy-AI-Passport-*.bin

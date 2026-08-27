@@ -55,6 +55,7 @@ void bsp_display_backlight(uint8_t percent)
 {
     ESP_LOGI("bsp_mock", "backlight=%u%%", percent);
 }
+void bsp_display_sleep(bool sleep) { (void)sleep; }
 struct _lv_display_t *bsp_lvgl_init(void) { return NULL; }
 
 bool bsp_lvgl_lock(int timeout_ms)
@@ -68,6 +69,14 @@ void bsp_lvgl_unlock(void)
 {
     pthread_mutex_unlock(&s_lvgl_mutex);
 }
+
+void bsp_lvgl_flush_enable(bool on) { (void)on; }
+void bsp_lvgl_tick_enable(bool on) { (void)on; }
+void bsp_lvgl_pause(void) {}
+void bsp_lvgl_resume(void) {}
+
+void bsp_button_set_wake_cb(void (*cb)(void)) { (void)cb; }
+esp_err_t bsp_button_sleep_gpio(bool on) { (void)on; return ESP_OK; }
 
 esp_err_t bsp_battery_init(void) { return ESP_OK; }
 int bsp_battery_soc(void) { return 82; }
@@ -104,3 +113,5 @@ void bsp_audio_set_volume(uint8_t percent)
 {
     ESP_LOGI("bsp_mock", "volume=%u%%", percent);
 }
+
+void bsp_audio_standby(void) {}

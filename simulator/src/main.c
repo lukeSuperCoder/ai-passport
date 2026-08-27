@@ -1,4 +1,7 @@
-#include "app_ui.h"
+#include "app_i18n.h"
+#include "app_meow_ui.h"
+#include "app_prefs.h"
+#include "ui_pixel.h"
 #include "bsp_audio.h"
 #include "bsp_battery.h"
 #include "bsp_button.h"
@@ -30,7 +33,7 @@ static void on_button(bsp_btn_t btn, bsp_btn_ev_t ev, void *user)
 {
     (void)user;
     if (!bsp_lvgl_lock(500)) return;
-    app_ui_handle_key(btn, ev);
+    app_meow_on_key(btn, ev);
     bsp_lvgl_unlock();
 }
 
@@ -49,6 +52,7 @@ static void poll_keys(void)
         } else if (!down && key->down) {
             key->down = false;
             bsp_mock_button_set_pressed(key->button, false);
+            bsp_mock_button_emit(key->button, BSP_BTN_RELEASE);
             bsp_mock_button_emit(key->button,
                 now - key->down_at >= LONG_PRESS_MS ? BSP_BTN_LONG : BSP_BTN_CLICK);
         }
@@ -57,28 +61,32 @@ static void poll_keys(void)
 
 int main(void)
 {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
+        fprintf(stderr, "Failed to initialize SDL: %s\n", SDL_GetError());
+        return 1;
+    }
     lv_init();
     lv_display_t *display = lv_sdl_window_create(240, 320);
     if (!display) {
         fprintf(stderr, "Failed to create SDL display\n");
+        SDL_Quit();
         return 1;
     }
     lv_sdl_window_set_title(display, "FoloToy AI Passport Simulator");
     lv_sdl_window_set_zoom(display, 2.0f);
 
-    bool ok[APP_UI_DEMO_COUNT] = {
-        true,
-        bsp_button_init(on_button, NULL) == ESP_OK,
-        bsp_audio_init() == ESP_OK,
-        bsp_battery_init() == ESP_OK,
-    };
+    bsp_button_init(on_button, NULL);
+    bsp_audio_init();
+    bsp_battery_init();
+    app_prefs_load();
+    ui_pixel_fonts_init();
 
     if (bsp_lvgl_lock(1000)) {
-        app_ui_start(ok);
+        app_meow_start();
         bsp_lvgl_unlock();
     }
 
-    puts("Controls: Up/Down arrows, Enter; hold Enter for 700ms to return.");
+    puts("Meow controls: Up/Down arrows, Enter; hold a key for 700ms for long press.");
     while (SDL_WasInit(SDL_INIT_VIDEO) && lv_display_get_default()) {
         if (bsp_lvgl_lock(1000)) {
             lv_timer_handler();

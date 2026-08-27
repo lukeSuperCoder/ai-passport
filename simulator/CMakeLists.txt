@@ -33,13 +33,28 @@ add_executable(ai_passport_sim
     src/main.c
     src/bsp_mock.c
     src/freertos_mock.c
+    src/platform_mock.c
+    src/nvs_mock.c
+    src/app_services_mock.c
     ${APP_DIR}/app_ui.c
     ${APP_DIR}/ui_pixel.c
     ${APP_DIR}/ui_pixel_math.c
-    ${APP_DIR}/demo_display.c
-    ${APP_DIR}/demo_button.c
-    ${APP_DIR}/demo_audio.c
-    ${APP_DIR}/demo_battery.c
+    ${APP_DIR}/app_i18n.c
+    ${APP_DIR}/app_logic.c
+    ${APP_DIR}/app_prefs.c
+    ${APP_DIR}/app_meow_logic.c
+    ${APP_DIR}/app_meow_rhythm.c
+    ${APP_DIR}/app_meow_run.c
+    ${APP_DIR}/app_meow_match.c
+    ${APP_DIR}/app_meow.c
+    ${APP_DIR}/app_meow_pet.c
+    ${APP_DIR}/app_meow_good.c
+    ${APP_DIR}/app_meow_souv.c
+    ${APP_DIR}/app_meow_haz.c
+    ${APP_DIR}/app_meow_ico.c
+    ${APP_DIR}/app_meow_stage.c
+    ${APP_DIR}/app_meow_set.c
+    ${APP_DIR}/fonts/lv_font_cjk_12.c
 )
 
 target_include_directories(ai_passport_sim PRIVATE
@@ -53,6 +68,7 @@ target_link_libraries(ai_passport_sim PRIVATE
     Threads::Threads
 )
 target_compile_options(ai_passport_sim PRIVATE -Wall -Wextra -Wpedantic)
+target_compile_definitions(ai_passport_sim PRIVATE APP_DESKTOP_SIM=1)
 
 if(SIM_ENABLE_SANITIZERS AND CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(ai_passport_sim PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)

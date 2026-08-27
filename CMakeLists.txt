@@ -1,3 +1,16 @@
 cmake_minimum_required(VERSION 3.16)
+# CI 用 idf.py -D PROJECT_VER=x.y.z 覆盖；本地默认跟当前树一致。
+if(NOT DEFINED PROJECT_VER)
+    set(PROJECT_VER "0.1.0")
+endif()
+# 通道跟 git 分支一致，写在 ota/channel。各 demo 只更新自己的清单。
+if(NOT DEFINED APP_OTA_CHANNEL)
+    if(EXISTS "${CMAKE_SOURCE_DIR}/ota/channel")
+        file(STRINGS "${CMAKE_SOURCE_DIR}/ota/channel" APP_OTA_CHANNEL LIMIT_COUNT 1)
+    else()
+        set(APP_OTA_CHANNEL "main")
+    endif()
+endif()
+set(APP_OTA_CHANNEL "${APP_OTA_CHANNEL}" CACHE STRING "OTA firmware channel")
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(FoloToy-AI-Passport)

@@ -36,7 +36,7 @@ void demo_display_enter(void) {
     s_scr = ui_pixel_screen_create("DISPLAY");
     s_swatch = ui_pixel_panel_create(s_scr, 18, 58, 204, 188, COLORS[s_color_idx]);
     s_info = lv_label_create(s_swatch);
-    lv_obj_set_style_text_font(s_info, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(s_info, ui_pixel_font_14(), 0);
     lv_obj_set_style_text_align(s_info, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_center(s_info);
     s_mascot = ui_pixel_mascot_create(s_scr, 101, 238);

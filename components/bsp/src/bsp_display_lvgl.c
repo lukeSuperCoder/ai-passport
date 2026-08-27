@@ -4,6 +4,7 @@
 #include "bsp_pins.h"
 #include "esp_lvgl_port.h"
 #include "esp_log.h"
+#include "lvgl.h"
 
 static const char *TAG = "bsp_lvgl";
 
@@ -16,7 +17,10 @@ lv_display_t *bsp_lvgl_init(void) {
         return NULL;
     }
 
-    const lvgl_port_cfg_t pc = ESP_LVGL_PORT_INIT_CONFIG();
+    lvgl_port_cfg_t pc = ESP_LVGL_PORT_INIT_CONFIG();
+    // 中文回退字体 cmap 多,标题/列表排版比纯英文吃栈。5120 在中文主页会溢出黑屏。
+    pc.task_stack = 8192;
+    pc.task_max_sleep_ms = 10000;
     if (lvgl_port_init(&pc) != ESP_OK) {
         ESP_LOGE(TAG, "lvgl_port_init 失败");
         return NULL;
@@ -46,3 +50,22 @@ lv_display_t *bsp_lvgl_init(void) {
 
 bool bsp_lvgl_lock(int timeout_ms) { return lvgl_port_lock(timeout_ms); }
 void bsp_lvgl_unlock(void)         { lvgl_port_unlock(); }
+
+void bsp_lvgl_flush_enable(bool on)
+{
+    if (!s_disp) return;
+    lv_display_enable_invalidation(s_disp, on);
+}
+
+void bsp_lvgl_tick_enable(bool on)
+{
+    if (on) {
+        lvgl_port_resume();
+        lvgl_port_task_wake(LVGL_PORT_EVENT_USER, NULL);
+    } else {
+        lvgl_port_stop();
+    }
+}
+
+void bsp_lvgl_pause(void) { bsp_lvgl_flush_enable(false); }
+void bsp_lvgl_resume(void) { bsp_lvgl_flush_enable(true); }

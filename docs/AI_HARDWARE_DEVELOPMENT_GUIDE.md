@@ -26,9 +26,11 @@ AI 应先完成以下检查：
 | 按键 | UP/DOWN/OK 三键电阻分压 | GPIO0 / ADC1_CH0 | 已实现 |
 | 音频 | ES8311，播放 + 麦克风录音 | I2C 控制 + I2S0 全双工 | 已实现 |
 | 电池 | CW2017 电量计 | 共享 I2C0，地址 0x63 | 已实现，可缺省 |
+| Wi-Fi | ESP32-C3 2.4 GHz STA | 内部射频；凭据存 NVS | 已实现 |
+| BLE | NimBLE 外设 + ANCS 客户端 | 内部射频，与 Wi-Fi 共存 | 已实现 |
 | 日志 | USB Serial/JTAG | 原生 USB GPIO18/19 | 已配置 |
 
-仓库没有提供原理图、PCB、BOM、电池型号、充电芯片信息、LCD TE 引脚或板卡修订号。因此不能据此声称支持充电控制、USB 检测、休眠唤醒、屏幕读回、触摸或其他未在代码中出现的能力。
+仓库没有提供原理图、PCB、BOM、电池型号、充电芯片信息、LCD TE 引脚或板卡修订号。因此不能据此声称支持充电控制、USB 检测、深度睡眠唤醒、屏幕读回、触摸或其他未在代码中出现的能力。息屏路径已实现自动 Light Sleep（保 BLE / ANCS），但板载 32 kHz 晶振、USB 插入时是否挡浅睡、以及待机电流都尚未实测。
 
 ## 3. 完整引脚表
 
@@ -36,7 +38,7 @@ AI 应先完成以下检查：
 
 | GPIO | 功能 | 方向/外设 | 重要说明 |
 | ---: | --- | --- | --- |
-| 0 | 三键公共 ADC 节点 | ADC1_CH0 输入 | 外部 10 kΩ 上拉；也是启动相关管脚，硬件改动前需核对 ESP32-C3 strapping 要求 |
+| 0 | 三键公共 ADC 节点 | ADC1_CH0 输入；息屏时切 GPIO 输入 | 外部 10 kΩ 上拉；也是启动相关管脚。息屏后停 ADC 扫描，用低电平唤醒浅睡，唤醒后再切回 ADC 分辨三键 |
 | 1 | LCD CS | SPI 输出 | ST7789P3 片选 |
 | 2 | I2S DOUT | 输出 | MCU → ES8311，播放数据 |
 | 3 | I2S WS | 输出 | MCU 为 I2S master |
@@ -64,11 +66,16 @@ app_main
   ├─ bsp_button_init(on_key)
   ├─ bsp_audio_init
   ├─ bsp_battery_init
+  ├─ bsp_wifi_init（若有已存凭据则后台自动连接）
+  ├─ bsp_ble_init（广播 Passport-XXXX，等待 iPhone 配对）
+  ├─ bsp_pm_init（DFS；息屏后才开自动 Light Sleep）
   └─ LVGL menu
        ├─ Display demo
        ├─ Button demo
        ├─ Audio demo
-       └─ Battery demo
+       ├─ Battery demo
+       ├─ WiFi demo
+       └─ BLE demo
 ```
 
 显示是 UI 的硬依赖，显示或 LVGL 初始化失败时 `app_main` 直接返回。按键、音频、电池是软依赖：初始化失败的菜单项显示 `[FAIL]`，其他页面仍可用。
@@ -80,7 +87,12 @@ app_main
 - `bsp_button.h`：三键事件与校准电压读取。
 - `bsp_audio.h`：codec 初始化、格式、阻塞式 PCM 收发和音量。
 - `bsp_battery.h`：SOC 与电压。
+- `bsp_wifi.h`：STA 扫描、连接、NVS 记忆、开机自动重连。
+- `bsp_ble.h`：BLE 广播、配对、ANCS 通知。
+- `bsp_pm.h`：DFS 与息屏自动 Light Sleep（保 BLE，不是 Deep Sleep）。
 - `bsp_pins.h`：硬件常量，不承载业务逻辑。
+
+`main` 里的对讲机（Walkie）用 8 kHz IMA ADPCM 半双工：Wi-Fi 模式在局域网 UDP 广播，并给浏览器提供 `/w` WebSocket 页（设备音频）；蓝牙模式走自定义 GATT。浏览器互通则走 `/rtc`：设备只做 WebSocket 信令，两端用 RTCPeerConnection。`getUserMedia` 要求安全源，所以 `/rtc` 与 `/w` 会 302 到 `https://<ip>:8443` 自签证书（微信内置浏览器除外）。TLS 不占 443，扫码首页用 `http://<ip>:8080/`，避免浏览器把局域网 IP 升到 HTTPS 后卡在证书页。ESP32-C3 没有经典蓝牙，也装不下带 DTLS-SRTP 的完整 WebRTC 栈。
 
 驱动初始化大多设计为幂等，但当前没有统一 deinit API。不要假设可以在运行时反复销毁和重建总线/驱动。
 
@@ -176,14 +188,43 @@ Audio demo 使用独立 4 KB 栈任务：OK 播放 1 秒 1 kHz 方波，UP 录 3
 
 ## 9. CW2017 电池计
 
-CW2017 在共享 I2C 地址 0x63。初始化读取 VERSION 确认在线，将 CONFIG 写为 0x00 进入正常模式，等待 100 ms 后使用芯片自带 Li-Poly profile。仓库刻意不写自定义电池 profile，因为开源用户的电池可能不同。
+CW2017 在共享 I2C 地址 0x63。初始化读取 VERSION 确认在线，先写 MODE `0x0A=0x00` 唤醒，再将 CONFIG 写为 0x00，等待 200 ms 后使用芯片自带 Li-Poly profile。仓库刻意不写自定义电池 profile，因为开源用户的电池可能不同。
 
-- SOC：读 0x04–0x05，仅返回高字节整数百分比；大于 100 视为未就绪并返回 `-1`。
+- SOC：读 0x04–0x05，仅返回高字节整数百分比；大于 100 或读失败时用电压估算（3.3 V=0%，4.2 V=100%），并保留上次有效值。
 - 电压：读 0x02–0x03 的 14 bit 值，换算为 `raw × 312.5 µV`，API 返回 mV。
 - 事务超时当前为 100 ms，设备时钟为 100 kHz。
 - 芯片不应答时初始化返回 `ESP_ERR_NOT_FOUND`，菜单标记失败，但整机继续运行。
 
 SOC 准确度取决于电芯与 profile 的匹配程度。本驱动给出的是电量计读数，不等于实验室标定结果。若产品需要准确 SOC，必须取得电芯参数、CW2017 数据手册和供应商 profile，并完成完整充放电验证。
+
+## 9.1 Wi-Fi STA
+
+ESP32-C3 内置 2.4 GHz Wi-Fi。BSP 只封装 STA：扫描、加入、把成功凭据写入 NVS（命名空间 `bsp_wifi`），开机若有凭据则自动重连。SoftAP 在 `sdkconfig.defaults` 中关闭，以节省无 PSRAM 的内部 RAM。
+
+约束：
+
+- `bsp_wifi_scan()` 阻塞最多约 10 秒，必须放工作任务，不能放按键回调或 LVGL 任务。
+- `bsp_wifi_connect()` 只启动连接；凭据仅在拿到 IPv4 后写入 NVS。不要在日志里打印密码。
+- 认证失败会停止自动重连，避免用错密码反复冲击路由器；信号丢失会继续重试。
+- 当前板的天线、距离、功耗和与 2.4 GHz 共存表现仍需实机测量，不能把“能扫描到附近 AP”写成射频合格。
+- 界面用 12px CJK 回退字体显示中文、假名和全角符号；生僻字仍可能缺字形。
+
+## 9.2 BLE 与 ANCS
+
+ESP32-C3 只有 BLE 5，没有经典蓝牙。BSP 用 NimBLE：设备作为可连接外设广播 `Passport-XXXX`，iPhone 连上并绑定后，板子作为 GATT 客户端订阅 Apple Notification Center Service。
+
+约束：
+
+- 回调在 NimBLE host 任务，禁止操作 LVGL。应用通过 `bsp_ble_state()` / `bsp_ble_take_notif()` 轮询。
+- 不要在日志中打印通知正文或配对码明文之外的敏感内容。
+- ANCS 需要 iPhone 系统蓝牙配对，并在设备详情中打开分享通知。没有手机伴侣 App。
+- iOS 设置里的蓝牙列表不展示普通 BLE 外设。本板按 HID 键盘（UUID `0x1812`、外观 `0x03C1`）广播，才会出现在「其他设备」中，名称 `Passport-XXXX`。
+- 关键字匹配在板上完成（默认 `code` / `otp` / `verify` / `验证码` 等）。过滤模式存 NVS `demo_ble`。
+- 界面用 12px CJK 回退字体显示通知正文；匹配对 UTF-8 生效，并抽出数字验证码。
+- 与 Wi-Fi 共用 2.4 GHz 射频。能配对不代表距离、功耗或共存已经合格。
+- 最多同时 2 路连接（例如 iPhone 走 ANCS，另一路 HID 或 BLE 对讲），绑定槽 6。ESP32-C3 主机上限 9、控制器活动 10（含广播）；无 PSRAM 且与 Wi-Fi 共存，固件不拉满。`Unpair` 只忘掉当前已连接的对端；无连接时才清除全部绑定。未满员时仍广播，便于再配对。
+- Mac / 非 Apple 对端没有 ANCS，会保持 HID 连接，不订阅通知。
+- Wi-Fi 与 BLE 同时开启后剩余内部堆通常只有数十 KB，不要同时做 96 KB 录音。
 
 ## 10. Flash、控制台和资源预算
 
@@ -193,10 +234,12 @@ FoloToy AI Passport 的所有硬件批次均使用 8 MB Flash，`sdkconfig.defau
 
 内存审查至少关注：
 
-- LVGL 静态内存池 24 KB；
+- LVGL 静态内存池 24 KB，LVGL 任务栈 5 KB（组件默认 7 KB）；
 - LCD DMA buffer 约 9.6 KB；
 - I2S DMA descriptor/frame buffer；
 - Audio demo 96 KB 录音堆；
+- Wi-Fi STA 静态 RX 6、动态 RX/TX 16，关闭 IPv6；
+- NimBLE 主机/控制器与 ANCS 重装缓冲；
 - 各 FreeRTOS 任务栈和最大连续空闲块。
 
 新增图片、字体、网络栈、TLS、音频缓存或双缓冲时，应记录 build 后的静态 RAM/Flash 使用，并在运行时记录 free heap 与 largest free block。总 free heap 足够不代表能成功分配大连续缓冲。
@@ -382,6 +425,7 @@ idf.py flash monitor
 | LCD 序列/旋转/颜色 | 红绿蓝白黑色块、方向、边缘裁切、负片、字节序、背光 100/50/10% |
 | ADC/按键 | 松开和三键实测 mV、单击/双击/长按、不同电量下的裕量 |
 | codec/I2S | 1 kHz 音调频率/速度、录音非零且回放速度正确、格式切换、退出页面 |
+| Wi-Fi | 扫描到附近 AP、选中后能连接、密码错误有失败提示、复位后自动重连、Forget 后不再自动连 |
 | 电池 | 合理 SOC 和 mV、无电量计时正确降级、断续 I2C 的错误恢复表现 |
 | DMA/内存/UI | build 内存报告、运行时最小堆/最大块、音频与刷屏并发稳定性 |
 
