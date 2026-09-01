@@ -9,6 +9,8 @@
 #define GAME_SPRING_DAY_COUNT 14U
 #define GAME_EVENT_MARKET 0x01U
 #define GAME_EVENT_FESTIVAL 0x02U
+#define GAME_PET_COUNT 4U
+#define GAME_RELATION_COUNT 6U
 
 typedef enum {
     GAME_JOB_REST = 0,
@@ -31,6 +33,13 @@ typedef enum {
     GAME_ACTOR_AMAI,
     GAME_ACTOR_ATUAN,
 } game_actor_id_t;
+
+typedef enum {
+    GAME_PET_MOMO = 0,
+    GAME_PET_LULU,
+    GAME_PET_AMAI,
+    GAME_PET_ATUAN,
+} game_pet_id_t;
 
 typedef enum {
     GAME_CROP_NONE = 0,
@@ -144,6 +153,14 @@ typedef struct {
     uint16_t cooked_counts[GAME_RECIPE_COUNT];
     bool chapter_complete;
     game_timed_task_t construction;
+    uint8_t relationships[GAME_RELATION_COUNT];
+    uint8_t player_affinity[GAME_PET_COUNT];
+    uint16_t job_experience[GAME_PET_COUNT][5];
+    uint8_t companion_actions;
+    uint8_t companion_actions_day;
+    bool sound_enabled;
+    bool night_mute_enabled;
+    bool clock_24_hour;
     game_farm_plot_t farm[GAME_FARM_PLOT_COUNT];
     game_pending_report_t pending;
     bool time_anomaly;
@@ -161,6 +178,8 @@ typedef enum {
     GAME_ACTION_START_RECIPE,
     GAME_ACTION_PLANT_CROP,
     GAME_ACTION_START_BUILDING,
+    GAME_ACTION_TALK_TO_PET,
+    GAME_ACTION_TOGGLE_SETTING,
 } game_action_type_t;
 
 typedef struct {
@@ -173,3 +192,5 @@ typedef struct {
 void game_state_init(game_state_t *state, uint32_t now);
 bool game_reduce(game_state_t *state, game_action_t action);
 const char *game_weather_name(game_weather_t weather);
+uint8_t game_relationship(const game_state_t *state, game_pet_id_t left,
+                          game_pet_id_t right);

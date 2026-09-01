@@ -2,6 +2,7 @@
 #include <stdint.h>
 
 #include "game/game_state.h"
+#include "game/game_content.h"
 
 static uint32_t reception_income(uint32_t base, game_weather_t weather)
 {
@@ -376,6 +377,74 @@ static void test_travel_requires_unlock_and_completes_offline(void)
     assert(state.inventory_mushrooms == 1U);
 }
 
+static void test_partner_relationship_changes_travel_result(void)
+{
+    game_state_t state;
+    game_state_init(&state, 0U);
+    state.spring_day = 8U;
+    state.completed_buildings |= (uint8_t)(1U << GAME_BUILD_SIGNPOST);
+    state.inventory_hot_bread = 1U;
+    state.relationships[5] = 50U;
+    assert(game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_START_TRAVEL, .now = 0U,
+    }));
+    assert(game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_SETTLE_TO_TIME, .now = 8U * 60U * 60U,
+    }));
+    assert(state.pending.mushrooms == 2U);
+    assert(game_relationship(&state, GAME_PET_AMAI, GAME_PET_ATUAN) == 55U);
+}
+
+static void test_companion_actions_restore_each_day(void)
+{
+    game_state_t state;
+    game_state_init(&state, 100U);
+    assert(state.companion_actions == 2U);
+    assert(game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_TALK_TO_PET, .target = GAME_PET_MOMO,
+    }));
+    assert(state.momo.mood == 90U);
+    assert(state.player_affinity[GAME_PET_MOMO] == 5U);
+    assert(game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_TALK_TO_PET, .target = GAME_PET_LULU,
+    }));
+    assert(!game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_TALK_TO_PET, .target = GAME_PET_AMAI,
+    }));
+    assert(game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_SETTLE_TO_TIME, .now = 100U + 24U * 60U * 60U,
+    }));
+    assert(state.companion_actions == 2U);
+}
+
+static void test_content_catalog_is_complete_and_valid(void)
+{
+    assert(game_content_validate());
+    for (uint8_t i = 0U; i < GAME_CONTENT_EVENT_COUNT; i++) {
+        assert(game_event_definition(i));
+    }
+    assert(!game_event_definition(GAME_CONTENT_EVENT_COUNT));
+    for (game_pet_id_t pet = GAME_PET_MOMO; pet < GAME_PET_COUNT; pet++) {
+        assert(game_pet_definition(pet));
+    }
+}
+
+static void test_settings_toggle_deterministically(void)
+{
+    game_state_t state;
+    game_state_init(&state, 0U);
+    assert(state.sound_enabled && state.night_mute_enabled && state.clock_24_hour);
+    for (uint8_t setting = 0U; setting < 3U; setting++) {
+        assert(game_reduce(&state, (game_action_t){
+            .type = GAME_ACTION_TOGGLE_SETTING, .target = setting,
+        }));
+    }
+    assert(!state.sound_enabled && !state.night_mute_enabled && !state.clock_24_hour);
+    assert(!game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_TOGGLE_SETTING, .target = 3U,
+    }));
+}
+
 static void test_main_story_can_reach_spring_14_without_deadlock(void)
 {
     game_state_t state;
@@ -591,6 +660,10 @@ int main(void)
     test_reception_is_split_by_daily_weather();
     test_milestone_events_are_player_resolved_once();
     test_travel_requires_unlock_and_completes_offline();
+    test_partner_relationship_changes_travel_result();
+    test_companion_actions_restore_each_day();
+    test_content_catalog_is_complete_and_valid();
+    test_settings_toggle_deterministically();
     test_all_crops_and_recipes_form_production_chains();
     test_main_story_can_reach_spring_14_without_deadlock();
     return 0;

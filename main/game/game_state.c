@@ -10,6 +10,41 @@ _Static_assert(sizeof(game_state_t) <= 12U * 1024U,
 
 static void refresh_quest_progress(game_state_t *state);
 
+static int relationship_index(game_pet_id_t left, game_pet_id_t right)
+{
+    if (left == right || left >= GAME_PET_COUNT || right >= GAME_PET_COUNT) return -1;
+    if (left > right) {
+        game_pet_id_t swap = left;
+        left = right;
+        right = swap;
+    }
+    static const int8_t indexes[GAME_PET_COUNT][GAME_PET_COUNT] = {
+        { -1, 0, 1, 2 },
+        { -1, -1, 3, 4 },
+        { -1, -1, -1, 5 },
+        { -1, -1, -1, -1 },
+    };
+    return indexes[left][right];
+}
+
+uint8_t game_relationship(const game_state_t *state, game_pet_id_t left,
+                          game_pet_id_t right)
+{
+    int index = relationship_index(left, right);
+    return state && index >= 0 ? state->relationships[index] : 0U;
+}
+
+static game_pet_state_t *pet_state(game_state_t *state, game_pet_id_t pet)
+{
+    switch (pet) {
+    case GAME_PET_MOMO: return &state->momo;
+    case GAME_PET_LULU: return &state->lulu;
+    case GAME_PET_AMAI: return &state->amai;
+    case GAME_PET_ATUAN: return &state->atuan;
+    }
+    return NULL;
+}
+
 static uint32_t saturating_add_u32(uint32_t left, uint32_t right)
 {
     return UINT32_MAX - left < right ? UINT32_MAX : left + right;
@@ -93,6 +128,10 @@ static void update_calendar(game_state_t *state, uint32_t now)
     uint8_t day = day_for_time(state, now);
     state->spring_day = day;
     state->weather = weather_for_day(state->weather_seed, day);
+    if (day != state->companion_actions_day) {
+        state->companion_actions_day = day;
+        state->companion_actions = 2U;
+    }
     if (previous < 7U && day >= 7U) {
         state->calendar_milestones |= GAME_EVENT_MARKET;
         if ((state->completed_events & GAME_EVENT_MARKET) == 0U) {
@@ -129,12 +168,18 @@ static void complete_timed_task(game_state_t *state, game_timed_task_t *task)
             ? (uint8_t)(state->amai.stamina - 5U) : 0U;
         if (state->forest_runs < UINT8_MAX) state->forest_runs++;
         if (state->road_fragments < 9U) state->road_fragments++;
+        state->job_experience[GAME_PET_AMAI][GAME_JOB_FOREST] =
+            saturating_add_u16(
+                state->job_experience[GAME_PET_AMAI][GAME_JOB_FOREST], 10U);
         break;
     case GAME_TASK_HOT_BREAD:
         add_pending_dish(state, task->recipe, 1U);
         if (state->cooked_counts[task->recipe] < UINT16_MAX) {
             state->cooked_counts[task->recipe]++;
         }
+        state->job_experience[GAME_PET_ATUAN][GAME_JOB_KITCHEN] =
+            saturating_add_u16(
+                state->job_experience[GAME_PET_ATUAN][GAME_JOB_KITCHEN], 10U);
         state->atuan.job = GAME_JOB_REST;
         state->atuan.stamina = state->atuan.stamina > 4U
             ? (uint8_t)(state->atuan.stamina - 4U) : 0U;
@@ -144,6 +189,15 @@ static void complete_timed_task(game_state_t *state, game_timed_task_t *task)
         state->pending.berries = saturating_add_u16(state->pending.berries, 3U);
         state->pending.mushrooms = saturating_add_u16(
             state->pending.mushrooms, 1U);
+        if (game_relationship(state, GAME_PET_AMAI, GAME_PET_ATUAN) >= 50U) {
+            state->pending.mushrooms = saturating_add_u16(
+                state->pending.mushrooms, 1U);
+        }
+        int relation = relationship_index(GAME_PET_AMAI, GAME_PET_ATUAN);
+        if (relation >= 0) {
+            uint16_t improved = (uint16_t)state->relationships[relation] + 5U;
+            state->relationships[relation] = improved > 100U ? 100U : (uint8_t)improved;
+        }
         state->travel_journal_count = state->travel_journal_count == UINT8_MAX
             ? UINT8_MAX : (uint8_t)(state->travel_journal_count + 1U);
         state->amai.job = GAME_JOB_REST;
@@ -314,6 +368,14 @@ void game_state_init(game_state_t *state, uint32_t now)
         (1U << GAME_BUILD_KITCHEN) |
         (1U << GAME_BUILD_FARM));
     state->quest_stage = 2U;
+    for (size_t i = 0; i < GAME_RELATION_COUNT; i++) {
+        state->relationships[i] = 20U;
+    }
+    state->companion_actions = 2U;
+    state->companion_actions_day = 1U;
+    state->sound_enabled = true;
+    state->night_mute_enabled = true;
+    state->clock_24_hour = true;
 }
 
 bool game_reduce(game_state_t *state, game_action_t action)
@@ -585,6 +647,28 @@ bool game_reduce(game_state_t *state, game_action_t action)
         state->commit_sequence++;
         return true;
     }
+
+    case GAME_ACTION_TALK_TO_PET: {
+        game_pet_id_t pet = (game_pet_id_t)action.target;
+        game_pet_state_t *partner = pet_state(state, pet);
+        if (!partner || state->companion_actions == 0U) return false;
+        state->companion_actions--;
+        partner->mood = partner->mood > 90U ? 100U : (uint8_t)(partner->mood + 10U);
+        state->player_affinity[pet] = state->player_affinity[pet] > 95U
+            ? 100U : (uint8_t)(state->player_affinity[pet] + 5U);
+        state->commit_sequence++;
+        return true;
+    }
+
+    case GAME_ACTION_TOGGLE_SETTING:
+        switch (action.target) {
+        case 0U: state->sound_enabled = !state->sound_enabled; break;
+        case 1U: state->night_mute_enabled = !state->night_mute_enabled; break;
+        case 2U: state->clock_24_hour = !state->clock_24_hour; break;
+        default: return false;
+        }
+        state->commit_sequence++;
+        return true;
     }
 
     return false;

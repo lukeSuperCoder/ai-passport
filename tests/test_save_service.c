@@ -138,6 +138,14 @@ int main(void)
     second.construction.building = GAME_BUILD_SIGNPOST;
     second.construction.started_at = 5000U;
     second.construction.ends_at = 19400U;
+    second.relationships[5] = 73U;
+    second.player_affinity[GAME_PET_MOMO] = 35U;
+    second.job_experience[GAME_PET_ATUAN][GAME_JOB_KITCHEN] = 155U;
+    second.companion_actions = 1U;
+    second.companion_actions_day = 7U;
+    second.sound_enabled = false;
+    second.night_mute_enabled = false;
+    second.clock_24_hour = false;
     assert(save_service_store(&save, &second));
     assert(save_service_load(&save, &loaded));
     assert(loaded.coins == 80U);
@@ -181,6 +189,14 @@ int main(void)
     assert(loaded.cooked_counts[GAME_RECIPE_HERB_TEA] == 2U);
     assert(loaded.construction.active);
     assert(loaded.construction.building == GAME_BUILD_SIGNPOST);
+    assert(loaded.relationships[5] == 73U);
+    assert(loaded.player_affinity[GAME_PET_MOMO] == 35U);
+    assert(loaded.job_experience[GAME_PET_ATUAN][GAME_JOB_KITCHEN] == 155U);
+    assert(loaded.companion_actions == 1U);
+    assert(loaded.companion_actions_day == 7U);
+    assert(!loaded.sound_enabled);
+    assert(!loaded.night_mute_enabled);
+    assert(!loaded.clock_24_hour);
 
     /* Slot 1 is newest. Corrupt its payload and verify fallback to slot 0. */
     storage.bytes[SAVE_SLOT_SIZE + 28U] ^= 0x01U;

@@ -31,6 +31,42 @@ typedef struct {
     uint32_t build_seconds;
 } game_building_definition_t;
 
+typedef struct {
+    const char *name;
+    const char *species;
+    const char *personality;
+    uint8_t stamina;
+    uint8_t dexterity;
+    uint8_t perception;
+    uint8_t charm;
+    uint8_t focus;
+    game_job_t preferred_job;
+} game_pet_definition_t;
+
+typedef enum {
+    GAME_EVENT_TYPE_MAIN = 0,
+    GAME_EVENT_TYPE_PET,
+    GAME_EVENT_TYPE_JOB,
+    GAME_EVENT_TYPE_WEATHER,
+    GAME_EVENT_TYPE_COMBINATION,
+    GAME_EVENT_TYPE_TRAVEL,
+    GAME_EVENT_TYPE_VISITOR,
+    GAME_EVENT_TYPE_COUNT,
+} game_event_type_t;
+
+typedef struct {
+    uint8_t id;
+    game_event_type_t type;
+    const char *title;
+    bool repeatable;
+    uint8_t cooldown_days;
+} game_event_definition_t;
+
+#define GAME_CONTENT_EVENT_COUNT 65U
+
 const game_crop_definition_t *game_crop_definition(game_crop_t crop);
 const game_recipe_definition_t *game_recipe_definition(game_recipe_t recipe);
 const game_building_definition_t *game_building_definition(game_building_t building);
+const game_pet_definition_t *game_pet_definition(game_pet_id_t pet);
+const game_event_definition_t *game_event_definition(uint8_t index);
+bool game_content_validate(void);

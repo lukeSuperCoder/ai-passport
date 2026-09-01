@@ -29,6 +29,7 @@ typedef enum {
     PAGE_FARM_DETAIL,
     PAGE_KITCHEN,
     PAGE_BUILDINGS,
+    PAGE_BACKPACK_DETAIL,
 } app_page_t;
 
 static game_state_t s_game;
@@ -43,6 +44,7 @@ static int s_farm_crop_selection;
 static int s_recipe_selection;
 static int s_backpack_selection;
 static int s_building_selection;
+static int s_partner_selection;
 static uint32_t s_now;
 
 static uint16_t ui_crop_count(game_crop_t crop)
@@ -109,6 +111,14 @@ static void activate_screen(void)
     case PAGE_FARM_DETAIL: checkpoint = "page_farm_detail"; break;
     case PAGE_KITCHEN: checkpoint = "page_kitchen"; break;
     case PAGE_BUILDINGS: checkpoint = "page_buildings"; break;
+    case PAGE_BACKPACK_DETAIL: {
+        static const char *details[6] = {
+            "page_items", "page_partners", "page_buildings",
+            "page_tasks", "page_album", "page_settings",
+        };
+        checkpoint = details[s_backpack_selection];
+        break;
+    }
     }
     telemetry_log_memory(checkpoint);
 }
@@ -158,8 +168,13 @@ static void draw_inn(lv_obj_t *parent)
 static void draw_top_status(lv_obj_t *parent)
 {
     char time_text[8];
+    uint32_t hour = (s_now / 3600U) % 24U;
+    if (!s_game.clock_24_hour) {
+        hour %= 12U;
+        if (hour == 0U) hour = 12U;
+    }
     snprintf(time_text, sizeof(time_text), "%02lu:%02lu",
-             (unsigned long)((s_now / 3600U) % 24U),
+             (unsigned long)hour,
              (unsigned long)((s_now / 60U) % 60U));
     label(parent, time_text, 9, 7, &lv_font_montserrat_20, COLOR_PAPER);
     char calendar[32];
@@ -467,6 +482,88 @@ static void build_buildings(void)
     activate_screen();
 }
 
+static void build_backpack_detail(void)
+{
+    static const char *titles[6] = {
+        "ITEMS", "PARTNERS", "BUILDINGS", "TASKS", "ALBUM", "SETTINGS",
+    };
+    lv_obj_t *screen = new_screen(COLOR_PAPER);
+    rect(screen, 0, 0, 240, 48, COLOR_NIGHT);
+    label(screen, titles[s_backpack_selection], 10, 10,
+          &lv_font_montserrat_20, COLOR_PAPER);
+    lv_obj_t *card = rect(screen, 10, 61, 220, 190, COLOR_PAPER);
+    lv_obj_set_style_border_width(card, 3, 0);
+    lv_obj_set_style_border_color(card, lv_color_hex(COLOR_INK), 0);
+    char line[48];
+    if (s_backpack_selection == 0) {
+        snprintf(line, sizeof(line), "WOOD %u  BERRIES %u  MUSHROOM %u",
+                 s_game.inventory_wood, s_game.inventory_berries,
+                 s_game.inventory_mushrooms);
+        label(card, line, 9, 12, &lv_font_montserrat_14, COLOR_INK);
+        snprintf(line, sizeof(line), "WHEAT %u  CARROT %u  BREAD %u",
+                 s_game.inventory_wheat,
+                 s_game.inventory_crops[GAME_CROP_CARROT],
+                 s_game.inventory_hot_bread);
+        label(card, line, 9, 48, &lv_font_montserrat_14, COLOR_INK);
+        snprintf(line, sizeof(line), "SEEDS W%u C%u S%u H%u",
+                 ui_seed_count(GAME_CROP_WHEAT), ui_seed_count(GAME_CROP_CARROT),
+                 ui_seed_count(GAME_CROP_STRAWBERRY), ui_seed_count(GAME_CROP_HERB));
+        label(card, line, 9, 84, &lv_font_montserrat_14, COLOR_INK);
+    } else if (s_backpack_selection == 1) {
+        game_pet_id_t pet = (game_pet_id_t)s_partner_selection;
+        const game_pet_definition_t *definition = game_pet_definition(pet);
+        label(card, definition->name, 9, 10, &lv_font_montserrat_20, COLOR_RED);
+        snprintf(line, sizeof(line), "%s / %s", definition->species,
+                 definition->personality);
+        label(card, line, 9, 43, &lv_font_montserrat_14, COLOR_INK);
+        snprintf(line, sizeof(line), "STA %u DEX %u PER %u CHA %u FOC %u",
+                 definition->stamina, definition->dexterity,
+                 definition->perception, definition->charm, definition->focus);
+        label(card, line, 9, 75, &lv_font_montserrat_14, COLOR_INK);
+        snprintf(line, sizeof(line), "AFFINITY %u  ACTIONS %u",
+                 s_game.player_affinity[pet], s_game.companion_actions);
+        label(card, line, 9, 107, &lv_font_montserrat_14, COLOR_INK);
+        label(card, "UP/DOWN PET  OK: TALK", 9, 143,
+              &lv_font_montserrat_14, COLOR_RED);
+    } else if (s_backpack_selection == 3) {
+        snprintf(line, sizeof(line), "FIRST CHAPTER  %u / 10",
+                 s_game.quest_stage > 10U ? 10U : s_game.quest_stage);
+        label(card, line, 9, 12, &lv_font_montserrat_20, COLOR_RED);
+        label(card, s_game.chapter_complete ? "THE ROAD IS RELIT" : "NEXT OBJECTIVE ACTIVE",
+              9, 55, &lv_font_montserrat_14, COLOR_INK);
+        snprintf(line, sizeof(line), "FOREST %u  HARVEST %u  JOURNALS %u",
+                 s_game.forest_runs, s_game.total_crops_harvested,
+                 s_game.travel_journal_count);
+        label(card, line, 9, 91, &lv_font_montserrat_14, COLOR_INK);
+    } else if (s_backpack_selection == 4) {
+        snprintf(line, sizeof(line), "PETS 4/4  RECIPES %u/5",
+                 (unsigned)__builtin_popcount((unsigned)s_game.unlocked_recipes));
+        label(card, line, 9, 12, &lv_font_montserrat_14, COLOR_INK);
+        snprintf(line, sizeof(line), "VISITORS 6  EVENTS %u",
+                 GAME_CONTENT_EVENT_COUNT);
+        label(card, line, 9, 48, &lv_font_montserrat_14, COLOR_INK);
+        snprintf(line, sizeof(line), "TRAVEL PHOTOS %u/8",
+                 s_game.travel_journal_count > 8U ? 8U : s_game.travel_journal_count);
+        label(card, line, 9, 84, &lv_font_montserrat_14, COLOR_INK);
+    } else if (s_backpack_selection == 5) {
+        snprintf(line, sizeof(line), "%c SOUND: %s",
+                 s_partner_selection == 0 ? '>' : ' ',
+                 s_game.sound_enabled ? "ON" : "OFF");
+        label(card, line, 9, 12, &lv_font_montserrat_14, COLOR_INK);
+        snprintf(line, sizeof(line), "%c NIGHT MUTE: %s",
+                 s_partner_selection == 1 ? '>' : ' ',
+                 s_game.night_mute_enabled ? "ON" : "OFF");
+        label(card, line, 9, 48, &lv_font_montserrat_14, COLOR_INK);
+        snprintf(line, sizeof(line), "%c CLOCK: %s",
+                 s_partner_selection == 2 ? '>' : ' ',
+                 s_game.clock_24_hour ? "24 HOUR" : "12 HOUR");
+        label(card, line, 9, 84, &lv_font_montserrat_14, COLOR_INK);
+        label(card, "SAVE: A/B CRC V11", 9, 120, &lv_font_montserrat_14, COLOR_INK);
+    }
+    label(screen, "HOLD OK: BACK", 10, 276, &lv_font_montserrat_14, COLOR_INK);
+    activate_screen();
+}
+
 void app_ui_start(const bool ok[APP_UI_DEMO_COUNT])
 {
     (void)ok;
@@ -502,6 +599,7 @@ void app_ui_start(const bool ok[APP_UI_DEMO_COUNT])
     s_recipe_selection = GAME_RECIPE_HOT_BREAD;
     s_backpack_selection = 0;
     s_building_selection = 0;
+    s_partner_selection = 0;
     build_station();
 }
 
@@ -613,6 +711,45 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
         return;
     }
 
+    if (s_page == PAGE_BACKPACK_DETAIL) {
+        if (btn == BSP_BTN_OK && ev == BSP_BTN_LONG) {
+            s_page = PAGE_BACKPACK;
+            build_backpack();
+        } else if (s_backpack_selection == 1 && ev == BSP_BTN_CLICK &&
+                   (btn == BSP_BTN_UP || btn == BSP_BTN_DOWN)) {
+            int delta = btn == BSP_BTN_UP ? -1 : 1;
+            s_partner_selection = (s_partner_selection + delta +
+                                   GAME_PET_COUNT) % GAME_PET_COUNT;
+            build_backpack_detail();
+        } else if (s_backpack_selection == 1 && ev == BSP_BTN_CLICK &&
+                   btn == BSP_BTN_OK) {
+            game_state_t candidate = s_game;
+            if (game_reduce(&candidate, (game_action_t){
+                    .type = GAME_ACTION_TALK_TO_PET,
+                    .target = (uint8_t)s_partner_selection,
+                }) && app_persistence_store(&candidate)) {
+                s_game = candidate;
+            }
+            build_backpack_detail();
+        } else if (s_backpack_selection == 5 && ev == BSP_BTN_CLICK &&
+                   (btn == BSP_BTN_UP || btn == BSP_BTN_DOWN)) {
+            int delta = btn == BSP_BTN_UP ? -1 : 1;
+            s_partner_selection = (s_partner_selection + delta + 3) % 3;
+            build_backpack_detail();
+        } else if (s_backpack_selection == 5 && ev == BSP_BTN_CLICK &&
+                   btn == BSP_BTN_OK) {
+            game_state_t candidate = s_game;
+            if (game_reduce(&candidate, (game_action_t){
+                    .type = GAME_ACTION_TOGGLE_SETTING,
+                    .target = (uint8_t)s_partner_selection,
+                }) && app_persistence_store(&candidate)) {
+                s_game = candidate;
+            }
+            build_backpack_detail();
+        }
+        return;
+    }
+
     if (s_page == PAGE_TRAVEL || s_page == PAGE_BACKPACK) {
         if (btn == BSP_BTN_OK && ev == BSP_BTN_LONG) {
             s_page = PAGE_STATION;
@@ -628,6 +765,11 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
             s_page = PAGE_BUILDINGS;
             s_building_selection = 0;
             build_buildings();
+        } else if (s_page == PAGE_BACKPACK && ev == BSP_BTN_CLICK &&
+                   btn == BSP_BTN_OK) {
+            s_page = PAGE_BACKPACK_DETAIL;
+            s_partner_selection = 0;
+            build_backpack_detail();
         } else if (s_page == PAGE_TRAVEL && ev == BSP_BTN_CLICK &&
                    btn == BSP_BTN_OK && !s_game.travel.active) {
             uint32_t now = s_game.last_trusted_time;
