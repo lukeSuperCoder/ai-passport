@@ -33,6 +33,7 @@ typedef enum {
     PAGE_EVENT,
     PAGE_COOK_ASSIST,
     PAGE_NOTICE,
+    PAGE_FOREST,
 } app_page_t;
 
 static game_state_t s_game;
@@ -51,6 +52,7 @@ static int s_partner_selection;
 static int s_event_choice;
 static int s_item_selection;
 static int s_travel_goal;
+static int s_forest_duration;
 static uint32_t s_now;
 static lv_obj_t *s_bottom_tabs[5];
 static lv_timer_t *s_menu_timer;
@@ -132,6 +134,7 @@ static void activate_screen(void)
     case PAGE_EVENT: checkpoint = "page_event"; break;
     case PAGE_COOK_ASSIST: checkpoint = "page_cook_assist"; break;
     case PAGE_NOTICE: checkpoint = "page_notice"; break;
+    case PAGE_FOREST: checkpoint = "page_forest"; break;
     }
     telemetry_log_memory(checkpoint);
 }
@@ -455,6 +458,35 @@ static void build_kitchen(void)
           10, 124, &lv_font_montserrat_14,
           s_game.kitchen.active ? COLOR_MUTED : COLOR_RED);
     label(screen, "UP/DOWN RECIPE  HOLD OK: BACK", 10, 276,
+          &lv_font_montserrat_14, COLOR_INK);
+    activate_screen();
+}
+
+static void build_forest(void)
+{
+    lv_obj_t *screen = new_screen(COLOR_GRASS);
+    rect(screen, 0, 0, 240, 48, COLOR_NIGHT);
+    label(screen, "FOREST EXPEDITION", 10, 10,
+          &lv_font_montserrat_20, COLOR_PAPER);
+    lv_obj_t *card = rect(screen, 10, 62, 220, 178, COLOR_PAPER);
+    lv_obj_set_style_border_width(card, 3, 0);
+    lv_obj_set_style_border_color(card, lv_color_hex(COLOR_WOOD_DARK), 0);
+    game_job_score_t score = game_calculate_job_score(
+        &s_game, GAME_PET_AMAI, GAME_JOB_FOREST, GAME_PET_COUNT);
+    label(card, s_forest_duration == 0 ? "QUICK SEARCH" : "LONG EXPEDITION",
+          10, 12, &lv_font_montserrat_20, COLOR_RED);
+    char line[40];
+    snprintf(line, sizeof(line), "%s / SCORE %d",
+             s_forest_duration == 0 ? "30 MIN" : "2 HOURS", score.score);
+    label(card, line, 10, 52, &lv_font_montserrat_14, COLOR_INK);
+    label(card, s_forest_duration == 0
+          ? "SAFE: WOOD + BERRIES"
+          : "RISK: WEATHER / RARE FINDS",
+          10, 84, &lv_font_montserrat_14, COLOR_INK);
+    label(card, s_game.forest.active ? "AMAI IS EXPLORING" : "OK: SEND AMAI",
+          10, 124, &lv_font_montserrat_14,
+          s_game.forest.active ? COLOR_MUTED : COLOR_RED);
+    label(screen, "UP/DOWN DURATION  HOLD OK: BACK", 10, 276,
           &lv_font_montserrat_14, COLOR_INK);
     activate_screen();
 }
@@ -790,6 +822,7 @@ void app_ui_start(const bool ok[APP_UI_DEMO_COUNT])
     s_event_choice = 0;
     s_item_selection = 0;
     s_travel_goal = GAME_TRAVEL_MATERIALS;
+    s_forest_duration = 0;
     s_last_input_tick = lv_tick_get();
     s_menu_hidden = false;
     if (!s_menu_timer) s_menu_timer = lv_timer_create(menu_timer_cb, 250U, NULL);
@@ -947,6 +980,39 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
                    s_game.kitchen.active) {
             s_page = PAGE_COOK_ASSIST;
             build_cook_assist();
+        }
+        return;
+    }
+
+    if (s_page == PAGE_FOREST) {
+        if (btn == BSP_BTN_OK && ev == BSP_BTN_LONG) {
+            s_page = PAGE_SCHEDULE;
+            build_schedule();
+        } else if (ev == BSP_BTN_CLICK &&
+                   (btn == BSP_BTN_UP || btn == BSP_BTN_DOWN) &&
+                   !s_game.forest.active) {
+            s_forest_duration = 1 - s_forest_duration;
+            build_forest();
+        } else if (ev == BSP_BTN_CLICK && btn == BSP_BTN_OK &&
+                   !s_game.forest.active) {
+            uint32_t now = s_game.last_trusted_time;
+            clock_service_now(&now);
+            s_now = now;
+            game_state_t candidate = s_game;
+            if (now > candidate.last_settled_time) {
+                game_reduce(&candidate, (game_action_t){
+                    .type = GAME_ACTION_SETTLE_TO_TIME, .now = now,
+                });
+            }
+            if (game_reduce(&candidate, (game_action_t){
+                    .type = s_forest_duration == 0
+                        ? GAME_ACTION_START_AMAI_FOREST
+                        : GAME_ACTION_START_FOREST_2H,
+                    .now = now,
+                }) && app_persistence_store(&candidate)) {
+                s_game = candidate;
+            }
+            build_forest();
         }
         return;
     }
@@ -1150,23 +1216,10 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
             s_recipe_selection = GAME_RECIPE_HOT_BREAD;
             build_kitchen();
         } else if (ev == BSP_BTN_CLICK && btn == BSP_BTN_OK &&
-                   s_schedule_selection == 2 && !s_game.forest.active) {
-            uint32_t now = s_game.last_trusted_time;
-            clock_service_now(&now);
-            game_state_t candidate = s_game;
-            if (now > candidate.last_settled_time) {
-                game_reduce(&candidate, (game_action_t){
-                    .type = GAME_ACTION_SETTLE_TO_TIME,
-                    .now = now,
-                });
-            }
-            if (game_reduce(&candidate, (game_action_t){
-                    .type = GAME_ACTION_START_AMAI_FOREST,
-                    .now = now,
-                }) && app_persistence_store(&candidate)) {
-                s_game = candidate;
-            }
-            build_schedule();
+                   s_schedule_selection == 2) {
+            s_page = PAGE_FOREST;
+            s_forest_duration = 0;
+            build_forest();
         }
         return;
     }
