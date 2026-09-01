@@ -1,7 +1,8 @@
 # Desktop simulator
 
-The simulator runs the real LVGL menu and demo pages on macOS/Linux through
-SDL2. Hardware-facing BSP calls are replaced by deterministic host mocks.
+The simulator runs the real LVGL application on macOS/Linux through SDL2.
+The current branch starts the Time Station MVP vertical slice; hardware-facing
+BSP calls are replaced by deterministic host mocks.
 
 ## Prerequisites (macOS)
 
@@ -19,8 +20,21 @@ cmake --build simulator/build
 ```
 
 The first configure downloads the pinned LVGL `v9.5.0` source into the build
-directory. Use Up/Down to navigate, Enter to select, and hold Enter for at
-least 700 ms to return to the menu.
+directory. Use Up/Down to select Station or Schedule, Enter to open or claim,
+and hold Enter for at least 700 ms to return to the station.
+
+The first vertical slice intentionally starts with a deterministic six-hour
+reception report. Open Schedule and claim the 60-coin reward to exercise the
+state reducer and page lifecycle.
+
+## Host logic tests
+
+```bash
+cc -std=c11 -Wall -Wextra -Werror -Imain \
+  tests/test_game_state.c main/game/game_state.c \
+  -o /tmp/test_game_state
+/tmp/test_game_state
+```
 
 The mocks currently provide a stable 82%/3970 mV battery, ADC values matching
 the three-button resistor ladder, and timed in-memory audio input/output. They

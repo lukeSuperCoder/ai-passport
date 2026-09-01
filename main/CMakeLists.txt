@@ -3,6 +3,7 @@ idf_component_register(
          "app_ui.c"
          "ui_pixel.c"
          "ui_pixel_math.c"
+         "game/game_state.c"
          "demo_display.c"
          "demo_button.c"
          "demo_audio.c"

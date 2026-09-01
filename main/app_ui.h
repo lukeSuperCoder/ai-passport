@@ -5,7 +5,7 @@
 
 #define APP_UI_DEMO_COUNT 4
 
-// 构建主菜单。ok 按 Display/Button/Audio/Battery 顺序描述外设是否可用。
+// 启动《时光驿站》。ok 保留现有外设能力数组接口，用于后续降级策略。
 void app_ui_start(const bool ok[APP_UI_DEMO_COUNT]);
 
 // 分发统一按键语义；调用方必须已经持有 LVGL 锁。

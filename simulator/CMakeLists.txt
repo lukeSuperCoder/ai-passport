@@ -36,6 +36,7 @@ add_executable(ai_passport_sim
     ${APP_DIR}/app_ui.c
     ${APP_DIR}/ui_pixel.c
     ${APP_DIR}/ui_pixel_math.c
+    ${APP_DIR}/game/game_state.c
     ${APP_DIR}/demo_display.c
     ${APP_DIR}/demo_button.c
     ${APP_DIR}/demo_audio.c
