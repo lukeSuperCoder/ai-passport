@@ -367,7 +367,7 @@ static void test_travel_requires_unlock_and_completes_offline(void)
         .now = departure + 8U * 60U * 60U,
     }));
     assert(!state.travel.active);
-    assert(state.pending.wood == 5U);
+    assert(state.pending.wood == 8U);
     assert(state.pending.berries == 3U);
     assert(state.pending.mushrooms == 1U);
     assert(state.travel_journal_count == 1U);
@@ -643,7 +643,8 @@ static void test_main_story_can_reach_spring_14_without_deadlock(void)
         .type = GAME_ACTION_SETTLE_TO_TIME, .now = now,
     }));
     assert(state.quest_stage == 10U);
-    assert(state.inventory_hot_bread > 0U);
+    assert(state.inventory_hot_bread > 0U ||
+           state.inventory_premium_hot_bread > 0U);
     now = 7U * 24U * 60U * 60U;
     assert(game_reduce(&state, (game_action_t){
         .type = GAME_ACTION_SETTLE_TO_TIME, .now = now,
@@ -779,6 +780,78 @@ static void test_cooking_assist_and_sale_complete_economic_loop(void)
     }));
 }
 
+static void test_recipe_research_unlocks_after_two_sessions(void)
+{
+    game_state_t state;
+    game_state_init(&state, 0U);
+    state.inventory_berries = 2U;
+    for (uint32_t session = 0U; session < 2U; session++) {
+        uint32_t now = session * 60U * 60U;
+        assert(game_reduce(&state, (game_action_t){
+            .type = GAME_ACTION_START_RESEARCH, .now = now,
+            .target = GAME_RECIPE_CARROT_STEW,
+        }));
+        assert(game_reduce(&state, (game_action_t){
+            .type = GAME_ACTION_SETTLE_TO_TIME, .now = now + 60U * 60U,
+        }));
+    }
+    assert(state.recipe_research[GAME_RECIPE_CARROT_STEW] == 100U);
+    assert(state.unlocked_recipes & (1U << GAME_RECIPE_CARROT_STEW));
+    assert(state.inventory_berries == 0U);
+}
+
+static void test_premium_dish_is_claimed_and_sells_for_bonus(void)
+{
+    game_state_t state;
+    game_state_init(&state, 0U);
+    state.inventory_wheat = 2U;
+    state.weather_seed = 70U;
+    assert(game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_START_RECIPE, .target = GAME_RECIPE_HOT_BREAD,
+    }));
+    assert(game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_SETTLE_TO_TIME, .now = 10U * 60U,
+    }));
+    assert(state.pending_premium_hot_bread == 1U);
+    assert(game_reduce(&state, (game_action_t){ .type = GAME_ACTION_CLAIM_REPORT }));
+    assert(state.inventory_premium_hot_bread == 1U);
+    uint32_t coins = state.coins;
+    assert(game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_SELL_DISH, .target = GAME_RECIPE_HOT_BREAD,
+    }));
+    assert(state.coins == coins + 42U);
+}
+
+static void test_two_hour_forest_and_travel_goals_have_distinct_results(void)
+{
+    game_state_t forest;
+    game_state_init(&forest, 0U);
+    assert(game_reduce(&forest, (game_action_t){
+        .type = GAME_ACTION_START_FOREST_2H,
+    }));
+    assert(forest.forest.ends_at == 2U * 60U * 60U);
+    assert(game_reduce(&forest, (game_action_t){
+        .type = GAME_ACTION_SETTLE_TO_TIME, .now = 2U * 60U * 60U,
+    }));
+    assert(forest.pending.wood >= 4U);
+    assert(forest.job_experience[GAME_PET_AMAI][GAME_JOB_FOREST] == 25U);
+
+    game_state_t road;
+    game_state_init(&road, 0U);
+    road.spring_day = 8U;
+    road.completed_buildings |= (uint8_t)(1U << GAME_BUILD_SIGNPOST);
+    road.inventory_hot_bread = 1U;
+    assert(game_reduce(&road, (game_action_t){
+        .type = GAME_ACTION_START_TRAVEL, .option = GAME_TRAVEL_OLD_ROAD,
+    }));
+    assert(game_reduce(&road, (game_action_t){
+        .type = GAME_ACTION_SETTLE_TO_TIME, .now = 8U * 60U * 60U,
+    }));
+    assert(road.last_travel_goal == GAME_TRAVEL_OLD_ROAD);
+    assert(road.road_fragments == 1U);
+    assert(road.notifications & 0x01U);
+}
+
 int main(void)
 {
     test_offline_acceptance_duration_matrix();
@@ -801,6 +874,9 @@ int main(void)
     test_rest_recovers_eight_per_hour_with_eight_hour_cap();
     test_sink_building_unlocks_two_additional_plots();
     test_cooking_assist_and_sale_complete_economic_loop();
+    test_recipe_research_unlocks_after_two_sessions();
+    test_premium_dish_is_claimed_and_sells_for_bonus();
+    test_two_hour_forest_and_travel_goals_have_distinct_results();
     test_all_crops_and_recipes_form_production_chains();
     test_main_story_can_reach_spring_14_without_deadlock();
     return 0;

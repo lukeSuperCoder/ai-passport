@@ -3,7 +3,7 @@
 #include <string.h>
 
 #define SAVE_MAGIC 0x5453544EU /* TSTN */
-#define SAVE_FORMAT_VERSION 13U
+#define SAVE_FORMAT_VERSION 14U
 #define SAVE_HEADER_SIZE 28U
 #define SAVE_COMMIT_MARKER 0x434F4D4DU /* COMM */
 #define SAVE_PAYLOAD_V1_SIZE 36U
@@ -18,7 +18,8 @@
 #define SAVE_PAYLOAD_V10_SIZE 344U
 #define SAVE_PAYLOAD_V11_SIZE 348U
 #define SAVE_PAYLOAD_V12_SIZE 448U
-#define SAVE_PAYLOAD_SIZE 472U
+#define SAVE_PAYLOAD_V13_SIZE 472U
+#define SAVE_PAYLOAD_SIZE 508U
 
 typedef struct {
     uint32_t sequence;
@@ -197,6 +198,20 @@ static void encode_payload(const game_state_t *state, uint8_t payload[SAVE_PAYLO
         write_u32(payload + offset + 4U, state->farm[i].planted_at);
         write_u32(payload + offset + 8U, state->farm[i].matures_at);
     }
+    for (size_t i = 0; i < GAME_RECIPE_COUNT; i++) {
+        write_u16(payload + 472U + i * 2U, state->inventory_premium_dishes[i]);
+        write_u16(payload + 482U + i * 2U, state->pending_premium_dishes[i]);
+    }
+    write_u16(payload + 492, state->inventory_premium_hot_bread);
+    write_u16(payload + 494, state->pending_premium_hot_bread);
+    memcpy(payload + 496, state->recipe_research, GAME_RECIPE_COUNT);
+    payload[501] = state->last_forest_result;
+    payload[502] = (uint8_t)state->last_travel_goal;
+    payload[503] = state->notifications;
+    payload[504] = state->forest.option;
+    payload[505] = state->kitchen.option;
+    payload[506] = state->travel.option;
+    payload[507] = state->construction.option;
 }
 
 static bool decode_payload(const uint8_t payload[SAVE_PAYLOAD_SIZE],
@@ -366,15 +381,31 @@ static bool decode_payload(const uint8_t payload[SAVE_PAYLOAD_SIZE],
             decoded.farm[i].matures_at = read_u32(payload + offset + 8U);
         }
     }
+    if (version >= 14U) {
+        for (size_t i = 0; i < GAME_RECIPE_COUNT; i++) {
+            decoded.inventory_premium_dishes[i] = read_u16(payload + 472U + i * 2U);
+            decoded.pending_premium_dishes[i] = read_u16(payload + 482U + i * 2U);
+        }
+        decoded.inventory_premium_hot_bread = read_u16(payload + 492);
+        decoded.pending_premium_hot_bread = read_u16(payload + 494);
+        memcpy(decoded.recipe_research, payload + 496, GAME_RECIPE_COUNT);
+        decoded.last_forest_result = payload[501];
+        decoded.last_travel_goal = (game_travel_goal_t)payload[502];
+        decoded.notifications = payload[503];
+        decoded.forest.option = payload[504];
+        decoded.kitchen.option = payload[505];
+        decoded.travel.option = payload[506];
+        decoded.construction.option = payload[507];
+    }
 
     if (decoded.momo.job > GAME_JOB_FARM ||
         decoded.amai.job > GAME_JOB_FARM ||
         decoded.atuan.job > GAME_JOB_FARM ||
         decoded.lulu.job > GAME_JOB_FARM ||
-        decoded.forest.kind > GAME_TASK_BUILDING ||
-        decoded.kitchen.kind > GAME_TASK_BUILDING ||
-        decoded.travel.kind > GAME_TASK_BUILDING ||
-        decoded.construction.kind > GAME_TASK_BUILDING ||
+        decoded.forest.kind > GAME_TASK_RECIPE_RESEARCH ||
+        decoded.kitchen.kind > GAME_TASK_RECIPE_RESEARCH ||
+        decoded.travel.kind > GAME_TASK_RECIPE_RESEARCH ||
+        decoded.construction.kind > GAME_TASK_RECIPE_RESEARCH ||
         decoded.construction.building >= GAME_BUILD_COUNT ||
         decoded.quest_stage < 2U || decoded.quest_stage > 11U ||
         decoded.companion_actions > 2U ||
@@ -389,6 +420,9 @@ static bool decode_payload(const uint8_t payload[SAVE_PAYLOAD_SIZE],
         decoded.kitchen.actor > GAME_ACTOR_ATUAN ||
         decoded.spring_day < 1U || decoded.spring_day > GAME_SPRING_DAY_COUNT ||
         decoded.weather > GAME_WEATHER_STORM ||
+        decoded.last_forest_result > 2U ||
+        decoded.last_travel_goal >= GAME_TRAVEL_GOAL_COUNT ||
+        decoded.travel.option >= GAME_TRAVEL_GOAL_COUNT ||
         (decoded.pending_events & ~(GAME_EVENT_MARKET | GAME_EVENT_FESTIVAL)) != 0U ||
         (decoded.completed_events & ~(GAME_EVENT_MARKET | GAME_EVENT_FESTIVAL)) != 0U ||
         decoded.momo.stamina > 100U || decoded.momo.mood > 100U ||
@@ -427,6 +461,9 @@ static bool decode_payload(const uint8_t payload[SAVE_PAYLOAD_SIZE],
     for (size_t i = 0; i < GAME_VISITOR_COUNT; i++) {
         if (decoded.visitor_stages[i] > 3U) return false;
     }
+    for (size_t i = 0; i < GAME_RECIPE_COUNT; i++) {
+        if (decoded.recipe_research[i] > 100U) return false;
+    }
     *state = decoded;
     return true;
 }
@@ -461,7 +498,8 @@ static slot_info_t inspect_slot(const save_backend_t *backend, unsigned slot)
                  (version == 10U && info.payload_length == SAVE_PAYLOAD_V10_SIZE) ||
                  (version == 11U && info.payload_length == SAVE_PAYLOAD_V11_SIZE) ||
                  (version == 12U && info.payload_length == SAVE_PAYLOAD_V12_SIZE) ||
-                 (version == 13U && info.payload_length == SAVE_PAYLOAD_SIZE);
+                 (version == 13U && info.payload_length == SAVE_PAYLOAD_V13_SIZE) ||
+                 (version == 14U && info.payload_length == SAVE_PAYLOAD_SIZE);
     return info;
 }
 

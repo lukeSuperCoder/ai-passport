@@ -159,6 +159,13 @@ int main(void)
     second.farm[4].crop = GAME_CROP_HERB;
     second.farm[4].planted_at = 6000U;
     second.farm[4].matures_at = 135600U;
+    second.inventory_premium_hot_bread = 2U;
+    second.pending_premium_dishes[GAME_RECIPE_HERB_TEA] = 3U;
+    second.recipe_research[GAME_RECIPE_FOREST_CAKE] = 50U;
+    second.last_forest_result = 2U;
+    second.last_travel_goal = GAME_TRAVEL_OLD_ROAD;
+    second.notifications = 3U;
+    second.travel.option = GAME_TRAVEL_OLD_ROAD;
     assert(save_service_store(&save, &second));
     assert(save_service_load(&save, &loaded));
     assert(loaded.coins == 80U);
@@ -220,6 +227,13 @@ int main(void)
     assert(loaded.farm[4].active);
     assert(loaded.farm[4].crop == GAME_CROP_HERB);
     assert(loaded.farm[4].matures_at == 135600U);
+    assert(loaded.inventory_premium_hot_bread == 2U);
+    assert(loaded.pending_premium_dishes[GAME_RECIPE_HERB_TEA] == 3U);
+    assert(loaded.recipe_research[GAME_RECIPE_FOREST_CAKE] == 50U);
+    assert(loaded.last_forest_result == 2U);
+    assert(loaded.last_travel_goal == GAME_TRAVEL_OLD_ROAD);
+    assert(loaded.notifications == 3U);
+    assert(loaded.travel.option == GAME_TRAVEL_OLD_ROAD);
 
     /* Slot 1 is newest. Corrupt its payload and verify fallback to slot 0. */
     storage.bytes[SAVE_SLOT_SIZE + 28U] ^= 0x01U;

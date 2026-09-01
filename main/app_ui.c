@@ -49,6 +49,7 @@ static int s_building_selection;
 static int s_partner_selection;
 static int s_event_choice;
 static int s_item_selection;
+static int s_travel_goal;
 static uint32_t s_now;
 static lv_obj_t *s_bottom_tabs[5];
 static lv_timer_t *s_menu_timer;
@@ -431,7 +432,18 @@ static void build_kitchen(void)
     snprintf(line, sizeof(line), "CROP %u  BERRIES %u",
              ui_crop_count(definition->crop_a), s_game.inventory_berries);
     label(card, line, 10, 84, &lv_font_montserrat_14, COLOR_INK);
-    label(card, s_game.kitchen.active ? "ATUAN IS COOKING" : "OK: START COOKING",
+    char action_line[36];
+    if (s_game.kitchen.active) {
+        snprintf(action_line, sizeof(action_line), "%s",
+                 s_game.kitchen.kind == GAME_TASK_RECIPE_RESEARCH
+                 ? "ATUAN IS RESEARCHING" : "ATUAN IS COOKING");
+    } else if (unlocked) {
+        snprintf(action_line, sizeof(action_line), "OK: START COOKING");
+    } else {
+        snprintf(action_line, sizeof(action_line), "OK: RESEARCH %u%%",
+                 s_game.recipe_research[recipe]);
+    }
+    label(card, action_line,
           10, 124, &lv_font_montserrat_14,
           s_game.kitchen.active ? COLOR_MUTED : COLOR_RED);
     label(screen, "UP/DOWN RECIPE  HOLD OK: BACK", 10, 276,
@@ -462,15 +474,21 @@ static void build_travel(void)
         label(card, "LOCKED UNTIL SPRING 8", 10, 51,
               &lv_font_montserrat_14, COLOR_MUTED);
     } else {
+        static const char *goals[GAME_TRAVEL_GOAL_COUNT] = {
+            "MATERIALS", "OLD ROAD", "SCENERY",
+        };
         label(card, "8 HOURS / 1 HOT BREAD", 10, 51,
               &lv_font_montserrat_14, COLOR_INK);
-        label(card, "OK: SEND AMAI + ATUAN", 10, 78,
+        char goal[32];
+        snprintf(goal, sizeof(goal), "GOAL: %s", goals[s_travel_goal]);
+        label(card, goal, 10, 78, &lv_font_montserrat_14, COLOR_RED);
+        label(card, "OK: SEND / UP-DOWN GOAL", 10, 103,
               &lv_font_montserrat_14, COLOR_RED);
     }
     char journal[32];
     snprintf(journal, sizeof(journal), "TRAVEL JOURNALS %u",
              s_game.travel_journal_count);
-    label(card, journal, 10, 120, &lv_font_montserrat_14, COLOR_INK);
+    label(card, journal, 10, 137, &lv_font_montserrat_14, COLOR_INK);
     label(screen, "HOLD OK: STATION", 10, 276,
           &lv_font_montserrat_14, COLOR_INK);
     activate_screen();
@@ -563,8 +581,11 @@ static void build_backpack_detail(void)
         const game_recipe_definition_t *dish = game_recipe_definition(recipe);
         uint16_t stock = recipe == GAME_RECIPE_HOT_BREAD
             ? s_game.inventory_hot_bread : s_game.inventory_dishes[recipe];
-        snprintf(line, sizeof(line), "> %s x%u / SELL %uG",
-                 dish->name, stock, dish->sell_price);
+        uint16_t premium = recipe == GAME_RECIPE_HOT_BREAD
+            ? s_game.inventory_premium_hot_bread
+            : s_game.inventory_premium_dishes[recipe];
+        snprintf(line, sizeof(line), "> %s x%u +%uQ / %uG",
+                 dish->name, stock, premium, dish->sell_price);
         label(card, line, 9, 126, &lv_font_montserrat_14, COLOR_RED);
         label(card, "UP/DOWN DISH  OK: SELL", 9, 157,
               &lv_font_montserrat_14, COLOR_MUTED);
@@ -728,6 +749,7 @@ void app_ui_start(const bool ok[APP_UI_DEMO_COUNT])
     s_partner_selection = 0;
     s_event_choice = 0;
     s_item_selection = 0;
+    s_travel_goal = GAME_TRAVEL_MATERIALS;
     s_last_input_tick = lv_tick_get();
     s_menu_hidden = false;
     if (!s_menu_timer) s_menu_timer = lv_timer_create(menu_timer_cb, 250U, NULL);
@@ -853,8 +875,11 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
                     .type = GAME_ACTION_SETTLE_TO_TIME, .now = now,
                 });
             }
+            bool unlocked = (candidate.unlocked_recipes &
+                             (1U << s_recipe_selection)) != 0U;
             if (game_reduce(&candidate, (game_action_t){
-                    .type = GAME_ACTION_START_RECIPE,
+                    .type = unlocked ? GAME_ACTION_START_RECIPE
+                                     : GAME_ACTION_START_RESEARCH,
                     .now = now,
                     .target = (uint8_t)s_recipe_selection,
                 }) && app_persistence_store(&candidate)) {
@@ -977,6 +1002,13 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
             s_partner_selection = 0;
             build_backpack_detail();
         } else if (s_page == PAGE_TRAVEL && ev == BSP_BTN_CLICK &&
+                   (btn == BSP_BTN_UP || btn == BSP_BTN_DOWN) &&
+                   !s_game.travel.active) {
+            int delta = btn == BSP_BTN_UP ? -1 : 1;
+            s_travel_goal = (s_travel_goal + delta +
+                             GAME_TRAVEL_GOAL_COUNT) % GAME_TRAVEL_GOAL_COUNT;
+            build_travel();
+        } else if (s_page == PAGE_TRAVEL && ev == BSP_BTN_CLICK &&
                    btn == BSP_BTN_OK && !s_game.travel.active) {
             uint32_t now = s_game.last_trusted_time;
             clock_service_now(&now);
@@ -989,6 +1021,7 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
             }
             if (game_reduce(&candidate, (game_action_t){
                     .type = GAME_ACTION_START_TRAVEL, .now = now,
+                    .option = (uint8_t)s_travel_goal,
                 }) && app_persistence_store(&candidate)) {
                 s_game = candidate;
             }

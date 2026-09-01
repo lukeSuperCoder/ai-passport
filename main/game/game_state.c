@@ -215,6 +215,18 @@ static void add_pending_dish(game_state_t *state, game_recipe_t recipe,
     }
 }
 
+static void add_pending_premium_dish(game_state_t *state,
+                                     game_recipe_t recipe, uint16_t count)
+{
+    if (recipe == GAME_RECIPE_HOT_BREAD) {
+        state->pending_premium_hot_bread = saturating_add_u16(
+            state->pending_premium_hot_bread, count);
+    } else {
+        state->pending_premium_dishes[recipe] = saturating_add_u16(
+            state->pending_premium_dishes[recipe], count);
+    }
+}
+
 static game_weather_t weather_for_day(uint32_t seed, uint8_t day)
 {
     uint32_t value = seed ^ ((uint32_t)day * 0x9E3779B9U);
@@ -294,8 +306,45 @@ static void complete_timed_task(game_state_t *state, game_timed_task_t *task)
                 state->job_experience[GAME_PET_AMAI][GAME_JOB_FOREST], 10U);
         enqueue_event(state, (uint8_t)(30U + task->task_id % 4U));
         break;
+    case GAME_TASK_FOREST_2H: {
+        game_job_score_t score = game_calculate_job_score(
+            state, GAME_PET_AMAI, GAME_JOB_FOREST, GAME_PET_COUNT);
+        uint16_t wood = (uint16_t)((4U + task->task_id % 3U) *
+                                   score.yield_percent / 100U);
+        uint16_t berries = (uint16_t)((2U + (task->task_id / 3U) % 3U) *
+                                      score.yield_percent / 100U);
+        state->pending.wood = saturating_add_u16(state->pending.wood, wood);
+        state->pending.berries = saturating_add_u16(state->pending.berries, berries);
+        if ((task->task_id & 1U) == 0U) {
+            state->pending.mushrooms = saturating_add_u16(
+                state->pending.mushrooms, 1U);
+        }
+        state->last_forest_result = state->weather == GAME_WEATHER_STORM
+            ? 2U : (uint8_t)(task->task_id % 2U);
+        state->amai.job = GAME_JOB_REST;
+        uint8_t cost = state->last_forest_result == 2U ? 20U : 15U;
+        state->amai.stamina = state->amai.stamina > cost
+            ? (uint8_t)(state->amai.stamina - cost) : 0U;
+        if (state->forest_runs < UINT8_MAX) state->forest_runs++;
+        if (state->road_fragments < 9U) state->road_fragments++;
+        state->job_experience[GAME_PET_AMAI][GAME_JOB_FOREST] =
+            saturating_add_u16(
+                state->job_experience[GAME_PET_AMAI][GAME_JOB_FOREST], 25U);
+        enqueue_event(state, (uint8_t)(34U + task->task_id % 6U));
+        break;
+    }
     case GAME_TASK_HOT_BREAD:
-        add_pending_dish(state, task->recipe, 1U);
+        {
+            game_job_score_t score = game_calculate_job_score(
+                state, GAME_PET_ATUAN, GAME_JOB_KITCHEN, GAME_PET_COUNT);
+            uint8_t roll = (uint8_t)((task->task_id * 37U +
+                                      state->weather_seed) % 100U);
+            if (roll < score.premium_chance) {
+                add_pending_premium_dish(state, task->recipe, 1U);
+            } else {
+                add_pending_dish(state, task->recipe, 1U);
+            }
+        }
         if (state->cooked_counts[task->recipe] < UINT16_MAX) {
             state->cooked_counts[task->recipe]++;
         }
@@ -307,14 +356,37 @@ static void complete_timed_task(game_state_t *state, game_timed_task_t *task)
         state->atuan.stamina = state->atuan.stamina > 4U
             ? (uint8_t)(state->atuan.stamina - 4U) : 0U;
         break;
+    case GAME_TASK_RECIPE_RESEARCH:
+        state->recipe_research[task->recipe] =
+            state->recipe_research[task->recipe] >= 50U
+            ? 100U : (uint8_t)(state->recipe_research[task->recipe] + 50U);
+        if (state->recipe_research[task->recipe] >= 100U) {
+            state->unlocked_recipes |= (uint8_t)(1U << task->recipe);
+        }
+        state->atuan.job = GAME_JOB_REST;
+        state->atuan.stamina = state->atuan.stamina > 6U
+            ? (uint8_t)(state->atuan.stamina - 6U) : 0U;
+        enqueue_event(state, (uint8_t)(26U + task->task_id % 4U));
+        break;
     case GAME_TASK_TRAVEL_8H:
-        state->pending.wood = saturating_add_u16(state->pending.wood, 5U);
-        state->pending.berries = saturating_add_u16(state->pending.berries, 3U);
+        state->last_travel_goal = (game_travel_goal_t)task->option;
+        state->pending.wood = saturating_add_u16(
+            state->pending.wood,
+            task->option == GAME_TRAVEL_MATERIALS ? 8U : 4U);
+        state->pending.berries = saturating_add_u16(
+            state->pending.berries,
+            task->option == GAME_TRAVEL_SCENERY ? 5U : 3U);
         state->pending.mushrooms = saturating_add_u16(
             state->pending.mushrooms, 1U);
         if (game_relationship(state, GAME_PET_AMAI, GAME_PET_ATUAN) >= 50U) {
             state->pending.mushrooms = saturating_add_u16(
                 state->pending.mushrooms, 1U);
+        }
+        if (task->option == GAME_TRAVEL_OLD_ROAD && state->road_fragments < 9U) {
+            state->road_fragments++;
+        }
+        if (task->option == GAME_TRAVEL_SCENERY && state->reputation < 100U) {
+            state->reputation++;
         }
         int relation = relationship_index(GAME_PET_AMAI, GAME_PET_ATUAN);
         if (relation >= 0) {
@@ -330,6 +402,7 @@ static void complete_timed_task(game_state_t *state, game_timed_task_t *task)
             ? (uint8_t)(state->amai.stamina - 15U) : 0U;
         state->atuan.stamina = state->atuan.stamina > 15U
             ? (uint8_t)(state->atuan.stamina - 15U) : 0U;
+        state->notifications |= 0x01U;
         break;
     case GAME_TASK_BUILDING:
         state->completed_buildings |= (uint8_t)(1U << task->building);
@@ -603,23 +676,28 @@ bool game_reduce(game_state_t *state, game_action_t action)
     }
 
     case GAME_ACTION_START_AMAI_FOREST:
+    case GAME_ACTION_START_FOREST_2H: {
+        uint32_t duration = action.type == GAME_ACTION_START_FOREST_2H
+            ? 2U * 60U * 60U : 30U * 60U;
         if (state->forest.active || state->amai.job != GAME_JOB_REST ||
-            action.now > UINT32_MAX - 30U * 60U ||
+            action.now > UINT32_MAX - duration ||
             action.now != state->last_settled_time) {
             return false;
         }
         state->forest.active = true;
-        state->forest.kind = GAME_TASK_FOREST_30M;
+        state->forest.kind = action.type == GAME_ACTION_START_FOREST_2H
+            ? GAME_TASK_FOREST_2H : GAME_TASK_FOREST_30M;
         state->forest.actor = GAME_ACTOR_AMAI;
         state->forest.task_id = state->commit_sequence + 1U;
         state->forest.started_at = action.now;
-        state->forest.ends_at = action.now + 30U * 60U;
+        state->forest.ends_at = action.now + duration;
         state->amai.job = GAME_JOB_FOREST;
         state->amai.job_started_at = action.now;
         state->last_trusted_time = action.now;
         state->last_settled_time = action.now;
         state->commit_sequence++;
         return true;
+    }
 
     case GAME_ACTION_START_ATUAN_HOT_BREAD:
     case GAME_ACTION_START_RECIPE: {
@@ -684,9 +762,21 @@ bool game_reduce(game_state_t *state, game_action_t action)
             state->inventory_dishes[recipe] = saturating_add_u16(
                 state->inventory_dishes[recipe], state->pending_dishes[recipe]);
         }
+        state->inventory_premium_hot_bread = saturating_add_u16(
+            state->inventory_premium_hot_bread,
+            state->pending_premium_hot_bread);
+        for (game_recipe_t recipe = GAME_RECIPE_CARROT_STEW;
+             recipe < GAME_RECIPE_COUNT; recipe++) {
+            state->inventory_premium_dishes[recipe] = saturating_add_u16(
+                state->inventory_premium_dishes[recipe],
+                state->pending_premium_dishes[recipe]);
+        }
         memset(&state->pending, 0, sizeof(state->pending));
         memset(state->pending_crops, 0, sizeof(state->pending_crops));
         memset(state->pending_dishes, 0, sizeof(state->pending_dishes));
+        memset(state->pending_premium_dishes, 0,
+               sizeof(state->pending_premium_dishes));
+        state->pending_premium_hot_bread = 0U;
         state->commit_sequence++;
         return true;
 
@@ -743,17 +833,21 @@ bool game_reduce(game_state_t *state, game_action_t action)
             state->amai.job != GAME_JOB_REST ||
             state->atuan.job != GAME_JOB_REST ||
             state->amai.stamina < 40U || state->atuan.stamina < 40U ||
-            state->inventory_hot_bread == 0U ||
+            (state->inventory_hot_bread == 0U &&
+             state->inventory_premium_hot_bread == 0U) ||
             action.now > UINT32_MAX - 8U * 60U * 60U ||
-            action.now != state->last_settled_time) {
+            action.now != state->last_settled_time ||
+            action.option >= GAME_TRAVEL_GOAL_COUNT) {
             return false;
         }
-        state->inventory_hot_bread--;
+        if (state->inventory_hot_bread > 0U) state->inventory_hot_bread--;
+        else state->inventory_premium_hot_bread--;
         state->travel.active = true;
         state->travel.kind = GAME_TASK_TRAVEL_8H;
         state->travel.task_id = state->commit_sequence + 1U;
         state->travel.started_at = action.now;
         state->travel.ends_at = action.now + 8U * 60U * 60U;
+        state->travel.option = action.option;
         state->amai.job = GAME_JOB_FOREST;
         state->atuan.job = GAME_JOB_FOREST;
         state->amai.job_started_at = action.now;
@@ -858,10 +952,45 @@ bool game_reduce(game_state_t *state, game_action_t action)
         if (!definition) return false;
         uint16_t *stock = recipe == GAME_RECIPE_HOT_BREAD
             ? &state->inventory_hot_bread : &state->inventory_dishes[recipe];
+        bool premium = false;
+        if (*stock == 0U) {
+            stock = recipe == GAME_RECIPE_HOT_BREAD
+                ? &state->inventory_premium_hot_bread
+                : &state->inventory_premium_dishes[recipe];
+            premium = true;
+        }
         if (*stock == 0U) return false;
         (*stock)--;
-        state->coins = saturating_add_u32(state->coins, definition->sell_price);
+        uint32_t price = premium
+            ? (uint32_t)definition->sell_price * 3U / 2U
+            : definition->sell_price;
+        state->coins = saturating_add_u32(state->coins, price);
         if (state->reputation < 100U) state->reputation++;
+        state->commit_sequence++;
+        return true;
+    }
+
+    case GAME_ACTION_START_RESEARCH: {
+        game_recipe_t recipe = (game_recipe_t)action.target;
+        const game_recipe_definition_t *definition = game_recipe_definition(recipe);
+        if (!definition || recipe == GAME_RECIPE_HOT_BREAD ||
+            (state->unlocked_recipes & (1U << recipe)) != 0U ||
+            state->recipe_research[recipe] >= 100U || state->kitchen.active ||
+            state->atuan.job != GAME_JOB_REST || state->inventory_berries == 0U ||
+            action.now > UINT32_MAX - 60U * 60U ||
+            action.now != state->last_settled_time) {
+            return false;
+        }
+        state->inventory_berries--;
+        state->kitchen.active = true;
+        state->kitchen.kind = GAME_TASK_RECIPE_RESEARCH;
+        state->kitchen.recipe = recipe;
+        state->kitchen.actor = GAME_ACTOR_ATUAN;
+        state->kitchen.task_id = state->commit_sequence + 1U;
+        state->kitchen.started_at = action.now;
+        state->kitchen.ends_at = action.now + 60U * 60U;
+        state->atuan.job = GAME_JOB_KITCHEN;
+        state->atuan.job_started_at = action.now;
         state->commit_sequence++;
         return true;
     }
