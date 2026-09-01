@@ -33,10 +33,13 @@ add_executable(ai_passport_sim
     src/main.c
     src/bsp_mock.c
     src/freertos_mock.c
+    src/app_persistence_file.c
+    src/clock_service_sim.c
     ${APP_DIR}/app_ui.c
     ${APP_DIR}/ui_pixel.c
     ${APP_DIR}/ui_pixel_math.c
     ${APP_DIR}/game/game_state.c
+    ${APP_DIR}/services/save_service.c
     ${APP_DIR}/demo_display.c
     ${APP_DIR}/demo_button.c
     ${APP_DIR}/demo_audio.c

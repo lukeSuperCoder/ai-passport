@@ -1,5 +1,7 @@
 #include "app_ui.h"
 #include "game/game_state.h"
+#include "services/app_persistence.h"
+#include "services/clock_service.h"
 #include "lvgl.h"
 
 #include <stdio.h>
@@ -197,15 +199,29 @@ static void build_schedule(void)
 void app_ui_start(const bool ok[APP_UI_DEMO_COUNT])
 {
     (void)ok;
-    game_state_init(&s_game, 1000U);
-    game_reduce(&s_game, (game_action_t){
-        .type = GAME_ACTION_ASSIGN_MOMO_RECEPTION,
-        .now = 1000U,
-    });
-    game_reduce(&s_game, (game_action_t){
-        .type = GAME_ACTION_SETTLE_TO_TIME,
-        .now = 1000U + 6U * 3600U,
-    });
+    uint32_t now = 22600U;
+    clock_service_now(&now);
+    if (!app_persistence_load(&s_game)) {
+        uint32_t started_at = now >= 6U * 3600U ? now - 6U * 3600U : 0U;
+        game_state_init(&s_game, started_at);
+        game_reduce(&s_game, (game_action_t){
+            .type = GAME_ACTION_ASSIGN_MOMO_RECEPTION,
+            .now = started_at,
+        });
+        game_reduce(&s_game, (game_action_t){
+            .type = GAME_ACTION_SETTLE_TO_TIME,
+            .now = now,
+        });
+        app_persistence_store(&s_game);
+    } else {
+        game_state_t candidate = s_game;
+        if (game_reduce(&candidate, (game_action_t){
+                .type = GAME_ACTION_SETTLE_TO_TIME,
+                .now = now,
+            }) && app_persistence_store(&candidate)) {
+            s_game = candidate;
+        }
+    }
     s_page = PAGE_STATION;
     s_top_selection = 0;
     s_schedule_selection = 0;
@@ -227,9 +243,13 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
             refresh_schedule_selection();
         } else if (ev == BSP_BTN_CLICK && btn == BSP_BTN_OK &&
                    s_schedule_selection == 0 && s_game.pending.available) {
-            game_reduce(&s_game, (game_action_t){
+            game_state_t candidate = s_game;
+            game_reduce(&candidate, (game_action_t){
                 .type = GAME_ACTION_CLAIM_REPORT,
             });
+            if (app_persistence_store(&candidate)) {
+                s_game = candidate;
+            }
             build_schedule();
         }
         return;
