@@ -155,6 +155,10 @@ int main(void)
     second.event_history[0] = 53U;
     second.event_history[1] = 18U;
     second.visitor_stages[0] = 1U;
+    second.farm[4].active = true;
+    second.farm[4].crop = GAME_CROP_HERB;
+    second.farm[4].planted_at = 6000U;
+    second.farm[4].matures_at = 135600U;
     assert(save_service_store(&save, &second));
     assert(save_service_load(&save, &loaded));
     assert(loaded.coins == 80U);
@@ -213,6 +217,9 @@ int main(void)
     assert(loaded.event_history_count == 2U);
     assert(loaded.event_history[1] == 18U);
     assert(loaded.visitor_stages[0] == 1U);
+    assert(loaded.farm[4].active);
+    assert(loaded.farm[4].crop == GAME_CROP_HERB);
+    assert(loaded.farm[4].matures_at == 135600U);
 
     /* Slot 1 is newest. Corrupt its payload and verify fallback to slot 0. */
     storage.bytes[SAVE_SLOT_SIZE + 28U] ^= 0x01U;

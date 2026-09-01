@@ -3,7 +3,7 @@
 #include <string.h>
 
 #define SAVE_MAGIC 0x5453544EU /* TSTN */
-#define SAVE_FORMAT_VERSION 12U
+#define SAVE_FORMAT_VERSION 13U
 #define SAVE_HEADER_SIZE 28U
 #define SAVE_COMMIT_MARKER 0x434F4D4DU /* COMM */
 #define SAVE_PAYLOAD_V1_SIZE 36U
@@ -17,7 +17,8 @@
 #define SAVE_PAYLOAD_V9_SIZE 292U
 #define SAVE_PAYLOAD_V10_SIZE 344U
 #define SAVE_PAYLOAD_V11_SIZE 348U
-#define SAVE_PAYLOAD_SIZE 448U
+#define SAVE_PAYLOAD_V12_SIZE 448U
+#define SAVE_PAYLOAD_SIZE 472U
 
 typedef struct {
     uint32_t sequence;
@@ -115,7 +116,7 @@ static void encode_payload(const game_state_t *state, uint8_t payload[SAVE_PAYLO
     payload[108] = state->lulu.mood;
     write_u32(payload + 112, state->lulu.job_started_at);
     write_u16(payload + 116, state->inventory_wheat_seed);
-    for (size_t i = 0; i < GAME_FARM_PLOT_COUNT; i++) {
+    for (size_t i = 0; i < GAME_FARM_INITIAL_PLOT_COUNT; i++) {
         size_t offset = 120U + i * 12U;
         payload[offset] = state->farm[i].active ? 1U : 0U;
         payload[offset + 1U] = (uint8_t)state->farm[i].crop;
@@ -188,6 +189,14 @@ static void encode_payload(const game_state_t *state, uint8_t payload[SAVE_PAYLO
     memcpy(payload + 429, state->event_history, GAME_EVENT_HISTORY_SIZE);
     payload[439] = state->event_history_count;
     memcpy(payload + 440, state->visitor_stages, GAME_VISITOR_COUNT);
+    for (size_t i = GAME_FARM_INITIAL_PLOT_COUNT;
+         i < GAME_FARM_PLOT_COUNT; i++) {
+        size_t offset = 448U + (i - GAME_FARM_INITIAL_PLOT_COUNT) * 12U;
+        payload[offset] = state->farm[i].active ? 1U : 0U;
+        payload[offset + 1U] = (uint8_t)state->farm[i].crop;
+        write_u32(payload + offset + 4U, state->farm[i].planted_at);
+        write_u32(payload + offset + 8U, state->farm[i].matures_at);
+    }
 }
 
 static bool decode_payload(const uint8_t payload[SAVE_PAYLOAD_SIZE],
@@ -250,7 +259,7 @@ static bool decode_payload(const uint8_t payload[SAVE_PAYLOAD_SIZE],
         decoded.lulu.mood = payload[108];
         decoded.lulu.job_started_at = read_u32(payload + 112);
         decoded.inventory_wheat_seed = read_u16(payload + 116);
-        for (size_t i = 0; i < GAME_FARM_PLOT_COUNT; i++) {
+        for (size_t i = 0; i < GAME_FARM_INITIAL_PLOT_COUNT; i++) {
             size_t offset = 120U + i * 12U;
             decoded.farm[i].active = payload[offset] != 0U;
             decoded.farm[i].crop = (game_crop_t)payload[offset + 1U];
@@ -347,6 +356,16 @@ static bool decode_payload(const uint8_t payload[SAVE_PAYLOAD_SIZE],
         decoded.event_history_count = payload[439];
         memcpy(decoded.visitor_stages, payload + 440, GAME_VISITOR_COUNT);
     }
+    if (version >= 13U) {
+        for (size_t i = GAME_FARM_INITIAL_PLOT_COUNT;
+             i < GAME_FARM_PLOT_COUNT; i++) {
+            size_t offset = 448U + (i - GAME_FARM_INITIAL_PLOT_COUNT) * 12U;
+            decoded.farm[i].active = payload[offset] != 0U;
+            decoded.farm[i].crop = (game_crop_t)payload[offset + 1U];
+            decoded.farm[i].planted_at = read_u32(payload + offset + 4U);
+            decoded.farm[i].matures_at = read_u32(payload + offset + 8U);
+        }
+    }
 
     if (decoded.momo.job > GAME_JOB_FARM ||
         decoded.amai.job > GAME_JOB_FARM ||
@@ -441,7 +460,8 @@ static slot_info_t inspect_slot(const save_backend_t *backend, unsigned slot)
                  (version == 9U && info.payload_length == SAVE_PAYLOAD_V9_SIZE) ||
                  (version == 10U && info.payload_length == SAVE_PAYLOAD_V10_SIZE) ||
                  (version == 11U && info.payload_length == SAVE_PAYLOAD_V11_SIZE) ||
-                 (version == 12U && info.payload_length == SAVE_PAYLOAD_SIZE);
+                 (version == 12U && info.payload_length == SAVE_PAYLOAD_V12_SIZE) ||
+                 (version == 13U && info.payload_length == SAVE_PAYLOAD_SIZE);
     return info;
 }
 

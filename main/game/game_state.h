@@ -5,7 +5,8 @@
 
 #define GAME_OFFLINE_CAP_SECONDS (7U * 24U * 60U * 60U)
 #define GAME_RECEPTION_CAP_SECONDS (8U * 60U * 60U)
-#define GAME_FARM_PLOT_COUNT 4U
+#define GAME_FARM_INITIAL_PLOT_COUNT 4U
+#define GAME_FARM_PLOT_COUNT 6U
 #define GAME_SPRING_DAY_COUNT 14U
 #define GAME_EVENT_MARKET 0x01U
 #define GAME_EVENT_FESTIVAL 0x02U
@@ -122,6 +123,12 @@ typedef struct {
 } game_queued_event_t;
 
 typedef struct {
+    int16_t score;
+    uint8_t yield_percent;
+    uint8_t premium_chance;
+} game_job_score_t;
+
+typedef struct {
     uint32_t coins;
     uint32_t last_trusted_time;
     uint32_t last_settled_time;
@@ -197,6 +204,8 @@ typedef enum {
     GAME_ACTION_TALK_TO_PET,
     GAME_ACTION_TOGGLE_SETTING,
     GAME_ACTION_RESOLVE_CONTENT_EVENT,
+    GAME_ACTION_SELL_DISH,
+    GAME_ACTION_ASSIST_KITCHEN,
 } game_action_type_t;
 
 typedef struct {
@@ -211,3 +220,7 @@ bool game_reduce(game_state_t *state, game_action_t action);
 const char *game_weather_name(game_weather_t weather);
 uint8_t game_relationship(const game_state_t *state, game_pet_id_t left,
                           game_pet_id_t right);
+game_job_score_t game_calculate_job_score(const game_state_t *state,
+                                          game_pet_id_t pet, game_job_t job,
+                                          game_pet_id_t partner);
+uint8_t game_available_farm_plots(const game_state_t *state);

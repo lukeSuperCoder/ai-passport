@@ -481,6 +481,51 @@ static void test_content_events_wait_for_player_choice(void)
            relation + 3U);
 }
 
+static void test_job_scores_include_strength_mood_relationship_and_weather(void)
+{
+    game_state_t state;
+    game_state_init(&state, 0U);
+    state.weather = GAME_WEATHER_CLEAR;
+    game_job_score_t momo = game_calculate_job_score(
+        &state, GAME_PET_MOMO, GAME_JOB_RECEPTION, GAME_PET_COUNT);
+    assert(momo.score == 107);
+    assert(momo.yield_percent == 120U);
+    assert(momo.premium_chance == 15U);
+
+    game_job_score_t amai = game_calculate_job_score(
+        &state, GAME_PET_AMAI, GAME_JOB_FOREST, GAME_PET_ATUAN);
+    assert(amai.score == 112);
+    state.relationships[5] = 50U;
+    state.weather = GAME_WEATHER_CLOUDY;
+    amai = game_calculate_job_score(
+        &state, GAME_PET_AMAI, GAME_JOB_FOREST, GAME_PET_ATUAN);
+    assert(amai.score == 127);
+    assert(amai.yield_percent == 140U);
+    state.amai.mood = 20U;
+    state.job_experience[GAME_PET_AMAI][GAME_JOB_FOREST] = 150U;
+    amai = game_calculate_job_score(
+        &state, GAME_PET_AMAI, GAME_JOB_FOREST, GAME_PET_ATUAN);
+    assert(amai.score == 122);
+}
+
+static void test_rest_recovers_eight_per_hour_with_eight_hour_cap(void)
+{
+    game_state_t state;
+    game_state_init(&state, 0U);
+    state.momo.stamina = 10U;
+    state.lulu.stamina = 50U;
+    assert(game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_SETTLE_TO_TIME, .now = 2U * 60U * 60U,
+    }));
+    assert(state.momo.stamina == 26U);
+    assert(state.lulu.stamina == 66U);
+    assert(game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_SETTLE_TO_TIME, .now = 20U * 60U * 60U,
+    }));
+    assert(state.momo.stamina == 90U);
+    assert(state.lulu.stamina == 100U);
+}
+
 static void test_main_story_can_reach_spring_14_without_deadlock(void)
 {
     game_state_t state;
@@ -629,7 +674,7 @@ static void test_all_crops_and_recipes_form_production_chains(void)
     state.inventory_seeds[GAME_CROP_CARROT] = 1U;
     state.inventory_seeds[GAME_CROP_STRAWBERRY] = 1U;
     state.inventory_seeds[GAME_CROP_HERB] = 1U;
-    for (uint8_t plot = 0U; plot < GAME_FARM_PLOT_COUNT; plot++) {
+    for (uint8_t plot = 0U; plot < GAME_FARM_INITIAL_PLOT_COUNT; plot++) {
         game_crop_t crop = (game_crop_t)(plot + 1U);
         assert(game_reduce(&state, (game_action_t){
             .type = GAME_ACTION_PLANT_CROP,
@@ -683,6 +728,57 @@ static void test_all_crops_and_recipes_form_production_chains(void)
     }
 }
 
+static void test_sink_building_unlocks_two_additional_plots(void)
+{
+    game_state_t state;
+    game_state_init(&state, 0U);
+    assert(game_available_farm_plots(&state) == 4U);
+    assert(!game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_PLANT_CROP, .now = 0U,
+        .target = 4U, .option = GAME_CROP_WHEAT,
+    }));
+    state.completed_buildings |= (uint8_t)(1U << GAME_BUILD_SINK);
+    assert(game_available_farm_plots(&state) == 6U);
+    assert(game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_PLANT_CROP, .now = 0U,
+        .target = 4U, .option = GAME_CROP_WHEAT,
+    }));
+    assert(state.farm[4].active);
+}
+
+static void test_cooking_assist_and_sale_complete_economic_loop(void)
+{
+    game_state_t state;
+    game_state_init(&state, 0U);
+    state.inventory_wheat = 2U;
+    assert(game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_START_RECIPE, .now = 0U,
+        .target = GAME_RECIPE_HOT_BREAD,
+    }));
+    assert(state.kitchen.ends_at == 10U * 60U);
+    assert(game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_ASSIST_KITCHEN, .now = 0U,
+    }));
+    assert(state.kitchen.ends_at == 5U * 60U);
+    assert(state.companion_actions == 1U);
+    assert(state.player_affinity[GAME_PET_ATUAN] == 3U);
+    assert(game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_SETTLE_TO_TIME, .now = 5U * 60U,
+    }));
+    assert(game_reduce(&state, (game_action_t){ .type = GAME_ACTION_CLAIM_REPORT }));
+    assert(state.inventory_hot_bread == 1U);
+    uint32_t coins = state.coins;
+    assert(game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_SELL_DISH, .target = GAME_RECIPE_HOT_BREAD,
+    }));
+    assert(state.inventory_hot_bread == 0U);
+    assert(state.coins == coins + 28U);
+    assert(state.reputation == 1U);
+    assert(!game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_SELL_DISH, .target = GAME_RECIPE_HOT_BREAD,
+    }));
+}
+
 int main(void)
 {
     test_offline_acceptance_duration_matrix();
@@ -701,6 +797,10 @@ int main(void)
     test_content_catalog_is_complete_and_valid();
     test_settings_toggle_deterministically();
     test_content_events_wait_for_player_choice();
+    test_job_scores_include_strength_mood_relationship_and_weather();
+    test_rest_recovers_eight_per_hour_with_eight_hour_cap();
+    test_sink_building_unlocks_two_additional_plots();
+    test_cooking_assist_and_sale_complete_economic_loop();
     test_all_crops_and_recipes_form_production_chains();
     test_main_story_can_reach_spring_14_without_deadlock();
     return 0;

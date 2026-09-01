@@ -9,6 +9,13 @@ _Static_assert(sizeof(game_state_t) <= 12U * 1024U,
                "game_state_t exceeds the MVP resident RAM budget");
 
 static void refresh_quest_progress(game_state_t *state);
+static game_pet_state_t *pet_state(game_state_t *state, game_pet_id_t pet);
+
+uint8_t game_available_farm_plots(const game_state_t *state)
+{
+    return state && (state->completed_buildings & (1U << GAME_BUILD_SINK)) != 0U
+        ? GAME_FARM_PLOT_COUNT : GAME_FARM_INITIAL_PLOT_COUNT;
+}
 
 static int relationship_index(game_pet_id_t left, game_pet_id_t right)
 {
@@ -32,6 +39,75 @@ uint8_t game_relationship(const game_state_t *state, game_pet_id_t left,
 {
     int index = relationship_index(left, right);
     return state && index >= 0 ? state->relationships[index] : 0U;
+}
+
+game_job_score_t game_calculate_job_score(const game_state_t *state,
+                                          game_pet_id_t pet, game_job_t job,
+                                          game_pet_id_t partner)
+{
+    game_job_score_t result = { .score = 0, .yield_percent = 80U };
+    const game_pet_definition_t *definition = game_pet_definition(pet);
+    if (!state || !definition || job <= GAME_JOB_REST || job > GAME_JOB_FARM) {
+        return result;
+    }
+    uint8_t primary = 0U;
+    uint8_t secondary = 0U;
+    switch (job) {
+    case GAME_JOB_RECEPTION:
+        primary = definition->charm;
+        secondary = definition->perception;
+        break;
+    case GAME_JOB_KITCHEN:
+        primary = definition->dexterity;
+        secondary = definition->focus;
+        break;
+    case GAME_JOB_FARM:
+        primary = definition->dexterity;
+        secondary = definition->focus;
+        break;
+    case GAME_JOB_FOREST:
+        primary = definition->perception;
+        secondary = definition->stamina;
+        break;
+    case GAME_JOB_REST:
+        break;
+    }
+    int score = 50 + primary * 5 + secondary * 3;
+    if (definition->preferred_job == job) score += 25;
+    game_pet_state_t *pet_status = pet_state((game_state_t *)state, pet);
+    if (pet_status->mood >= 70U) score += 5;
+    else if (pet_status->mood < 40U) score -= 10;
+    uint16_t experience = state->job_experience[pet][job];
+    if (experience >= 150U) score += 10;
+    else if (experience >= 50U) score += 5;
+    if (partner < GAME_PET_COUNT && partner != pet) {
+        uint8_t relationship = game_relationship(state, pet, partner);
+        if (relationship >= 80U) score += 10;
+        else if (relationship >= 50U) score += 5;
+    }
+    if (job == GAME_JOB_RECEPTION) {
+        if (state->weather == GAME_WEATHER_RAIN) score -= 10;
+        else if (state->weather == GAME_WEATHER_STORM) score += 10;
+    } else if (job == GAME_JOB_FOREST) {
+        if (state->weather == GAME_WEATHER_CLOUDY) score += 10;
+        else if (state->weather == GAME_WEATHER_STORM) score -= 10;
+    } else if (job == GAME_JOB_FARM && state->weather >= GAME_WEATHER_RAIN) {
+        score += 10;
+    }
+    if (score < 0) score = 0;
+    if (score > INT16_MAX) score = INT16_MAX;
+    result.score = (int16_t)score;
+    if (score >= 110) {
+        result.yield_percent = 140U;
+        result.premium_chance = 25U;
+    } else if (score >= 90) {
+        result.yield_percent = 120U;
+        result.premium_chance = 15U;
+    } else if (score >= 70) {
+        result.yield_percent = 100U;
+        result.premium_chance = 5U;
+    }
+    return result;
 }
 
 static game_pet_state_t *pet_state(game_state_t *state, game_pet_id_t pet)
@@ -387,6 +463,17 @@ static void settle_reception(game_state_t *state, uint32_t from, uint32_t elapse
     }
 }
 
+static void recover_resting_pet(game_pet_state_t *pet, game_job_t initial_job,
+                                uint32_t elapsed)
+{
+    if (initial_job != GAME_JOB_REST || pet->stamina >= 100U) return;
+    uint32_t hours = elapsed / 3600U;
+    if (hours > 8U) hours = 8U;
+    uint32_t recovered = hours * 8U;
+    pet->stamina = recovered >= 100U - pet->stamina
+        ? 100U : (uint8_t)(pet->stamina + recovered);
+}
+
 void game_state_init(game_state_t *state, uint32_t now)
 {
     if (!state) return;
@@ -456,6 +543,10 @@ bool game_reduce(game_state_t *state, game_action_t action)
             elapsed = GAME_OFFLINE_CAP_SECONDS;
         }
         uint32_t settlement_end = state->last_settled_time + elapsed;
+        game_job_t initial_momo_job = state->momo.job;
+        game_job_t initial_lulu_job = state->lulu.job;
+        game_job_t initial_amai_job = state->amai.job;
+        game_job_t initial_atuan_job = state->atuan.job;
         if (state->momo.job == GAME_JOB_RECEPTION) {
             settle_reception(state, state->last_settled_time, elapsed);
         }
@@ -499,6 +590,10 @@ bool game_reduce(game_state_t *state, game_action_t action)
             state->pending.elapsed_seconds = saturating_add_u32(
                 state->pending.elapsed_seconds, elapsed);
         }
+        recover_resting_pet(&state->momo, initial_momo_job, elapsed);
+        recover_resting_pet(&state->lulu, initial_lulu_job, elapsed);
+        recover_resting_pet(&state->amai, initial_amai_job, elapsed);
+        recover_resting_pet(&state->atuan, initial_atuan_job, elapsed);
         /* Calendar follows trusted wall time even when economic simulation is capped. */
         update_calendar(state, action.now);
         state->last_settled_time = action.now;
@@ -600,7 +695,7 @@ bool game_reduce(game_state_t *state, game_action_t action)
         game_crop_t crop = action.type == GAME_ACTION_PLANT_WHEAT
             ? GAME_CROP_WHEAT : (game_crop_t)action.option;
         const game_crop_definition_t *definition = game_crop_definition(crop);
-        if (!definition || action.target >= GAME_FARM_PLOT_COUNT ||
+        if (!definition || action.target >= game_available_farm_plots(state) ||
             state->farm[action.target].active ||
             seed_inventory(state, crop) == 0U ||
             action.now > UINT32_MAX - definition->grow_seconds ||
@@ -756,6 +851,37 @@ bool game_reduce(game_state_t *state, game_action_t action)
         state->commit_sequence++;
         return true;
     }
+
+    case GAME_ACTION_SELL_DISH: {
+        game_recipe_t recipe = (game_recipe_t)action.target;
+        const game_recipe_definition_t *definition = game_recipe_definition(recipe);
+        if (!definition) return false;
+        uint16_t *stock = recipe == GAME_RECIPE_HOT_BREAD
+            ? &state->inventory_hot_bread : &state->inventory_dishes[recipe];
+        if (*stock == 0U) return false;
+        (*stock)--;
+        state->coins = saturating_add_u32(state->coins, definition->sell_price);
+        if (state->reputation < 100U) state->reputation++;
+        state->commit_sequence++;
+        return true;
+    }
+
+    case GAME_ACTION_ASSIST_KITCHEN:
+        if (!state->kitchen.active || state->companion_actions == 0U ||
+            action.now != state->last_settled_time ||
+            state->kitchen.ends_at <= action.now) {
+            return false;
+        }
+        state->companion_actions--;
+        state->kitchen.ends_at = action.now +
+            (state->kitchen.ends_at - action.now) / 2U;
+        state->player_affinity[GAME_PET_ATUAN] =
+            state->player_affinity[GAME_PET_ATUAN] > 97U ? 100U :
+            (uint8_t)(state->player_affinity[GAME_PET_ATUAN] + 3U);
+        state->atuan.mood = state->atuan.mood > 90U ? 100U :
+            (uint8_t)(state->atuan.mood + 10U);
+        state->commit_sequence++;
+        return true;
     }
 
     return false;

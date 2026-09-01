@@ -27,6 +27,28 @@ The first vertical slice intentionally starts with a deterministic six-hour
 reception report. Open Schedule and claim the 60-coin reward to exercise the
 state reducer and page lifecycle.
 
+## Playable MVP loop
+
+The simulator now exposes the complete top-level navigation:
+
+- **Inn** shows real time, spring day, weather, time-of-day colors, traveler
+  dialogue, pending reports, and story-event indicators. The bottom menu hides
+  after five idle seconds; press a direction key to reveal it.
+- **Plan** claims offline rewards, resolves story choices, sends Amai to the
+  forest, and opens the five-recipe kitchen. During cooking, press OK again to
+  spend a companion action and halve the remaining time.
+- **Farm** opens each plot and selects wheat, carrot, strawberry, or herb. Four
+  plots are initially available; repairing the sink unlocks plots five and six.
+- **Trip** sends Amai and Atuan to Mistpine Forest after Spring 8 and signpost
+  repair. Their relationship changes the rare-material result.
+- **Bag** contains items and dish sales, partner talk, six buildings, the ten
+  main quests and event history, album progress, and persistent settings.
+
+A normal play loop is: claim the welcome report, plant crops, advance the
+injected clock, claim the harvest, cook a dish, assist the cooking task, advance
+time again, claim and sell the dish, then spend the proceeds on buildings.
+Use a later `TIME_STATION_NOW` value on each restart to advance timed work.
+
 The simulator uses timestamp `22600` by default. Inject a later trusted time to
 test offline settlement without waiting:
 

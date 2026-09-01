@@ -31,6 +31,7 @@ typedef enum {
     PAGE_BUILDINGS,
     PAGE_BACKPACK_DETAIL,
     PAGE_EVENT,
+    PAGE_COOK_ASSIST,
 } app_page_t;
 
 static game_state_t s_game;
@@ -47,7 +48,12 @@ static int s_backpack_selection;
 static int s_building_selection;
 static int s_partner_selection;
 static int s_event_choice;
+static int s_item_selection;
 static uint32_t s_now;
+static lv_obj_t *s_bottom_tabs[5];
+static lv_timer_t *s_menu_timer;
+static uint32_t s_last_input_tick;
+static bool s_menu_hidden;
 
 static uint16_t ui_crop_count(game_crop_t crop)
 {
@@ -122,6 +128,7 @@ static void activate_screen(void)
         break;
     }
     case PAGE_EVENT: checkpoint = "page_event"; break;
+    case PAGE_COOK_ASSIST: checkpoint = "page_cook_assist"; break;
     }
     telemetry_log_memory(checkpoint);
 }
@@ -194,11 +201,26 @@ static void draw_bottom_tabs(lv_obj_t *parent)
         int x = 3 + i * 47;
         lv_obj_t *tab = rect(parent, x, 278, 46, 32,
                              s_top_selection == i ? COLOR_GOLD : COLOR_PAPER);
+        s_bottom_tabs[i] = tab;
         lv_obj_set_style_border_width(tab, 3, 0);
         lv_obj_set_style_border_color(tab, lv_color_hex(COLOR_INK), 0);
         lv_obj_t *text = label(tab, items[i], 0, 7, &lv_font_montserrat_14, COLOR_INK);
         lv_obj_set_width(text, 42);
         lv_obj_set_style_text_align(text, LV_TEXT_ALIGN_CENTER, 0);
+        if (s_menu_hidden) lv_obj_add_flag(tab, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+static void menu_timer_cb(lv_timer_t *timer)
+{
+    (void)timer;
+    if (s_page != PAGE_STATION || s_menu_hidden ||
+        lv_tick_elaps(s_last_input_tick) < 5000U) {
+        return;
+    }
+    s_menu_hidden = true;
+    for (size_t i = 0; i < 5U; i++) {
+        if (s_bottom_tabs[i]) lv_obj_add_flag(s_bottom_tabs[i], LV_OBJ_FLAG_HIDDEN);
     }
 }
 
@@ -285,14 +307,23 @@ static void build_schedule(void)
     label(s_schedule_rows[1], "MOMO", 9, 23,
           &lv_font_montserrat_14, COLOR_INK);
     char stamina[24];
-    snprintf(stamina, sizeof(stamina), "ENERGY %u", s_game.momo.stamina);
+    game_job_score_t reception_score = game_calculate_job_score(
+        &s_game, GAME_PET_MOMO, GAME_JOB_RECEPTION, GAME_PET_COUNT);
+    snprintf(stamina, sizeof(stamina), "E%u SCORE %d",
+             s_game.momo.stamina, reception_score.score);
     label(s_schedule_rows[1], stamina, 128, 23,
           &lv_font_montserrat_14, COLOR_MUTED);
 
     label(s_schedule_rows[2], "FOREST  /  30 MIN", 9, 4,
           &lv_font_montserrat_14, COLOR_RED);
-    label(s_schedule_rows[2], s_game.forest.active ? "AMAI EXPLORING" : "OK TO SEND AMAI",
-          9, 23, &lv_font_montserrat_14, COLOR_INK);
+    char forest_line[40];
+    game_job_score_t forest_score = game_calculate_job_score(
+        &s_game, GAME_PET_AMAI, GAME_JOB_FOREST, GAME_PET_COUNT);
+    snprintf(forest_line, sizeof(forest_line), "%s  SCORE %d",
+             s_game.forest.active ? "EXPLORING" : "OK SEND",
+             forest_score.score);
+    label(s_schedule_rows[2], forest_line, 9, 23,
+          &lv_font_montserrat_14, COLOR_INK);
     label(s_schedule_rows[3], "KITCHEN / HOT BREAD", 9, 4,
           &lv_font_montserrat_14, COLOR_RED);
     char kitchen_line[40];
@@ -319,9 +350,10 @@ static void build_farm(void)
              s_game.inventory_wheat_seed, s_game.inventory_wheat);
     label(screen, stock, 78, 16, &lv_font_montserrat_14, COLOR_GOLD);
 
-    for (int i = 0; i < (int)GAME_FARM_PLOT_COUNT; i++) {
-        int y = 58 + i * 51;
-        lv_obj_t *plot = rect(screen, 10, y, 220, 43,
+    uint8_t plot_count = game_available_farm_plots(&s_game);
+    for (int i = 0; i < plot_count; i++) {
+        int y = 54 + i * 34;
+        lv_obj_t *plot = rect(screen, 10, y, 220, 30,
                               i == s_farm_selection ? COLOR_GOLD : COLOR_PAPER);
         lv_obj_set_style_border_width(plot, 3, 0);
         lv_obj_set_style_border_color(plot, lv_color_hex(COLOR_WOOD_DARK), 0);
@@ -330,7 +362,7 @@ static void build_farm(void)
             ? game_crop_definition(s_game.farm[i].crop) : NULL;
         snprintf(line, sizeof(line), "PLOT %d  %s", i + 1,
                  crop ? crop->name : "OK FOR DETAILS");
-        label(plot, line, 8, 11, &lv_font_montserrat_14, COLOR_INK);
+        label(plot, line, 8, 5, &lv_font_montserrat_14, COLOR_INK);
     }
     label(screen, "HOLD OK: STATION", 10, 276,
           &lv_font_montserrat_14, COLOR_INK);
@@ -383,16 +415,18 @@ static void build_kitchen(void)
     label(screen, "KITCHEN", 10, 10, &lv_font_montserrat_20, COLOR_PAPER);
     game_recipe_t recipe = (game_recipe_t)s_recipe_selection;
     const game_recipe_definition_t *definition = game_recipe_definition(recipe);
+    game_job_score_t kitchen_score = game_calculate_job_score(
+        &s_game, GAME_PET_ATUAN, GAME_JOB_KITCHEN, GAME_PET_COUNT);
     lv_obj_t *card = rect(screen, 10, 62, 220, 178, COLOR_GOLD);
     lv_obj_set_style_border_width(card, 3, 0);
     lv_obj_set_style_border_color(card, lv_color_hex(COLOR_INK), 0);
     label(card, definition->name, 10, 12, &lv_font_montserrat_20, COLOR_RED);
     char line[42];
     bool unlocked = (s_game.unlocked_recipes & (1U << recipe)) != 0U;
-    snprintf(line, sizeof(line), "%s / %lu MIN / VALUE %u",
+    snprintf(line, sizeof(line), "%s / %luM / SCORE %d",
              unlocked ? "UNLOCKED" : "LOCKED",
              (unsigned long)(definition->cook_seconds / 60U),
-             definition->sell_price);
+             kitchen_score.score);
     label(card, line, 10, 52, &lv_font_montserrat_14, COLOR_INK);
     snprintf(line, sizeof(line), "CROP %u  BERRIES %u",
              ui_crop_count(definition->crop_a), s_game.inventory_berries);
@@ -525,6 +559,15 @@ static void build_backpack_detail(void)
                  ui_seed_count(GAME_CROP_WHEAT), ui_seed_count(GAME_CROP_CARROT),
                  ui_seed_count(GAME_CROP_STRAWBERRY), ui_seed_count(GAME_CROP_HERB));
         label(card, line, 9, 84, &lv_font_montserrat_14, COLOR_INK);
+        game_recipe_t recipe = (game_recipe_t)s_item_selection;
+        const game_recipe_definition_t *dish = game_recipe_definition(recipe);
+        uint16_t stock = recipe == GAME_RECIPE_HOT_BREAD
+            ? s_game.inventory_hot_bread : s_game.inventory_dishes[recipe];
+        snprintf(line, sizeof(line), "> %s x%u / SELL %uG",
+                 dish->name, stock, dish->sell_price);
+        label(card, line, 9, 126, &lv_font_montserrat_14, COLOR_RED);
+        label(card, "UP/DOWN DISH  OK: SELL", 9, 157,
+              &lv_font_montserrat_14, COLOR_MUTED);
     } else if (s_backpack_selection == 1) {
         game_pet_id_t pet = (game_pet_id_t)s_partner_selection;
         const game_pet_definition_t *definition = game_pet_definition(pet);
@@ -551,6 +594,20 @@ static void build_backpack_detail(void)
                  s_game.forest_runs, s_game.total_crops_harvested,
                  s_game.travel_journal_count);
         label(card, line, 9, 91, &lv_font_montserrat_14, COLOR_INK);
+        label(card, "RECENT EVENTS", 9, 125, &lv_font_montserrat_14, COLOR_RED);
+        if (s_game.event_history_count > 0U) {
+            uint8_t shown = s_game.event_history_count > 2U ? 2U
+                : s_game.event_history_count;
+            for (uint8_t i = 0U; i < shown; i++) {
+                uint8_t history_index = (uint8_t)(s_game.event_history_count - 1U - i);
+                const game_event_definition_t *event = game_event_definition(
+                    s_game.event_history[history_index]);
+                lv_obj_t *history = label(card, event->title, 9, 148 + i * 19,
+                                          &lv_font_montserrat_14, COLOR_MUTED);
+                lv_obj_set_width(history, 196);
+                lv_label_set_long_mode(history, LV_LABEL_LONG_DOT);
+            }
+        }
     } else if (s_backpack_selection == 4) {
         snprintf(line, sizeof(line), "PETS 4/4  RECIPES %u/5",
                  (unsigned)__builtin_popcount((unsigned)s_game.unlocked_recipes));
@@ -612,6 +669,27 @@ static void build_event(void)
     activate_screen();
 }
 
+static void build_cook_assist(void)
+{
+    lv_obj_t *screen = new_screen(COLOR_NIGHT);
+    label(screen, "FIRE CONTROL", 10, 10, &lv_font_montserrat_20, COLOR_PAPER);
+    lv_obj_t *card = rect(screen, 15, 65, 210, 164, COLOR_PAPER);
+    lv_obj_set_style_border_width(card, 3, 0);
+    lv_obj_set_style_border_color(card, lv_color_hex(COLOR_RED), 0);
+    label(card, "KEEP THE FLAME STEADY", 10, 15,
+          &lv_font_montserrat_14, COLOR_RED);
+    rect(card, 18, 65, 174, 28, COLOR_WOOD_DARK);
+    rect(card, 67, 68, 76, 22, COLOR_GOLD);
+    label(card, "OK IN THE GOLD ZONE", 18, 112,
+          &lv_font_montserrat_14, COLOR_INK);
+    char actions[24];
+    snprintf(actions, sizeof(actions), "ACTIONS LEFT %u", s_game.companion_actions);
+    label(screen, actions, 55, 248, &lv_font_montserrat_14, COLOR_GOLD);
+    label(screen, "OK ASSIST  HOLD OK BACK", 10, 278,
+          &lv_font_montserrat_14, COLOR_PAPER);
+    activate_screen();
+}
+
 void app_ui_start(const bool ok[APP_UI_DEMO_COUNT])
 {
     (void)ok;
@@ -649,12 +727,26 @@ void app_ui_start(const bool ok[APP_UI_DEMO_COUNT])
     s_building_selection = 0;
     s_partner_selection = 0;
     s_event_choice = 0;
+    s_item_selection = 0;
+    s_last_input_tick = lv_tick_get();
+    s_menu_hidden = false;
+    if (!s_menu_timer) s_menu_timer = lv_timer_create(menu_timer_cb, 250U, NULL);
     build_station();
 }
 
 void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
 {
     if (ev != BSP_BTN_CLICK && ev != BSP_BTN_LONG) return;
+    s_last_input_tick = lv_tick_get();
+    if (s_page == PAGE_STATION && s_menu_hidden) {
+        s_menu_hidden = false;
+        for (size_t i = 0; i < 5U; i++) {
+            if (s_bottom_tabs[i]) lv_obj_remove_flag(s_bottom_tabs[i], LV_OBJ_FLAG_HIDDEN);
+        }
+        if (ev == BSP_BTN_CLICK && (btn == BSP_BTN_UP || btn == BSP_BTN_DOWN)) {
+            return;
+        }
+    }
 
     if (s_page == PAGE_EVENT) {
         if (ev == BSP_BTN_CLICK && (btn == BSP_BTN_UP || btn == BSP_BTN_DOWN)) {
@@ -673,6 +765,30 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
         } else if (ev == BSP_BTN_LONG && btn == BSP_BTN_OK) {
             s_page = PAGE_SCHEDULE;
             build_schedule();
+        }
+        return;
+    }
+
+    if (s_page == PAGE_COOK_ASSIST) {
+        if (btn == BSP_BTN_OK && ev == BSP_BTN_LONG) {
+            s_page = PAGE_KITCHEN;
+            build_kitchen();
+        } else if (btn == BSP_BTN_OK && ev == BSP_BTN_CLICK) {
+            uint32_t now = s_game.last_settled_time;
+            clock_service_now(&now);
+            game_state_t candidate = s_game;
+            if (now > candidate.last_settled_time) {
+                game_reduce(&candidate, (game_action_t){
+                    .type = GAME_ACTION_SETTLE_TO_TIME, .now = now,
+                });
+            }
+            if (game_reduce(&candidate, (game_action_t){
+                    .type = GAME_ACTION_ASSIST_KITCHEN, .now = now,
+                }) && app_persistence_store(&candidate)) {
+                s_game = candidate;
+            }
+            s_page = PAGE_KITCHEN;
+            build_kitchen();
         }
         return;
     }
@@ -745,6 +861,10 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
                 s_game = candidate;
             }
             build_kitchen();
+        } else if (ev == BSP_BTN_CLICK && btn == BSP_BTN_OK &&
+                   s_game.kitchen.active) {
+            s_page = PAGE_COOK_ASSIST;
+            build_cook_assist();
         }
         return;
     }
@@ -785,6 +905,22 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
         if (btn == BSP_BTN_OK && ev == BSP_BTN_LONG) {
             s_page = PAGE_BACKPACK;
             build_backpack();
+        } else if (s_backpack_selection == 0 && ev == BSP_BTN_CLICK &&
+                   (btn == BSP_BTN_UP || btn == BSP_BTN_DOWN)) {
+            int delta = btn == BSP_BTN_UP ? -1 : 1;
+            s_item_selection = (s_item_selection + delta +
+                                GAME_RECIPE_COUNT) % GAME_RECIPE_COUNT;
+            build_backpack_detail();
+        } else if (s_backpack_selection == 0 && ev == BSP_BTN_CLICK &&
+                   btn == BSP_BTN_OK) {
+            game_state_t candidate = s_game;
+            if (game_reduce(&candidate, (game_action_t){
+                    .type = GAME_ACTION_SELL_DISH,
+                    .target = (uint8_t)s_item_selection,
+                }) && app_persistence_store(&candidate)) {
+                s_game = candidate;
+            }
+            build_backpack_detail();
         } else if (s_backpack_selection == 1 && ev == BSP_BTN_CLICK &&
                    (btn == BSP_BTN_UP || btn == BSP_BTN_DOWN)) {
             int delta = btn == BSP_BTN_UP ? -1 : 1;
@@ -868,7 +1004,8 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
             build_station();
         } else if (ev == BSP_BTN_CLICK &&
                    (btn == BSP_BTN_UP || btn == BSP_BTN_DOWN)) {
-            s_farm_selection = (s_farm_selection + 1) % GAME_FARM_PLOT_COUNT;
+            s_farm_selection = (s_farm_selection + 1) %
+                game_available_farm_plots(&s_game);
             build_farm();
         } else if (ev == BSP_BTN_CLICK && btn == BSP_BTN_OK) {
             s_page = PAGE_FARM_DETAIL;
