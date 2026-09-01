@@ -1,8 +1,8 @@
 # Desktop simulator
 
 The simulator runs the real LVGL application on macOS/Linux through SDL2.
-The current branch starts the Time Station MVP vertical slice; hardware-facing
-BSP calls are replaced by deterministic host mocks.
+The current branch contains the playable Time Station MVP; hardware-facing BSP
+calls are replaced by deterministic host mocks.
 
 ## Prerequisites (macOS)
 
@@ -20,12 +20,11 @@ cmake --build simulator/build
 ```
 
 The first configure downloads the pinned LVGL `v9.5.0` source into the build
-directory. Use Up/Down to select Station or Schedule, Enter to open or claim,
-and hold Enter for at least 700 ms to return to the station.
+directory. Use Up/Down to select an item, Enter to open or act, and hold Enter
+for at least 700 ms to return.
 
-The first vertical slice intentionally starts with a deterministic six-hour
-reception report. Open Schedule and claim the 60-coin reward to exercise the
-state reducer and page lifecycle.
+A fresh save starts with a deterministic six-hour reception report. Open Plan
+and claim the 60-coin reward to begin the economy loop.
 
 ## Playable MVP loop
 
@@ -34,15 +33,19 @@ The simulator now exposes the complete top-level navigation:
 - **Inn** shows real time, spring day, weather, time-of-day colors, traveler
   dialogue, pending reports, and story-event indicators. The bottom menu hides
   after five idle seconds; press a direction key to reveal it.
-- **Plan** claims offline rewards, resolves story choices, sends Amai to the
-  forest, and opens the five-recipe kitchen. During cooking, press OK again to
-  spend a companion action and halve the remaining time.
+- **Plan** claims offline rewards, resolves story choices, opens 30-minute or
+  two-hour forest expeditions, and opens the five-recipe kitchen. Locked recipes
+  can be researched twice to unlock them. During cooking, press OK again to
+  spend a companion action and halve the remaining time. Job score can produce
+  quality dishes with a higher sale price.
 - **Farm** opens each plot and selects wheat, carrot, strawberry, or herb. Four
   plots are initially available; repairing the sink unlocks plots five and six.
 - **Trip** sends Amai and Atuan to Mistpine Forest after Spring 8 and signpost
-  repair. Their relationship changes the rare-material result.
-- **Bag** contains items and dish sales, partner talk, six buildings, the ten
-  main quests and event history, album progress, and persistent settings.
+  repair. Choose materials, old-road, or scenery goals; their relationship also
+  changes the rare-material result.
+- **Bag** contains normal and quality dish sales, partner talk, six buildings,
+  the ten main quests and event history, album progress, and persistent
+  settings. Completed long tasks are collected in a persistent results page.
 
 A normal play loop is: claim the welcome report, plant crops, advance the
 injected clock, claim the harvest, cook a dish, assist the cooking task, advance
@@ -67,8 +70,9 @@ SDL_VIDEODRIVER=dummy TIME_STATION_SCRIPT=DOLDDOLDDDOLDDDDOL \
   ./simulator/build/ai_passport_sim
 ```
 
-The CTest suite also traverses Farm Detail, Kitchen recipes, Backpack, and
-Buildings. It is therefore the preferred regression command after UI changes.
+The CTest suite also traverses Farm Detail, Kitchen recipes, Backpack,
+Buildings, events, and the forest-duration selector. It is therefore the
+preferred regression command after UI changes.
 
 ## Host logic tests
 
@@ -84,12 +88,13 @@ Individual compiler commands are retained below for minimal environments.
 
 ```bash
 cc -std=c11 -Wall -Wextra -Werror -Imain \
-  tests/test_game_state.c main/game/game_state.c \
+  tests/test_game_state.c main/game/game_state.c main/game/game_content.c \
   -o /tmp/test_game_state
 /tmp/test_game_state
 
 cc -std=c11 -Wall -Wextra -Werror -Imain \
-  tests/test_save_service.c main/game/game_state.c main/services/save_service.c \
+  tests/test_save_service.c main/game/game_state.c main/game/game_content.c \
+  main/services/save_service.c \
   -o /tmp/test_save_service
 /tmp/test_save_service
 
@@ -104,6 +109,9 @@ the three-button resistor ladder, and timed in-memory audio input/output. The
 Time Station entry point initializes playback-only audio, so capture calls
 return `ESP_ERR_NOT_SUPPORTED`, matching the device BSP contract. They
 test application behavior, not electrical characteristics or audio quality.
+
+See [MVP acceptance status](../docs/MVP_ACCEPTANCE_STATUS.md) for the current
+host results, remaining simulator-capable work, and required device checks.
 
 To diagnose host memory errors:
 

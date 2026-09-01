@@ -47,6 +47,33 @@ static save_backend_t backend(memory_storage_t *storage)
     };
 }
 
+static void write_u16(uint8_t *data, uint16_t value)
+{
+    data[0] = (uint8_t)value;
+    data[1] = (uint8_t)(value >> 8U);
+}
+
+static void write_u32(uint8_t *data, uint32_t value)
+{
+    data[0] = (uint8_t)value;
+    data[1] = (uint8_t)(value >> 8U);
+    data[2] = (uint8_t)(value >> 16U);
+    data[3] = (uint8_t)(value >> 24U);
+}
+
+static uint32_t test_crc32(const uint8_t *data, size_t size)
+{
+    uint32_t crc = 0xFFFFFFFFU;
+    for (size_t i = 0; i < size; i++) {
+        crc ^= data[i];
+        for (unsigned bit = 0; bit < 8U; bit++) {
+            uint32_t mask = (uint32_t)-(int32_t)(crc & 1U);
+            crc = (crc >> 1U) ^ (0xEDB88320U & mask);
+        }
+    }
+    return ~crc;
+}
+
 int main(void)
 {
     memory_storage_t storage;
@@ -234,6 +261,23 @@ int main(void)
     assert(loaded.last_travel_goal == GAME_TRAVEL_OLD_ROAD);
     assert(loaded.notifications == 3U);
     assert(loaded.travel.option == GAME_TRAVEL_OLD_ROAD);
+
+    /* A valid v13 slot migrates with every v14-only field at its safe default. */
+    memory_storage_t legacy = storage;
+    uint8_t *legacy_header = legacy.bytes + SAVE_SLOT_SIZE;
+    uint8_t *legacy_payload = legacy_header + 28U;
+    write_u16(legacy_header + 4U, 13U);
+    write_u32(legacy_header + 12U, 472U);
+    write_u32(legacy_header + 16U, test_crc32(legacy_payload, 472U));
+    write_u32(legacy_header + 20U, test_crc32(legacy_header, 20U));
+    save_backend_t legacy_save = backend(&legacy);
+    assert(save_service_load(&legacy_save, &loaded));
+    assert(loaded.coins == 80U);
+    assert(loaded.inventory_premium_hot_bread == 0U);
+    assert(loaded.recipe_research[GAME_RECIPE_FOREST_CAKE] == 0U);
+    assert(loaded.notifications == 0U);
+    assert(loaded.last_travel_goal == GAME_TRAVEL_MATERIALS);
+    assert(loaded.travel.option == GAME_TRAVEL_MATERIALS);
 
     /* Slot 1 is newest. Corrupt its payload and verify fallback to slot 0. */
     storage.bytes[SAVE_SLOT_SIZE + 28U] ^= 0x01U;
