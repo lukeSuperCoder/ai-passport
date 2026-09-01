@@ -340,7 +340,11 @@ static void complete_timed_task(game_state_t *state, game_timed_task_t *task)
                 state, GAME_PET_ATUAN, GAME_JOB_KITCHEN, GAME_PET_COUNT);
             uint8_t roll = (uint8_t)((task->task_id * 37U +
                                       state->weather_seed) % 100U);
-            if (roll < score.premium_chance) {
+            uint8_t heat_bonus = task->option > 0U
+                ? (uint8_t)(task->option - 1U) : 0U;
+            uint16_t premium_chance = (uint16_t)score.premium_chance + heat_bonus;
+            if (premium_chance > 100U) premium_chance = 100U;
+            if (roll < premium_chance) {
                 add_pending_premium_dish(state, task->recipe, 1U);
                 state->notifications |= GAME_NOTICE_PREMIUM_DISH;
             } else {
@@ -1005,6 +1009,25 @@ bool game_reduce(game_state_t *state, game_action_t action)
         state->notifications = 0U;
         state->commit_sequence++;
         return true;
+
+    case GAME_ACTION_FINISH_HEAT_GAME: {
+        if (!state->kitchen.active || state->kitchen.kind != GAME_TASK_HOT_BREAD ||
+            state->kitchen.option != 0U || action.option > 100U ||
+            action.now != state->last_settled_time ||
+            state->kitchen.ends_at <= action.now) {
+            return false;
+        }
+        uint8_t bonus = action.option >= 80U ? 40U
+            : (action.option >= 50U ? 20U : 5U);
+        state->kitchen.option = (uint8_t)(bonus + 1U);
+        state->kitchen.ends_at = action.now +
+            (state->kitchen.ends_at - action.now) / 2U;
+        state->player_affinity[GAME_PET_ATUAN] =
+            state->player_affinity[GAME_PET_ATUAN] > 97U ? 100U :
+            (uint8_t)(state->player_affinity[GAME_PET_ATUAN] + 3U);
+        state->commit_sequence++;
+        return true;
+    }
 
     case GAME_ACTION_ASSIST_KITCHEN:
         if (!state->kitchen.active || state->companion_actions == 0U ||

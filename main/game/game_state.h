@@ -232,6 +232,7 @@ typedef enum {
     GAME_ACTION_START_FOREST_2H,
     GAME_ACTION_START_RESEARCH,
     GAME_ACTION_CLEAR_NOTIFICATIONS,
+    GAME_ACTION_FINISH_HEAT_GAME,
 } game_action_type_t;
 
 typedef struct {

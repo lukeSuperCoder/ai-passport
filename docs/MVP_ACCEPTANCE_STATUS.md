@@ -26,6 +26,8 @@ The complete CTest suite currently contains 10 tests and passes 10/10.
 - Reception, farming, cooking, recipe research, quality dishes, 30-minute and
   two-hour forest expeditions, building, travel, selling, partner interaction,
   and rest recovery.
+- A 25-second cooking heat-control game with a moving indicator, one attempt per
+  dish, deterministic quality bonus, timeout settlement, and timer cleanup.
 - Ten-stage Spring story progression, 65 validated event definitions, six
   visitor progress records, event history, and Spring 7/14 milestones.
 - Seven-day offline cap, weather/calendar settlement, task completion notices,
@@ -38,16 +40,14 @@ The complete CTest suite currently contains 10 tests and passes 10/10.
 These items are present in the product and technical design but are not yet
 implemented as complete playable features:
 
-1. The 20–30 second cooking heat-control minigame. The current companion-assist
-   action shortens cooking, but it is not the designed timing game.
-2. Player cancellation of active timed tasks with deterministic material refund.
-3. Day/night loop music, pet/UI sound effects, and their silent-failure path.
-4. Read-only asset pack v1, font-subset pipeline, and release asset-size report.
-5. Simulator injection for battery failure, audio failure, save corruption, and
+1. Player cancellation of active timed tasks with deterministic material refund.
+2. Day/night loop music, pet/UI sound effects, and their silent-failure path.
+3. Read-only asset pack v1, font-subset pipeline, and release asset-size report.
+4. Simulator injection for battery failure, audio failure, save corruption, and
    direct development time jumps. Trusted startup time injection already exists.
-6. A development diagnostics page showing live heap/DMA blocks, save sequence,
+5. A development diagnostics page showing live heap/DMA blocks, save sequence,
    state size, and resource-pack version.
-7. Automated text-overflow/image comparison coverage. Current UI tests validate
+6. Automated text-overflow/image comparison coverage. Current UI tests validate
    page reachability and memory-safe repeated transitions, not pixel fidelity.
 
 ## Required device acceptance
@@ -62,4 +62,3 @@ implemented as complete playable features:
 - Verify battery readings and the missing-CW2017 fallback.
 - Run the complete Spring 14 flow after real power cycles and confirm rewards are
   neither lost nor duplicated.
-

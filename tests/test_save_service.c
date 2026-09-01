@@ -123,6 +123,7 @@ int main(void)
     second.kitchen.task_id = 8U;
     second.kitchen.started_at = 2000U;
     second.kitchen.ends_at = 2600U;
+    second.kitchen.option = 41U;
     second.inventory_wheat = 2U;
     second.inventory_wheat_seed = 3U;
     second.pending.wheat = 2U;
@@ -204,6 +205,7 @@ int main(void)
     assert(loaded.pending.hot_bread == 1U);
     assert(loaded.kitchen.active);
     assert(loaded.kitchen.kind == GAME_TASK_HOT_BREAD);
+    assert(loaded.kitchen.option == 41U);
     assert(loaded.inventory_wheat == 2U);
     assert(loaded.inventory_wheat_seed == 3U);
     assert(loaded.pending.wheat == 2U);

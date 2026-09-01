@@ -800,6 +800,32 @@ static void test_recipe_research_unlocks_after_two_sessions(void)
     assert(state.inventory_berries == 0U);
 }
 
+static void test_heat_game_is_single_use_and_boosts_quality(void)
+{
+    game_state_t state;
+    game_state_init(&state, 0U);
+    state.inventory_wheat = 2U;
+    state.weather_seed = 95U;
+    assert(game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_START_RECIPE,
+        .target = GAME_RECIPE_HOT_BREAD,
+    }));
+    assert(game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_FINISH_HEAT_GAME,
+        .option = 100U,
+    }));
+    assert(state.kitchen.option == 41U);
+    assert(state.kitchen.ends_at == 5U * 60U);
+    assert(!game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_FINISH_HEAT_GAME,
+        .option = 100U,
+    }));
+    assert(game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_SETTLE_TO_TIME, .now = 5U * 60U,
+    }));
+    assert(state.pending_premium_hot_bread == 1U);
+}
+
 static void test_premium_dish_is_claimed_and_sells_for_bonus(void)
 {
     game_state_t state;
@@ -882,6 +908,7 @@ int main(void)
     test_sink_building_unlocks_two_additional_plots();
     test_cooking_assist_and_sale_complete_economic_loop();
     test_recipe_research_unlocks_after_two_sessions();
+    test_heat_game_is_single_use_and_boosts_quality();
     test_premium_dish_is_claimed_and_sells_for_bonus();
     test_two_hour_forest_and_travel_goals_have_distinct_results();
     test_all_crops_and_recipes_form_production_chains();

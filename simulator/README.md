@@ -36,8 +36,8 @@ The simulator now exposes the complete top-level navigation:
 - **Plan** claims offline rewards, resolves story choices, opens 30-minute or
   two-hour forest expeditions, and opens the five-recipe kitchen. Locked recipes
   can be researched twice to unlock them. During cooking, press OK again to
-  spend a companion action and halve the remaining time. Job score can produce
-  quality dishes with a higher sale price.
+  enter the 25-second heat-control game; stopping near the center shortens the
+  remaining time and raises quality chance. Job score also affects quality.
 - **Farm** opens each plot and selects wheat, carrot, strawberry, or herb. Four
   plots are initially available; repairing the sink unlocks plots five and six.
 - **Trip** sends Amai and Atuan to Mistpine Forest after Spring 8 and signpost

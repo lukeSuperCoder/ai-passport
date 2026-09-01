@@ -56,6 +56,10 @@ static int s_forest_duration;
 static uint32_t s_now;
 static lv_obj_t *s_bottom_tabs[5];
 static lv_timer_t *s_menu_timer;
+static lv_timer_t *s_heat_timer;
+static lv_obj_t *s_heat_marker;
+static uint32_t s_heat_started_at;
+static uint8_t s_heat_accuracy;
 static uint32_t s_last_input_tick;
 static bool s_menu_hidden;
 
@@ -762,6 +766,55 @@ static void build_notice(void)
     activate_screen();
 }
 
+static void stop_heat_timer(void)
+{
+    if (s_heat_timer) {
+        lv_timer_delete(s_heat_timer);
+        s_heat_timer = NULL;
+    }
+    s_heat_marker = NULL;
+}
+
+static void finish_heat_game(uint8_t accuracy)
+{
+    stop_heat_timer();
+    uint32_t now = s_game.last_settled_time;
+    clock_service_now(&now);
+    s_now = now;
+    game_state_t candidate = s_game;
+    if (now > candidate.last_settled_time) {
+        game_reduce(&candidate, (game_action_t){
+            .type = GAME_ACTION_SETTLE_TO_TIME, .now = now,
+        });
+    }
+    if (game_reduce(&candidate, (game_action_t){
+            .type = GAME_ACTION_FINISH_HEAT_GAME,
+            .now = now,
+            .option = accuracy,
+        }) && app_persistence_store(&candidate)) {
+        s_game = candidate;
+    }
+    s_page = PAGE_KITCHEN;
+    build_kitchen();
+}
+
+static void heat_timer_cb(lv_timer_t *timer)
+{
+    (void)timer;
+    if (s_page != PAGE_COOK_ASSIST || !s_heat_marker) {
+        stop_heat_timer();
+        return;
+    }
+    uint32_t elapsed = lv_tick_get() - s_heat_started_at;
+    uint32_t phase = (elapsed / 12U) % 332U;
+    uint32_t position = phase <= 166U ? phase : 332U - phase;
+    lv_obj_set_x(s_heat_marker, 18 + (int32_t)position);
+    uint32_t distance = position > 83U ? position - 83U : 83U - position;
+    s_heat_accuracy = distance >= 83U
+        ? 0U : (uint8_t)(100U - distance * 100U / 83U);
+    if (elapsed >= 25U * 1000U) finish_heat_game(s_heat_accuracy);
+}
+
 static void build_cook_assist(void)
 {
     lv_obj_t *screen = new_screen(COLOR_NIGHT);
@@ -773,14 +826,19 @@ static void build_cook_assist(void)
           &lv_font_montserrat_14, COLOR_RED);
     rect(card, 18, 65, 174, 28, COLOR_WOOD_DARK);
     rect(card, 67, 68, 76, 22, COLOR_GOLD);
+    s_heat_marker = rect(card, 18, 61, 8, 36, COLOR_RED);
     label(card, "OK IN THE GOLD ZONE", 18, 112,
           &lv_font_montserrat_14, COLOR_INK);
-    char actions[24];
-    snprintf(actions, sizeof(actions), "ACTIONS LEFT %u", s_game.companion_actions);
-    label(screen, actions, 55, 248, &lv_font_montserrat_14, COLOR_GOLD);
-    label(screen, "OK ASSIST  HOLD OK BACK", 10, 278,
+    label(screen, "25 SEC / STOP NEAR CENTER", 23, 248,
+          &lv_font_montserrat_14, COLOR_GOLD);
+    label(screen, "OK STOP  HOLD OK BACK", 10, 278,
           &lv_font_montserrat_14, COLOR_PAPER);
     activate_screen();
+    s_heat_started_at = lv_tick_get();
+    s_heat_accuracy = 0U;
+    stop_heat_timer();
+    s_heat_marker = lv_obj_get_child(card, -1);
+    s_heat_timer = lv_timer_create(heat_timer_cb, 50U, NULL);
 }
 
 void app_ui_start(const bool ok[APP_UI_DEMO_COUNT])
@@ -883,24 +941,11 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
 
     if (s_page == PAGE_COOK_ASSIST) {
         if (btn == BSP_BTN_OK && ev == BSP_BTN_LONG) {
+            stop_heat_timer();
             s_page = PAGE_KITCHEN;
             build_kitchen();
         } else if (btn == BSP_BTN_OK && ev == BSP_BTN_CLICK) {
-            uint32_t now = s_game.last_settled_time;
-            clock_service_now(&now);
-            game_state_t candidate = s_game;
-            if (now > candidate.last_settled_time) {
-                game_reduce(&candidate, (game_action_t){
-                    .type = GAME_ACTION_SETTLE_TO_TIME, .now = now,
-                });
-            }
-            if (game_reduce(&candidate, (game_action_t){
-                    .type = GAME_ACTION_ASSIST_KITCHEN, .now = now,
-                }) && app_persistence_store(&candidate)) {
-                s_game = candidate;
-            }
-            s_page = PAGE_KITCHEN;
-            build_kitchen();
+            finish_heat_game(s_heat_accuracy);
         }
         return;
     }
@@ -977,7 +1022,9 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
             }
             build_kitchen();
         } else if (ev == BSP_BTN_CLICK && btn == BSP_BTN_OK &&
-                   s_game.kitchen.active) {
+                   s_game.kitchen.active &&
+                   s_game.kitchen.kind == GAME_TASK_HOT_BREAD &&
+                   s_game.kitchen.option == 0U) {
             s_page = PAGE_COOK_ASSIST;
             build_cook_assist();
         }
