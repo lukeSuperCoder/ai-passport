@@ -3,7 +3,7 @@
 #include <string.h>
 
 #define SAVE_MAGIC 0x5453544EU /* TSTN */
-#define SAVE_FORMAT_VERSION 11U
+#define SAVE_FORMAT_VERSION 12U
 #define SAVE_HEADER_SIZE 28U
 #define SAVE_COMMIT_MARKER 0x434F4D4DU /* COMM */
 #define SAVE_PAYLOAD_V1_SIZE 36U
@@ -16,7 +16,8 @@
 #define SAVE_PAYLOAD_V8_SIZE 256U
 #define SAVE_PAYLOAD_V9_SIZE 292U
 #define SAVE_PAYLOAD_V10_SIZE 344U
-#define SAVE_PAYLOAD_SIZE 348U
+#define SAVE_PAYLOAD_V11_SIZE 348U
+#define SAVE_PAYLOAD_SIZE 448U
 
 typedef struct {
     uint32_t sequence;
@@ -177,6 +178,16 @@ static void encode_payload(const game_state_t *state, uint8_t payload[SAVE_PAYLO
     payload[344] = state->sound_enabled ? 1U : 0U;
     payload[345] = state->night_mute_enabled ? 1U : 0U;
     payload[346] = state->clock_24_hour ? 1U : 0U;
+    for (size_t i = 0; i < GAME_EVENT_QUEUE_SIZE; i++) {
+        payload[348U + i * 2U] = state->event_queue[i].id;
+        payload[349U + i * 2U] = state->event_queue[i].queued_day;
+    }
+    payload[354] = state->event_queue_count;
+    memcpy(payload + 355, state->event_last_day, GAME_CONTENT_EVENT_COUNT);
+    memcpy(payload + 420, state->event_seen, sizeof(state->event_seen));
+    memcpy(payload + 429, state->event_history, GAME_EVENT_HISTORY_SIZE);
+    payload[439] = state->event_history_count;
+    memcpy(payload + 440, state->visitor_stages, GAME_VISITOR_COUNT);
 }
 
 static bool decode_payload(const uint8_t payload[SAVE_PAYLOAD_SIZE],
@@ -323,6 +334,19 @@ static bool decode_payload(const uint8_t payload[SAVE_PAYLOAD_SIZE],
         decoded.night_mute_enabled = payload[345] != 0U;
         decoded.clock_24_hour = payload[346] != 0U;
     }
+    if (version >= 12U) {
+        memset(decoded.event_queue, 0, sizeof(decoded.event_queue));
+        for (size_t i = 0; i < GAME_EVENT_QUEUE_SIZE; i++) {
+            decoded.event_queue[i].id = payload[348U + i * 2U];
+            decoded.event_queue[i].queued_day = payload[349U + i * 2U];
+        }
+        decoded.event_queue_count = payload[354];
+        memcpy(decoded.event_last_day, payload + 355, GAME_CONTENT_EVENT_COUNT);
+        memcpy(decoded.event_seen, payload + 420, sizeof(decoded.event_seen));
+        memcpy(decoded.event_history, payload + 429, GAME_EVENT_HISTORY_SIZE);
+        decoded.event_history_count = payload[439];
+        memcpy(decoded.visitor_stages, payload + 440, GAME_VISITOR_COUNT);
+    }
 
     if (decoded.momo.job > GAME_JOB_FARM ||
         decoded.amai.job > GAME_JOB_FARM ||
@@ -335,6 +359,8 @@ static bool decode_payload(const uint8_t payload[SAVE_PAYLOAD_SIZE],
         decoded.construction.building >= GAME_BUILD_COUNT ||
         decoded.quest_stage < 2U || decoded.quest_stage > 11U ||
         decoded.companion_actions > 2U ||
+        decoded.event_queue_count > GAME_EVENT_QUEUE_SIZE ||
+        decoded.event_history_count > GAME_EVENT_HISTORY_SIZE ||
         decoded.companion_actions_day < 1U ||
         decoded.companion_actions_day > GAME_SPRING_DAY_COUNT ||
         (decoded.completed_buildings & ~((1U << GAME_BUILD_COUNT) - 1U)) != 0U ||
@@ -369,6 +395,19 @@ static bool decode_payload(const uint8_t payload[SAVE_PAYLOAD_SIZE],
     for (size_t i = 0; i < GAME_PET_COUNT; i++) {
         if (decoded.player_affinity[i] > 100U) return false;
     }
+    for (size_t i = 0; i < decoded.event_queue_count; i++) {
+        if (decoded.event_queue[i].id >= GAME_CONTENT_EVENT_COUNT ||
+            decoded.event_queue[i].queued_day < 1U ||
+            decoded.event_queue[i].queued_day > GAME_SPRING_DAY_COUNT) {
+            return false;
+        }
+    }
+    for (size_t i = 0; i < decoded.event_history_count; i++) {
+        if (decoded.event_history[i] >= GAME_CONTENT_EVENT_COUNT) return false;
+    }
+    for (size_t i = 0; i < GAME_VISITOR_COUNT; i++) {
+        if (decoded.visitor_stages[i] > 3U) return false;
+    }
     *state = decoded;
     return true;
 }
@@ -401,7 +440,8 @@ static slot_info_t inspect_slot(const save_backend_t *backend, unsigned slot)
                  (version == 8U && info.payload_length == SAVE_PAYLOAD_V8_SIZE) ||
                  (version == 9U && info.payload_length == SAVE_PAYLOAD_V9_SIZE) ||
                  (version == 10U && info.payload_length == SAVE_PAYLOAD_V10_SIZE) ||
-                 (version == 11U && info.payload_length == SAVE_PAYLOAD_SIZE);
+                 (version == 11U && info.payload_length == SAVE_PAYLOAD_V11_SIZE) ||
+                 (version == 12U && info.payload_length == SAVE_PAYLOAD_SIZE);
     return info;
 }
 

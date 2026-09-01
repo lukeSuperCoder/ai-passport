@@ -146,6 +146,15 @@ int main(void)
     second.sound_enabled = false;
     second.night_mute_enabled = false;
     second.clock_24_hour = false;
+    second.event_queue_count = 2U;
+    second.event_queue[0] = (game_queued_event_t){ .id = 18U, .queued_day = 7U };
+    second.event_queue[1] = (game_queued_event_t){ .id = 34U, .queued_day = 7U };
+    second.event_last_day[18] = 5U;
+    second.event_seen[53U / 8U] |= (uint8_t)(1U << (53U % 8U));
+    second.event_history_count = 2U;
+    second.event_history[0] = 53U;
+    second.event_history[1] = 18U;
+    second.visitor_stages[0] = 1U;
     assert(save_service_store(&save, &second));
     assert(save_service_load(&save, &loaded));
     assert(loaded.coins == 80U);
@@ -197,6 +206,13 @@ int main(void)
     assert(!loaded.sound_enabled);
     assert(!loaded.night_mute_enabled);
     assert(!loaded.clock_24_hour);
+    assert(loaded.event_queue_count == 2U);
+    assert(loaded.event_queue[0].id == 18U);
+    assert(loaded.event_last_day[18] == 5U);
+    assert(loaded.event_seen[53U / 8U] & (1U << (53U % 8U)));
+    assert(loaded.event_history_count == 2U);
+    assert(loaded.event_history[1] == 18U);
+    assert(loaded.visitor_stages[0] == 1U);
 
     /* Slot 1 is newest. Corrupt its payload and verify fallback to slot 0. */
     storage.bytes[SAVE_SLOT_SIZE + 28U] ^= 0x01U;

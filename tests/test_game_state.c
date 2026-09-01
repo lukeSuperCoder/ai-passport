@@ -445,6 +445,42 @@ static void test_settings_toggle_deterministically(void)
     }));
 }
 
+static void test_content_events_wait_for_player_choice(void)
+{
+    game_state_t state;
+    game_state_init(&state, 0U);
+    assert(state.event_queue_count == 1U);
+    assert(state.event_queue[0].id == 53U);
+    uint32_t coins = state.pending.coins;
+    assert(game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_RESOLVE_CONTENT_EVENT, .target = 0U,
+    }));
+    assert(state.event_queue_count == 0U);
+    assert(state.pending.coins > coins);
+    assert(state.visitor_stages[0] == 1U);
+    assert(state.event_history_count == 1U);
+    assert(!game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_RESOLVE_CONTENT_EVENT, .target = 0U,
+    }));
+
+    state.inventory_wheat = 2U;
+    assert(game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_START_RECIPE, .now = 0U,
+        .target = GAME_RECIPE_HOT_BREAD,
+    }));
+    assert(game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_SETTLE_TO_TIME, .now = 10U * 60U,
+    }));
+    assert(state.event_queue_count == 1U);
+    uint8_t relation = state.relationships[state.event_queue[0].id %
+                                           GAME_RELATION_COUNT];
+    assert(game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_RESOLVE_CONTENT_EVENT, .target = 1U,
+    }));
+    assert(state.relationships[state.event_history[1] % GAME_RELATION_COUNT] ==
+           relation + 3U);
+}
+
 static void test_main_story_can_reach_spring_14_without_deadlock(void)
 {
     game_state_t state;
@@ -664,6 +700,7 @@ int main(void)
     test_companion_actions_restore_each_day();
     test_content_catalog_is_complete_and_valid();
     test_settings_toggle_deterministically();
+    test_content_events_wait_for_player_choice();
     test_all_crops_and_recipes_form_production_chains();
     test_main_story_can_reach_spring_14_without_deadlock();
     return 0;

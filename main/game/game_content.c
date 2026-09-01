@@ -123,6 +123,41 @@ static const game_event_definition_t s_events[GAME_CONTENT_EVENT_COUNT] = {
     EVENT(64, GAME_EVENT_TYPE_VISITOR, "GRAYSHADOW'S STAMP", false),
 };
 
+static const char *s_traveler_dialogue[4][6] = {
+    [GAME_WEATHER_CLEAR] = {
+        "The sunrise makes the old roof shine.",
+        "A warm loaf would suit this road.",
+        "Is the forest path open today?",
+        "I remember this inn from years ago.",
+        "The lantern can be seen from the hill.",
+        "A clear night is good for traveling.",
+    },
+    [GAME_WEATHER_CLOUDY] = {
+        "The clouds make the fields look silver.",
+        "I may rest before the next village.",
+        "Mushrooms like weather like this.",
+        "The road feels quiet under gray skies.",
+        "Your signboard brightens the crossroads.",
+        "Perhaps the stars will appear later.",
+    },
+    [GAME_WEATHER_RAIN] = {
+        "May I shake the rain from my coat?",
+        "Tea sounds better than another mile.",
+        "The crops must welcome this rain.",
+        "I heard a bell beyond the wet pines.",
+        "The window light led me here.",
+        "Thank you for keeping the door open.",
+    },
+    [GAME_WEATHER_STORM] = {
+        "The wind nearly took my map away!",
+        "Is there a room until the storm passes?",
+        "The old trees are bending over the road.",
+        "Everyone on the trail needs shelter.",
+        "This lantern is braver than the thunder.",
+        "I will leave when the river calms down.",
+    },
+};
+
 #undef EVENT
 
 const game_crop_definition_t *game_crop_definition(game_crop_t crop)
@@ -155,6 +190,15 @@ const game_event_definition_t *game_event_definition(uint8_t index)
     return &s_events[index];
 }
 
+const char *game_traveler_dialogue(game_weather_t weather, uint8_t period,
+                                   uint32_t seed)
+{
+    if (weather > GAME_WEATHER_STORM) weather = GAME_WEATHER_CLEAR;
+    uint8_t base = (uint8_t)((period % 4U) * 2U);
+    uint8_t variant = (uint8_t)(seed & 1U);
+    return s_traveler_dialogue[weather][(base + variant) % 6U];
+}
+
 bool game_content_validate(void)
 {
     uint8_t counts[GAME_EVENT_TYPE_COUNT] = {0};
@@ -167,6 +211,12 @@ bool game_content_validate(void)
             return false;
         }
         counts[event->type]++;
+    }
+    for (size_t weather = 0; weather < 4U; weather++) {
+        for (size_t line = 0; line < 6U; line++) {
+            if (!s_traveler_dialogue[weather][line] ||
+                s_traveler_dialogue[weather][line][0] == '\0') return false;
+        }
     }
     return counts[GAME_EVENT_TYPE_MAIN] == 10U &&
            counts[GAME_EVENT_TYPE_PET] == 8U &&

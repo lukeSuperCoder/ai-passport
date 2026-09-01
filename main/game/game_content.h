@@ -62,11 +62,11 @@ typedef struct {
     uint8_t cooldown_days;
 } game_event_definition_t;
 
-#define GAME_CONTENT_EVENT_COUNT 65U
-
 const game_crop_definition_t *game_crop_definition(game_crop_t crop);
 const game_recipe_definition_t *game_recipe_definition(game_recipe_t recipe);
 const game_building_definition_t *game_building_definition(game_building_t building);
 const game_pet_definition_t *game_pet_definition(game_pet_id_t pet);
 const game_event_definition_t *game_event_definition(uint8_t index);
+const char *game_traveler_dialogue(game_weather_t weather, uint8_t period,
+                                   uint32_t seed);
 bool game_content_validate(void);

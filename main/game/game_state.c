@@ -45,6 +45,44 @@ static game_pet_state_t *pet_state(game_state_t *state, game_pet_id_t pet)
     return NULL;
 }
 
+static bool event_seen(const game_state_t *state, uint8_t id)
+{
+    return (state->event_seen[id / 8U] & (1U << (id % 8U))) != 0U;
+}
+
+static bool enqueue_event(game_state_t *state, uint8_t id)
+{
+    const game_event_definition_t *definition = game_event_definition(id);
+    if (!definition || state->event_queue_count >= GAME_EVENT_QUEUE_SIZE ||
+        (!definition->repeatable && event_seen(state, id))) {
+        return false;
+    }
+    for (uint8_t i = 0U; i < state->event_queue_count; i++) {
+        if (state->event_queue[i].id == id) return false;
+    }
+    uint8_t last_day = state->event_last_day[id];
+    if (definition->repeatable && last_day != 0U &&
+        state->spring_day < (uint8_t)(last_day + definition->cooldown_days)) {
+        return false;
+    }
+    state->event_queue[state->event_queue_count++] = (game_queued_event_t){
+        .id = id,
+        .queued_day = state->spring_day,
+    };
+    return true;
+}
+
+static void record_event_history(game_state_t *state, uint8_t id)
+{
+    if (state->event_history_count < GAME_EVENT_HISTORY_SIZE) {
+        state->event_history[state->event_history_count++] = id;
+        return;
+    }
+    memmove(state->event_history, state->event_history + 1,
+            GAME_EVENT_HISTORY_SIZE - 1U);
+    state->event_history[GAME_EVENT_HISTORY_SIZE - 1U] = id;
+}
+
 static uint32_t saturating_add_u32(uint32_t left, uint32_t right)
 {
     return UINT32_MAX - left < right ? UINT32_MAX : left + right;
@@ -138,6 +176,13 @@ static void update_calendar(game_state_t *state, uint32_t now)
             state->pending_events |= GAME_EVENT_MARKET;
         }
     }
+    if (previous != day) {
+        enqueue_event(state, (uint8_t)(34U + state->weather));
+        if (day >= 3U && state->visitor_stages[1] == 0U) enqueue_event(state, 55U);
+        if (day >= 4U && state->visitor_stages[2] == 0U) enqueue_event(state, 57U);
+        if (day >= 5U && state->visitor_stages[3] == 0U) enqueue_event(state, 59U);
+        if (day >= 10U && state->visitor_stages[5] == 0U) enqueue_event(state, 63U);
+    }
     if (previous < 14U && day >= 14U) {
         state->calendar_milestones |= GAME_EVENT_FESTIVAL;
         if ((state->completed_events & GAME_EVENT_FESTIVAL) == 0U) {
@@ -171,6 +216,7 @@ static void complete_timed_task(game_state_t *state, game_timed_task_t *task)
         state->job_experience[GAME_PET_AMAI][GAME_JOB_FOREST] =
             saturating_add_u16(
                 state->job_experience[GAME_PET_AMAI][GAME_JOB_FOREST], 10U);
+        enqueue_event(state, (uint8_t)(30U + task->task_id % 4U));
         break;
     case GAME_TASK_HOT_BREAD:
         add_pending_dish(state, task->recipe, 1U);
@@ -180,6 +226,7 @@ static void complete_timed_task(game_state_t *state, game_timed_task_t *task)
         state->job_experience[GAME_PET_ATUAN][GAME_JOB_KITCHEN] =
             saturating_add_u16(
                 state->job_experience[GAME_PET_ATUAN][GAME_JOB_KITCHEN], 10U);
+        enqueue_event(state, (uint8_t)(26U + task->task_id % 4U));
         state->atuan.job = GAME_JOB_REST;
         state->atuan.stamina = state->atuan.stamina > 4U
             ? (uint8_t)(state->atuan.stamina - 4U) : 0U;
@@ -198,6 +245,7 @@ static void complete_timed_task(game_state_t *state, game_timed_task_t *task)
             uint16_t improved = (uint16_t)state->relationships[relation] + 5U;
             state->relationships[relation] = improved > 100U ? 100U : (uint8_t)improved;
         }
+        enqueue_event(state, (uint8_t)(44U + task->task_id % 9U));
         state->travel_journal_count = state->travel_journal_count == UINT8_MAX
             ? UINT8_MAX : (uint8_t)(state->travel_journal_count + 1U);
         state->amai.job = GAME_JOB_REST;
@@ -376,6 +424,7 @@ void game_state_init(game_state_t *state, uint32_t now)
     state->sound_enabled = true;
     state->night_mute_enabled = true;
     state->clock_24_hour = true;
+    enqueue_event(state, 53U);
 }
 
 bool game_reduce(game_state_t *state, game_action_t action)
@@ -434,6 +483,7 @@ bool game_reduce(game_state_t *state, game_action_t action)
                         state->total_crops_harvested, definition->yield);
                     state->pending.available = true;
                     refresh_quest_progress(state);
+                    enqueue_event(state, (uint8_t)(22U + i));
                 }
                 memset(plot, 0, sizeof(*plot));
             }
@@ -669,6 +719,43 @@ bool game_reduce(game_state_t *state, game_action_t action)
         }
         state->commit_sequence++;
         return true;
+
+    case GAME_ACTION_RESOLVE_CONTENT_EVENT: {
+        if (state->event_queue_count == 0U || action.target > 1U) return false;
+        uint8_t id = state->event_queue[0].id;
+        const game_event_definition_t *definition = game_event_definition(id);
+        if (!definition) return false;
+        if (action.target == 0U) {
+            state->pending.coins = saturating_add_u32(
+                state->pending.coins, (uint32_t)(10U + definition->type * 2U));
+            state->pending.available = true;
+        } else {
+            int relation = id % GAME_RELATION_COUNT;
+            uint16_t improved = (uint16_t)state->relationships[relation] + 3U;
+            state->relationships[relation] = improved > 100U ? 100U : (uint8_t)improved;
+            game_pet_id_t pet = (game_pet_id_t)(id % GAME_PET_COUNT);
+            state->player_affinity[pet] = state->player_affinity[pet] > 98U
+                ? 100U : (uint8_t)(state->player_affinity[pet] + 2U);
+        }
+        state->event_last_day[id] = state->spring_day;
+        if (!definition->repeatable) {
+            state->event_seen[id / 8U] |= (uint8_t)(1U << (id % 8U));
+        }
+        if (definition->type == GAME_EVENT_TYPE_VISITOR) {
+            uint8_t visitor = (uint8_t)((id - 53U) / 2U);
+            if (visitor < GAME_VISITOR_COUNT && state->visitor_stages[visitor] < 3U) {
+                state->visitor_stages[visitor]++;
+            }
+        }
+        record_event_history(state, id);
+        state->event_queue_count--;
+        memmove(state->event_queue, state->event_queue + 1,
+                state->event_queue_count * sizeof(state->event_queue[0]));
+        memset(&state->event_queue[state->event_queue_count], 0,
+               sizeof(state->event_queue[0]));
+        state->commit_sequence++;
+        return true;
+    }
     }
 
     return false;

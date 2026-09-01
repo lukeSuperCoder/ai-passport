@@ -127,6 +127,12 @@ if(BUILD_TESTING)
         PASS_REGULAR_EXPRESSION "page_items.*page_partners.*page_tasks.*page_album.*page_settings.*Scripted simulator run completed"
         TIMEOUT 10
     )
+    add_test(NAME simulator_event_choice COMMAND ai_passport_sim)
+    set_tests_properties(simulator_event_choice PROPERTIES
+        ENVIRONMENT "SDL_VIDEODRIVER=dummy;TIME_STATION_SCRIPT=DOODOL"
+        PASS_REGULAR_EXPRESSION "page_event.*page_schedule.*Scripted simulator run completed"
+        TIMEOUT 10
+    )
 
     if(SIM_ENABLE_SANITIZERS AND CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
         foreach(test_target test_game_state test_save_service

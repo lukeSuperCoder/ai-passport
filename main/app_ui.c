@@ -30,6 +30,7 @@ typedef enum {
     PAGE_KITCHEN,
     PAGE_BUILDINGS,
     PAGE_BACKPACK_DETAIL,
+    PAGE_EVENT,
 } app_page_t;
 
 static game_state_t s_game;
@@ -45,6 +46,7 @@ static int s_recipe_selection;
 static int s_backpack_selection;
 static int s_building_selection;
 static int s_partner_selection;
+static int s_event_choice;
 static uint32_t s_now;
 
 static uint16_t ui_crop_count(game_crop_t crop)
@@ -119,6 +121,7 @@ static void activate_screen(void)
         checkpoint = details[s_backpack_selection];
         break;
     }
+    case PAGE_EVENT: checkpoint = "page_event"; break;
     }
     telemetry_log_memory(checkpoint);
 }
@@ -208,8 +211,15 @@ static void build_station(void)
     lv_obj_set_style_border_width(note, 3, 0);
     lv_obj_set_style_border_color(note, lv_color_hex(COLOR_WOOD_DARK), 0);
     label(note, "THE LANTERN IS LIT", 10, 9, &lv_font_montserrat_14, COLOR_RED);
-    label(note, "Momo is greeting travelers.", 10, 32,
-          &lv_font_montserrat_14, COLOR_INK);
+    uint32_t hour = (s_now / 3600U) % 24U;
+    uint8_t period = hour < 6U ? 3U : (hour < 11U ? 0U :
+                     (hour < 17U ? 1U : (hour < 21U ? 2U : 3U)));
+    const char *dialogue = game_traveler_dialogue(
+        s_game.weather, period, s_game.weather_seed ^ s_game.spring_day);
+    lv_obj_t *traveler = label(note, dialogue, 10, 32,
+                               &lv_font_montserrat_14, COLOR_INK);
+    lv_obj_set_width(traveler, 202);
+    lv_label_set_long_mode(traveler, LV_LABEL_LONG_DOT);
     if (s_game.pending.available) {
         label(note, "! OFFLINE REPORT READY", 10, 52,
               &lv_font_montserrat_14, COLOR_RED);
@@ -252,6 +262,10 @@ static void build_schedule(void)
         snprintf(report_line, sizeof(report_line), "ROAD MARKET - OK TO VISIT");
     } else if (s_game.pending_events & GAME_EVENT_FESTIVAL) {
         snprintf(report_line, sizeof(report_line), "LANTERN FEST - OK TO JOIN");
+    } else if (s_game.event_queue_count > 0U) {
+        const game_event_definition_t *event =
+            game_event_definition(s_game.event_queue[0].id);
+        snprintf(report_line, sizeof(report_line), "%s", event->title);
     } else if (s_game.pending.available) {
         snprintf(report_line, sizeof(report_line), "+%luG +%uW +%uB +%uH +%uF",
                  (unsigned long)s_game.pending.coins,
@@ -260,7 +274,9 @@ static void build_schedule(void)
     } else {
         snprintf(report_line, sizeof(report_line), "NO REWARD PENDING");
     }
-    label(s_schedule_rows[0], s_game.pending_events ? "STORY EVENT" : "OFFLINE REPORT", 9, 4,
+    label(s_schedule_rows[0],
+          (s_game.pending_events || s_game.event_queue_count) ? "STORY EVENT" : "OFFLINE REPORT",
+          9, 4,
           &lv_font_montserrat_14, COLOR_RED);
     label(s_schedule_rows[0], report_line, 9, 23,
           &lv_font_montserrat_14, COLOR_INK);
@@ -564,6 +580,38 @@ static void build_backpack_detail(void)
     activate_screen();
 }
 
+static void build_event(void)
+{
+    lv_obj_t *screen = new_screen(COLOR_NIGHT);
+    const game_event_definition_t *event =
+        game_event_definition(s_game.event_queue[0].id);
+    label(screen, "EVENT", 10, 10, &lv_font_montserrat_20, COLOR_PAPER);
+    lv_obj_t *card = rect(screen, 9, 52, 222, 208, COLOR_PAPER);
+    lv_obj_set_style_border_width(card, 3, 0);
+    lv_obj_set_style_border_color(card, lv_color_hex(COLOR_WOOD_DARK), 0);
+    lv_obj_t *title = label(card, event->title, 9, 12,
+                            &lv_font_montserrat_14, COLOR_RED);
+    lv_obj_set_width(title, 198);
+    lv_label_set_long_mode(title, LV_LABEL_LONG_WRAP);
+    label(card, "A traveler waits for your answer.", 9, 58,
+          &lv_font_montserrat_14, COLOR_INK);
+    lv_obj_t *choice_a = rect(card, 8, 96, 200, 38,
+                              s_event_choice == 0 ? COLOR_GOLD : COLOR_PAPER);
+    lv_obj_t *choice_b = rect(card, 8, 143, 200, 38,
+                              s_event_choice == 1 ? COLOR_GOLD : COLOR_PAPER);
+    lv_obj_set_style_border_width(choice_a, 2, 0);
+    lv_obj_set_style_border_width(choice_b, 2, 0);
+    lv_obj_set_style_border_color(choice_a, lv_color_hex(COLOR_INK), 0);
+    lv_obj_set_style_border_color(choice_b, lv_color_hex(COLOR_INK), 0);
+    label(choice_a, "PRACTICAL HELP / REWARD", 7, 9,
+          &lv_font_montserrat_14, COLOR_INK);
+    label(choice_b, "LISTEN / RELATIONSHIP", 7, 9,
+          &lv_font_montserrat_14, COLOR_INK);
+    label(screen, "UP/DOWN CHOOSE  OK CONFIRM", 10, 278,
+          &lv_font_montserrat_14, COLOR_PAPER);
+    activate_screen();
+}
+
 void app_ui_start(const bool ok[APP_UI_DEMO_COUNT])
 {
     (void)ok;
@@ -600,12 +648,34 @@ void app_ui_start(const bool ok[APP_UI_DEMO_COUNT])
     s_backpack_selection = 0;
     s_building_selection = 0;
     s_partner_selection = 0;
+    s_event_choice = 0;
     build_station();
 }
 
 void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
 {
     if (ev != BSP_BTN_CLICK && ev != BSP_BTN_LONG) return;
+
+    if (s_page == PAGE_EVENT) {
+        if (ev == BSP_BTN_CLICK && (btn == BSP_BTN_UP || btn == BSP_BTN_DOWN)) {
+            s_event_choice = 1 - s_event_choice;
+            build_event();
+        } else if (ev == BSP_BTN_CLICK && btn == BSP_BTN_OK) {
+            game_state_t candidate = s_game;
+            if (game_reduce(&candidate, (game_action_t){
+                    .type = GAME_ACTION_RESOLVE_CONTENT_EVENT,
+                    .target = (uint8_t)s_event_choice,
+                }) && app_persistence_store(&candidate)) {
+                s_game = candidate;
+                s_page = PAGE_SCHEDULE;
+                build_schedule();
+            }
+        } else if (ev == BSP_BTN_LONG && btn == BSP_BTN_OK) {
+            s_page = PAGE_SCHEDULE;
+            build_schedule();
+        }
+        return;
+    }
 
     if (s_page == PAGE_FARM_DETAIL) {
         if (btn == BSP_BTN_OK && ev == BSP_BTN_LONG) {
@@ -828,6 +898,11 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
                 s_game = candidate;
             }
             build_schedule();
+        } else if (ev == BSP_BTN_CLICK && btn == BSP_BTN_OK &&
+                   s_schedule_selection == 0 && s_game.event_queue_count > 0U) {
+            s_page = PAGE_EVENT;
+            s_event_choice = 0;
+            build_event();
         } else if (ev == BSP_BTN_CLICK && btn == BSP_BTN_OK &&
                    s_schedule_selection == 0 && s_game.pending.available) {
             game_state_t candidate = s_game;

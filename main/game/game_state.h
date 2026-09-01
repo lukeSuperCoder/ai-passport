@@ -11,6 +11,10 @@
 #define GAME_EVENT_FESTIVAL 0x02U
 #define GAME_PET_COUNT 4U
 #define GAME_RELATION_COUNT 6U
+#define GAME_EVENT_QUEUE_SIZE 3U
+#define GAME_EVENT_HISTORY_SIZE 10U
+#define GAME_VISITOR_COUNT 6U
+#define GAME_CONTENT_EVENT_COUNT 65U
 
 typedef enum {
     GAME_JOB_REST = 0,
@@ -113,6 +117,11 @@ typedef struct {
 } game_pending_report_t;
 
 typedef struct {
+    uint8_t id;
+    uint8_t queued_day;
+} game_queued_event_t;
+
+typedef struct {
     uint32_t coins;
     uint32_t last_trusted_time;
     uint32_t last_settled_time;
@@ -161,6 +170,13 @@ typedef struct {
     bool sound_enabled;
     bool night_mute_enabled;
     bool clock_24_hour;
+    game_queued_event_t event_queue[GAME_EVENT_QUEUE_SIZE];
+    uint8_t event_queue_count;
+    uint8_t event_last_day[GAME_CONTENT_EVENT_COUNT];
+    uint8_t event_seen[(GAME_CONTENT_EVENT_COUNT + 7U) / 8U];
+    uint8_t event_history[GAME_EVENT_HISTORY_SIZE];
+    uint8_t event_history_count;
+    uint8_t visitor_stages[GAME_VISITOR_COUNT];
     game_farm_plot_t farm[GAME_FARM_PLOT_COUNT];
     game_pending_report_t pending;
     bool time_anomaly;
@@ -180,6 +196,7 @@ typedef enum {
     GAME_ACTION_START_BUILDING,
     GAME_ACTION_TALK_TO_PET,
     GAME_ACTION_TOGGLE_SETTING,
+    GAME_ACTION_RESOLVE_CONTENT_EVENT,
 } game_action_type_t;
 
 typedef struct {
