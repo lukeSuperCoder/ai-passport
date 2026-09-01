@@ -73,6 +73,10 @@ SDL_VIDEODRIVER=dummy TIME_STATION_SCRIPT=DOLDDOLDDDOLDDDDOL \
   ./simulator/build/ai_passport_sim
 ```
 
+Set `TIME_STATION_SCREENSHOT` to write the final scripted frame as a 240 x 320
+binary PPM image. This provides a deterministic input for visual regression
+checks without opening a desktop window.
+
 The CTest suite also traverses Farm Detail, Kitchen recipes, Backpack,
 Buildings, events, and the forest-duration selector. It is therefore the
 preferred regression command after UI changes.

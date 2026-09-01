@@ -141,6 +141,20 @@ if(BUILD_TESTING)
         TIMEOUT 10
     )
 
+    add_test(NAME simulator_up_navigation COMMAND ai_passport_sim)
+    set_tests_properties(simulator_up_navigation PROPERTIES
+        ENVIRONMENT "SDL_VIDEODRIVER=dummy;TIME_STATION_SCRIPT=UO"
+        PASS_REGULAR_EXPRESSION "page_backpack.*Scripted simulator run completed"
+        TIMEOUT 10
+    )
+
+    add_test(NAME simulator_schedule_up_navigation COMMAND ai_passport_sim)
+    set_tests_properties(simulator_schedule_up_navigation PROPERTIES
+        ENVIRONMENT "SDL_VIDEODRIVER=dummy;TIME_STATION_SCRIPT=DOUO"
+        PASS_REGULAR_EXPRESSION "page_schedule.*page_kitchen.*Scripted simulator run completed"
+        TIMEOUT 10
+    )
+
     if(SIM_ENABLE_SANITIZERS AND CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
         foreach(test_target test_game_state test_save_service
                             test_clock_service_sim test_ui_pixel_math)

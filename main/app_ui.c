@@ -99,6 +99,15 @@ static lv_obj_t *label(lv_obj_t *parent, const char *text, int x, int y,
     return obj;
 }
 
+static lv_obj_t *label_one_line(lv_obj_t *parent, const char *text, int x, int y,
+                                int width, const lv_font_t *font, uint32_t color)
+{
+    lv_obj_t *obj = label(parent, text, x, y, font, color);
+    lv_obj_set_size(obj, width, lv_font_get_line_height(font));
+    lv_label_set_long_mode(obj, LV_LABEL_LONG_DOT);
+    return obj;
+}
+
 static lv_obj_t *new_screen(uint32_t color)
 {
     s_previous_screen = s_screen;
@@ -248,10 +257,8 @@ static void build_station(void)
                      (hour < 17U ? 1U : (hour < 21U ? 2U : 3U)));
     const char *dialogue = game_traveler_dialogue(
         s_game.weather, period, s_game.weather_seed ^ s_game.spring_day);
-    lv_obj_t *traveler = label(note, dialogue, 10, 32,
-                               &lv_font_montserrat_14, COLOR_INK);
-    lv_obj_set_width(traveler, 202);
-    lv_label_set_long_mode(traveler, LV_LABEL_LONG_DOT);
+    label_one_line(note, dialogue, 10, 31, 202,
+                   &lv_font_montserrat_14, COLOR_INK);
     if (s_game.pending_events != 0U || s_game.event_queue_count > 0U) {
         label(note, "! STORY EVENT IN PLAN", 10, 52,
               &lv_font_montserrat_14, COLOR_RED);
@@ -316,8 +323,8 @@ static void build_schedule(void)
           (s_game.notifications ? "TASK RESULTS" : "OFFLINE REPORT"),
           9, 4,
           &lv_font_montserrat_14, COLOR_RED);
-    label(s_schedule_rows[0], report_line, 9, 23,
-          &lv_font_montserrat_14, COLOR_INK);
+    label_one_line(s_schedule_rows[0], report_line, 9, 23, 198,
+                   &lv_font_montserrat_14, COLOR_INK);
     label(s_schedule_rows[1], "RECEPTION", 9, 4,
           &lv_font_montserrat_14, COLOR_RED);
     label(s_schedule_rows[1], "MOMO", 9, 23,
@@ -378,7 +385,8 @@ static void build_farm(void)
             ? game_crop_definition(s_game.farm[i].crop) : NULL;
         snprintf(line, sizeof(line), "PLOT %d  %s", i + 1,
                  crop ? crop->name : "OK FOR DETAILS");
-        label(plot, line, 8, 5, &lv_font_montserrat_14, COLOR_INK);
+        label_one_line(plot, line, 8, 5, 198,
+                       &lv_font_montserrat_14, COLOR_INK);
     }
     label(screen, "HOLD OK: STATION", 10, 276,
           &lv_font_montserrat_14, COLOR_INK);
@@ -490,7 +498,7 @@ static void build_forest(void)
     label(card, s_game.forest.active ? "OK: CANCEL + RETURN" : "OK: SEND AMAI",
           10, 124, &lv_font_montserrat_14,
           s_game.forest.active ? COLOR_MUTED : COLOR_RED);
-    label(screen, "UP/DOWN DURATION  HOLD OK: BACK", 10, 276,
+    label(screen, "UP/DOWN TIME  HOLD: BACK", 10, 276,
           &lv_font_montserrat_14, COLOR_INK);
     activate_screen();
 }
@@ -612,19 +620,22 @@ static void build_backpack_detail(void)
     lv_obj_set_style_border_color(card, lv_color_hex(COLOR_INK), 0);
     char line[48];
     if (s_backpack_selection == 0) {
-        snprintf(line, sizeof(line), "WOOD %u  BERRIES %u  MUSHROOM %u",
+        snprintf(line, sizeof(line), "WOOD%u  BERRY%u  MUSH%u",
                  s_game.inventory_wood, s_game.inventory_berries,
                  s_game.inventory_mushrooms);
-        label(card, line, 9, 12, &lv_font_montserrat_14, COLOR_INK);
-        snprintf(line, sizeof(line), "WHEAT %u  CARROT %u  BREAD %u",
+        label_one_line(card, line, 9, 12, 196,
+                       &lv_font_montserrat_14, COLOR_INK);
+        snprintf(line, sizeof(line), "WHEAT%u  CARROT%u  BRD%u",
                  s_game.inventory_wheat,
                  s_game.inventory_crops[GAME_CROP_CARROT],
                  s_game.inventory_hot_bread);
-        label(card, line, 9, 48, &lv_font_montserrat_14, COLOR_INK);
-        snprintf(line, sizeof(line), "SEEDS W%u C%u S%u H%u",
+        label_one_line(card, line, 9, 48, 196,
+                       &lv_font_montserrat_14, COLOR_INK);
+        snprintf(line, sizeof(line), "SEED W%u C%u S%u H%u",
                  ui_seed_count(GAME_CROP_WHEAT), ui_seed_count(GAME_CROP_CARROT),
                  ui_seed_count(GAME_CROP_STRAWBERRY), ui_seed_count(GAME_CROP_HERB));
-        label(card, line, 9, 84, &lv_font_montserrat_14, COLOR_INK);
+        label_one_line(card, line, 9, 84, 196,
+                       &lv_font_montserrat_14, COLOR_INK);
         game_recipe_t recipe = (game_recipe_t)s_item_selection;
         const game_recipe_definition_t *dish = game_recipe_definition(recipe);
         uint16_t stock = recipe == GAME_RECIPE_HOT_BREAD
@@ -634,7 +645,8 @@ static void build_backpack_detail(void)
             : s_game.inventory_premium_dishes[recipe];
         snprintf(line, sizeof(line), "> %s x%u +%uQ / %uG",
                  dish->name, stock, premium, dish->sell_price);
-        label(card, line, 9, 126, &lv_font_montserrat_14, COLOR_RED);
+        label_one_line(card, line, 9, 126, 196,
+                       &lv_font_montserrat_14, COLOR_RED);
         label(card, "UP/DOWN DISH  OK: SELL", 9, 157,
               &lv_font_montserrat_14, COLOR_MUTED);
     } else if (s_backpack_selection == 1) {
@@ -1252,8 +1264,9 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
             build_station();
         } else if (ev == BSP_BTN_CLICK &&
                    (btn == BSP_BTN_UP || btn == BSP_BTN_DOWN)) {
-            s_farm_selection = (s_farm_selection + 1) %
-                game_available_farm_plots(&s_game);
+            int count = game_available_farm_plots(&s_game);
+            int delta = btn == BSP_BTN_UP ? -1 : 1;
+            s_farm_selection = (s_farm_selection + delta + count) % count;
             build_farm();
         } else if (ev == BSP_BTN_CLICK && btn == BSP_BTN_OK) {
             s_page = PAGE_FARM_DETAIL;
@@ -1270,7 +1283,8 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
             build_station();
         } else if (ev == BSP_BTN_CLICK &&
                    (btn == BSP_BTN_UP || btn == BSP_BTN_DOWN)) {
-            s_schedule_selection = (s_schedule_selection + 1) % 4;
+            int delta = btn == BSP_BTN_UP ? -1 : 1;
+            s_schedule_selection = (s_schedule_selection + delta + 4) % 4;
             refresh_schedule_selection();
         } else if (ev == BSP_BTN_CLICK && btn == BSP_BTN_OK &&
                    s_schedule_selection == 0 && s_game.pending_events != 0U) {
@@ -1318,7 +1332,8 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
 
     if (ev != BSP_BTN_CLICK) return;
     if (btn == BSP_BTN_UP || btn == BSP_BTN_DOWN) {
-        s_top_selection = (s_top_selection + 1) % 5;
+        int delta = btn == BSP_BTN_UP ? -1 : 1;
+        s_top_selection = (s_top_selection + delta + 5) % 5;
         build_station();
     } else if (btn == BSP_BTN_OK && s_top_selection == 1) {
         s_page = PAGE_SCHEDULE;

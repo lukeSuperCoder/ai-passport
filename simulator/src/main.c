@@ -6,6 +6,7 @@
 #include "bsp_mock.h"
 #include "lvgl.h"
 #include "src/drivers/sdl/lv_sdl_window.h"
+#include "src/draw/snapshot/lv_snapshot.h"
 #include <SDL.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -81,6 +82,37 @@ static void run_script(const char *script)
     }
 }
 
+static bool write_screenshot(const char *path)
+{
+    if (!path || path[0] == '\0') return true;
+    lv_refr_now(NULL);
+    lv_draw_buf_t *snapshot = lv_snapshot_take(lv_screen_active(),
+                                                LV_COLOR_FORMAT_RGB565);
+    if (!snapshot) return false;
+    FILE *file = fopen(path, "wb");
+    if (!file) {
+        lv_draw_buf_destroy(snapshot);
+        return false;
+    }
+    fprintf(file, "P6\n%u %u\n255\n", snapshot->header.w, snapshot->header.h);
+    for (uint32_t y = 0; y < snapshot->header.h; y++) {
+        const uint16_t *row = (const uint16_t *)(snapshot->data +
+                                                y * snapshot->header.stride);
+        for (uint32_t x = 0; x < snapshot->header.w; x++) {
+            uint16_t pixel = row[x];
+            uint8_t rgb[3] = {
+                (uint8_t)(((pixel >> 11) & 0x1fU) * 255U / 31U),
+                (uint8_t)(((pixel >> 5) & 0x3fU) * 255U / 63U),
+                (uint8_t)((pixel & 0x1fU) * 255U / 31U),
+            };
+            fwrite(rgb, sizeof(rgb), 1, file);
+        }
+    }
+    bool ok = fclose(file) == 0;
+    lv_draw_buf_destroy(snapshot);
+    return ok;
+}
+
 int main(void)
 {
     lv_init();
@@ -114,6 +146,13 @@ int main(void)
             if (parsed > 0U && parsed <= 1000U) repeat = (unsigned)parsed;
         }
         for (unsigned i = 0U; i < repeat; i++) run_script(script);
+        const char *screenshot = getenv("TIME_STATION_SCREENSHOT");
+        if (!write_screenshot(screenshot)) {
+            fprintf(stderr, "Failed to write screenshot: %s\n", screenshot);
+            lv_sdl_quit();
+            lv_deinit();
+            return 1;
+        }
         puts("Scripted simulator run completed.");
         lv_sdl_quit();
         lv_deinit();
