@@ -32,6 +32,7 @@ typedef enum {
     PAGE_BACKPACK_DETAIL,
     PAGE_EVENT,
     PAGE_COOK_ASSIST,
+    PAGE_NOTICE,
 } app_page_t;
 
 static game_state_t s_game;
@@ -130,6 +131,7 @@ static void activate_screen(void)
     }
     case PAGE_EVENT: checkpoint = "page_event"; break;
     case PAGE_COOK_ASSIST: checkpoint = "page_cook_assist"; break;
+    case PAGE_NOTICE: checkpoint = "page_notice"; break;
     }
     telemetry_log_memory(checkpoint);
 }
@@ -243,12 +245,14 @@ static void build_station(void)
                                &lv_font_montserrat_14, COLOR_INK);
     lv_obj_set_width(traveler, 202);
     lv_label_set_long_mode(traveler, LV_LABEL_LONG_DOT);
-    if (s_game.pending.available) {
-        label(note, "! OFFLINE REPORT READY", 10, 52,
-              &lv_font_montserrat_14, COLOR_RED);
-    }
-    if (s_game.pending_events != 0U) {
+    if (s_game.pending_events != 0U || s_game.event_queue_count > 0U) {
         label(note, "! STORY EVENT IN PLAN", 10, 52,
+              &lv_font_montserrat_14, COLOR_RED);
+    } else if (s_game.notifications != 0U) {
+        label(note, "! NEW TASK RESULT", 10, 52,
+              &lv_font_montserrat_14, COLOR_RED);
+    } else if (s_game.pending.available) {
+        label(note, "! OFFLINE REPORT READY", 10, 52,
               &lv_font_montserrat_14, COLOR_RED);
     } else if (s_game.travel.active) {
         label(note, "TRAVEL TEAM IS AWAY", 10, 52,
@@ -289,6 +293,9 @@ static void build_schedule(void)
         const game_event_definition_t *event =
             game_event_definition(s_game.event_queue[0].id);
         snprintf(report_line, sizeof(report_line), "%s", event->title);
+    } else if (s_game.notifications != 0U) {
+        snprintf(report_line, sizeof(report_line), "%u RESULT(S) - OK TO VIEW",
+                 (unsigned)__builtin_popcount((unsigned)s_game.notifications));
     } else if (s_game.pending.available) {
         snprintf(report_line, sizeof(report_line), "+%luG +%uW +%uB +%uH +%uF",
                  (unsigned long)s_game.pending.coins,
@@ -298,7 +305,8 @@ static void build_schedule(void)
         snprintf(report_line, sizeof(report_line), "NO REWARD PENDING");
     }
     label(s_schedule_rows[0],
-          (s_game.pending_events || s_game.event_queue_count) ? "STORY EVENT" : "OFFLINE REPORT",
+          (s_game.pending_events || s_game.event_queue_count) ? "STORY EVENT" :
+          (s_game.notifications ? "TASK RESULTS" : "OFFLINE REPORT"),
           9, 4,
           &lv_font_montserrat_14, COLOR_RED);
     label(s_schedule_rows[0], report_line, 9, 23,
@@ -652,7 +660,7 @@ static void build_backpack_detail(void)
                  s_partner_selection == 2 ? '>' : ' ',
                  s_game.clock_24_hour ? "24 HOUR" : "12 HOUR");
         label(card, line, 9, 84, &lv_font_montserrat_14, COLOR_INK);
-        label(card, "SAVE: A/B CRC V11", 9, 120, &lv_font_montserrat_14, COLOR_INK);
+        label(card, "SAVE: A/B CRC V14", 9, 120, &lv_font_montserrat_14, COLOR_INK);
     }
     label(screen, "HOLD OK: BACK", 10, 276, &lv_font_montserrat_14, COLOR_INK);
     activate_screen();
@@ -686,6 +694,38 @@ static void build_event(void)
     label(choice_b, "LISTEN / RELATIONSHIP", 7, 9,
           &lv_font_montserrat_14, COLOR_INK);
     label(screen, "UP/DOWN CHOOSE  OK CONFIRM", 10, 278,
+          &lv_font_montserrat_14, COLOR_PAPER);
+    activate_screen();
+}
+
+static void build_notice(void)
+{
+    lv_obj_t *screen = new_screen(COLOR_NIGHT);
+    label(screen, "TASK RESULTS", 10, 10, &lv_font_montserrat_20, COLOR_PAPER);
+    lv_obj_t *card = rect(screen, 9, 52, 222, 202, COLOR_PAPER);
+    lv_obj_set_style_border_width(card, 3, 0);
+    lv_obj_set_style_border_color(card, lv_color_hex(COLOR_WOOD_DARK), 0);
+    int y = 12;
+    if (s_game.notifications & GAME_NOTICE_TRAVEL) {
+        label(card, "TRAVEL TEAM RETURNED", 9, y, &lv_font_montserrat_14, COLOR_RED);
+        y += 29;
+    }
+    if (s_game.notifications & GAME_NOTICE_BUILDING) {
+        label(card, "BUILDING COMPLETED", 9, y, &lv_font_montserrat_14, COLOR_RED);
+        y += 29;
+    }
+    if (s_game.notifications & GAME_NOTICE_RESEARCH) {
+        label(card, "RECIPE RESEARCH UPDATED", 9, y, &lv_font_montserrat_14, COLOR_RED);
+        y += 29;
+    }
+    if (s_game.notifications & GAME_NOTICE_PREMIUM_DISH) {
+        label(card, "QUALITY DISH READY", 9, y, &lv_font_montserrat_14, COLOR_RED);
+        y += 29;
+    }
+    if (s_game.notifications & GAME_NOTICE_FOREST) {
+        label(card, "LONG EXPEDITION COMPLETE", 9, y, &lv_font_montserrat_14, COLOR_RED);
+    }
+    label(screen, "OK: ACKNOWLEDGE  HOLD: BACK", 10, 276,
           &lv_font_montserrat_14, COLOR_PAPER);
     activate_screen();
 }
@@ -785,6 +825,23 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
                 build_schedule();
             }
         } else if (ev == BSP_BTN_LONG && btn == BSP_BTN_OK) {
+            s_page = PAGE_SCHEDULE;
+            build_schedule();
+        }
+        return;
+    }
+
+    if (s_page == PAGE_NOTICE) {
+        if (btn == BSP_BTN_OK && ev == BSP_BTN_LONG) {
+            s_page = PAGE_SCHEDULE;
+            build_schedule();
+        } else if (btn == BSP_BTN_OK && ev == BSP_BTN_CLICK) {
+            game_state_t candidate = s_game;
+            if (game_reduce(&candidate, (game_action_t){
+                    .type = GAME_ACTION_CLEAR_NOTIFICATIONS,
+                }) && app_persistence_store(&candidate)) {
+                s_game = candidate;
+            }
             s_page = PAGE_SCHEDULE;
             build_schedule();
         }
@@ -1073,6 +1130,10 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
             s_page = PAGE_EVENT;
             s_event_choice = 0;
             build_event();
+        } else if (ev == BSP_BTN_CLICK && btn == BSP_BTN_OK &&
+                   s_schedule_selection == 0 && s_game.notifications != 0U) {
+            s_page = PAGE_NOTICE;
+            build_notice();
         } else if (ev == BSP_BTN_CLICK && btn == BSP_BTN_OK &&
                    s_schedule_selection == 0 && s_game.pending.available) {
             game_state_t candidate = s_game;

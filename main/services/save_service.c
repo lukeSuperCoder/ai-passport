@@ -423,6 +423,11 @@ static bool decode_payload(const uint8_t payload[SAVE_PAYLOAD_SIZE],
         decoded.last_forest_result > 2U ||
         decoded.last_travel_goal >= GAME_TRAVEL_GOAL_COUNT ||
         decoded.travel.option >= GAME_TRAVEL_GOAL_COUNT ||
+        (decoded.notifications & ~(GAME_NOTICE_TRAVEL |
+                                   GAME_NOTICE_BUILDING |
+                                   GAME_NOTICE_RESEARCH |
+                                   GAME_NOTICE_PREMIUM_DISH |
+                                   GAME_NOTICE_FOREST)) != 0U ||
         (decoded.pending_events & ~(GAME_EVENT_MARKET | GAME_EVENT_FESTIVAL)) != 0U ||
         (decoded.completed_events & ~(GAME_EVENT_MARKET | GAME_EVENT_FESTIVAL)) != 0U ||
         decoded.momo.stamina > 100U || decoded.momo.mood > 100U ||

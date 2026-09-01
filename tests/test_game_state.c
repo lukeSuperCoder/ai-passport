@@ -849,7 +849,14 @@ static void test_two_hour_forest_and_travel_goals_have_distinct_results(void)
     }));
     assert(road.last_travel_goal == GAME_TRAVEL_OLD_ROAD);
     assert(road.road_fragments == 1U);
-    assert(road.notifications & 0x01U);
+    assert(road.notifications & GAME_NOTICE_TRAVEL);
+    assert(game_reduce(&road, (game_action_t){
+        .type = GAME_ACTION_CLEAR_NOTIFICATIONS,
+    }));
+    assert(road.notifications == 0U);
+    assert(!game_reduce(&road, (game_action_t){
+        .type = GAME_ACTION_CLEAR_NOTIFICATIONS,
+    }));
 }
 
 int main(void)

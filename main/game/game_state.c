@@ -331,6 +331,7 @@ static void complete_timed_task(game_state_t *state, game_timed_task_t *task)
             saturating_add_u16(
                 state->job_experience[GAME_PET_AMAI][GAME_JOB_FOREST], 25U);
         enqueue_event(state, (uint8_t)(34U + task->task_id % 6U));
+        state->notifications |= GAME_NOTICE_FOREST;
         break;
     }
     case GAME_TASK_HOT_BREAD:
@@ -341,6 +342,7 @@ static void complete_timed_task(game_state_t *state, game_timed_task_t *task)
                                       state->weather_seed) % 100U);
             if (roll < score.premium_chance) {
                 add_pending_premium_dish(state, task->recipe, 1U);
+                state->notifications |= GAME_NOTICE_PREMIUM_DISH;
             } else {
                 add_pending_dish(state, task->recipe, 1U);
             }
@@ -363,6 +365,7 @@ static void complete_timed_task(game_state_t *state, game_timed_task_t *task)
         if (state->recipe_research[task->recipe] >= 100U) {
             state->unlocked_recipes |= (uint8_t)(1U << task->recipe);
         }
+        state->notifications |= GAME_NOTICE_RESEARCH;
         state->atuan.job = GAME_JOB_REST;
         state->atuan.stamina = state->atuan.stamina > 6U
             ? (uint8_t)(state->atuan.stamina - 6U) : 0U;
@@ -402,10 +405,11 @@ static void complete_timed_task(game_state_t *state, game_timed_task_t *task)
             ? (uint8_t)(state->amai.stamina - 15U) : 0U;
         state->atuan.stamina = state->atuan.stamina > 15U
             ? (uint8_t)(state->atuan.stamina - 15U) : 0U;
-        state->notifications |= 0x01U;
+        state->notifications |= GAME_NOTICE_TRAVEL;
         break;
     case GAME_TASK_BUILDING:
         state->completed_buildings |= (uint8_t)(1U << task->building);
+        state->notifications |= GAME_NOTICE_BUILDING;
         task->active = false;
         task->kind = GAME_TASK_NONE;
         refresh_quest_progress(state);
@@ -874,6 +878,7 @@ bool game_reduce(game_state_t *state, game_action_t action)
                                            definition->road_fragments);
         if (definition->build_seconds == 0U) {
             state->completed_buildings |= (uint8_t)(1U << building);
+            state->notifications |= GAME_NOTICE_BUILDING;
             refresh_quest_progress(state);
         } else {
             state->construction.active = true;
@@ -994,6 +999,12 @@ bool game_reduce(game_state_t *state, game_action_t action)
         state->commit_sequence++;
         return true;
     }
+
+    case GAME_ACTION_CLEAR_NOTIFICATIONS:
+        if (state->notifications == 0U) return false;
+        state->notifications = 0U;
+        state->commit_sequence++;
+        return true;
 
     case GAME_ACTION_ASSIST_KITCHEN:
         if (!state->kitchen.active || state->companion_actions == 0U ||
