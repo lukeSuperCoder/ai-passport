@@ -31,6 +31,8 @@ typedef enum {
     GAME_TASK_HOT_BREAD,
     GAME_TASK_TRAVEL_8H,
     GAME_TASK_BUILDING,
+    GAME_TASK_FOREST_2H,
+    GAME_TASK_RECIPE_RESEARCH,
 } game_task_kind_t;
 
 typedef enum {
@@ -75,6 +77,13 @@ typedef enum {
 } game_building_t;
 
 typedef enum {
+    GAME_TRAVEL_MATERIALS = 0,
+    GAME_TRAVEL_OLD_ROAD,
+    GAME_TRAVEL_SCENERY,
+    GAME_TRAVEL_GOAL_COUNT,
+} game_travel_goal_t;
+
+typedef enum {
     GAME_WEATHER_CLEAR = 0,
     GAME_WEATHER_CLOUDY,
     GAME_WEATHER_RAIN,
@@ -97,6 +106,7 @@ typedef struct {
     uint32_t ends_at;
     game_recipe_t recipe;
     game_building_t building;
+    uint8_t option;
 } game_timed_task_t;
 
 typedef struct {
@@ -159,6 +169,11 @@ typedef struct {
     uint16_t inventory_dishes[GAME_RECIPE_COUNT];
     uint16_t pending_crops[GAME_CROP_COUNT];
     uint16_t pending_dishes[GAME_RECIPE_COUNT];
+    uint16_t inventory_premium_dishes[GAME_RECIPE_COUNT];
+    uint16_t pending_premium_dishes[GAME_RECIPE_COUNT];
+    uint16_t inventory_premium_hot_bread;
+    uint16_t pending_premium_hot_bread;
+    uint8_t recipe_research[GAME_RECIPE_COUNT];
     uint8_t unlocked_recipes;
     uint8_t quest_stage;
     uint8_t completed_buildings;
@@ -184,6 +199,9 @@ typedef struct {
     uint8_t event_history[GAME_EVENT_HISTORY_SIZE];
     uint8_t event_history_count;
     uint8_t visitor_stages[GAME_VISITOR_COUNT];
+    uint8_t last_forest_result;
+    game_travel_goal_t last_travel_goal;
+    uint8_t notifications;
     game_farm_plot_t farm[GAME_FARM_PLOT_COUNT];
     game_pending_report_t pending;
     bool time_anomaly;
@@ -206,6 +224,8 @@ typedef enum {
     GAME_ACTION_RESOLVE_CONTENT_EVENT,
     GAME_ACTION_SELL_DISH,
     GAME_ACTION_ASSIST_KITCHEN,
+    GAME_ACTION_START_FOREST_2H,
+    GAME_ACTION_START_RESEARCH,
 } game_action_type_t;
 
 typedef struct {
