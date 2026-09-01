@@ -376,23 +376,25 @@ static void complete_timed_task(game_state_t *state, game_timed_task_t *task)
         enqueue_event(state, (uint8_t)(26U + task->task_id % 4U));
         break;
     case GAME_TASK_TRAVEL_8H:
-        state->last_travel_goal = (game_travel_goal_t)task->option;
+        {
+        game_travel_goal_t goal = (game_travel_goal_t)(task->option & 0x7FU);
+        state->last_travel_goal = goal;
         state->pending.wood = saturating_add_u16(
             state->pending.wood,
-            task->option == GAME_TRAVEL_MATERIALS ? 8U : 4U);
+            goal == GAME_TRAVEL_MATERIALS ? 8U : 4U);
         state->pending.berries = saturating_add_u16(
             state->pending.berries,
-            task->option == GAME_TRAVEL_SCENERY ? 5U : 3U);
+            goal == GAME_TRAVEL_SCENERY ? 5U : 3U);
         state->pending.mushrooms = saturating_add_u16(
             state->pending.mushrooms, 1U);
         if (game_relationship(state, GAME_PET_AMAI, GAME_PET_ATUAN) >= 50U) {
             state->pending.mushrooms = saturating_add_u16(
                 state->pending.mushrooms, 1U);
         }
-        if (task->option == GAME_TRAVEL_OLD_ROAD && state->road_fragments < 9U) {
+        if (goal == GAME_TRAVEL_OLD_ROAD && state->road_fragments < 9U) {
             state->road_fragments++;
         }
-        if (task->option == GAME_TRAVEL_SCENERY && state->reputation < 100U) {
+        if (goal == GAME_TRAVEL_SCENERY && state->reputation < 100U) {
             state->reputation++;
         }
         int relation = relationship_index(GAME_PET_AMAI, GAME_PET_ATUAN);
@@ -411,6 +413,7 @@ static void complete_timed_task(game_state_t *state, game_timed_task_t *task)
             ? (uint8_t)(state->atuan.stamina - 15U) : 0U;
         state->notifications |= GAME_NOTICE_TRAVEL;
         break;
+        }
     case GAME_TASK_BUILDING:
         state->completed_buildings |= (uint8_t)(1U << task->building);
         state->notifications |= GAME_NOTICE_BUILDING;
@@ -848,14 +851,16 @@ bool game_reduce(game_state_t *state, game_action_t action)
             action.option >= GAME_TRAVEL_GOAL_COUNT) {
             return false;
         }
-        if (state->inventory_hot_bread > 0U) state->inventory_hot_bread--;
+        bool used_premium = state->inventory_hot_bread == 0U;
+        if (!used_premium) state->inventory_hot_bread--;
         else state->inventory_premium_hot_bread--;
         state->travel.active = true;
         state->travel.kind = GAME_TASK_TRAVEL_8H;
         state->travel.task_id = state->commit_sequence + 1U;
         state->travel.started_at = action.now;
         state->travel.ends_at = action.now + 8U * 60U * 60U;
-        state->travel.option = action.option;
+        state->travel.option = (uint8_t)(action.option |
+            (used_premium ? 0x80U : 0U));
         state->amai.job = GAME_JOB_FOREST;
         state->atuan.job = GAME_JOB_FOREST;
         state->amai.job_started_at = action.now;
@@ -1025,6 +1030,79 @@ bool game_reduce(game_state_t *state, game_action_t action)
         state->player_affinity[GAME_PET_ATUAN] =
             state->player_affinity[GAME_PET_ATUAN] > 97U ? 100U :
             (uint8_t)(state->player_affinity[GAME_PET_ATUAN] + 3U);
+        state->commit_sequence++;
+        return true;
+    }
+
+    case GAME_ACTION_CANCEL_TASK: {
+        game_timed_task_t *task = NULL;
+        switch (action.target) {
+        case GAME_CANCEL_FOREST:
+            task = &state->forest;
+            if (!task->active || action.now != state->last_settled_time ||
+                action.now >= task->ends_at) return false;
+            state->amai.job = GAME_JOB_REST;
+            break;
+        case GAME_CANCEL_KITCHEN: {
+            task = &state->kitchen;
+            if (!task->active || action.now != state->last_settled_time ||
+                action.now >= task->ends_at) return false;
+            if (task->kind == GAME_TASK_HOT_BREAD) {
+                const game_recipe_definition_t *recipe =
+                    game_recipe_definition(task->recipe);
+                if (!recipe) return false;
+                set_crop_inventory(state, recipe->crop_a, saturating_add_u16(
+                    crop_inventory(state, recipe->crop_a), recipe->crop_a_count));
+                if (recipe->crop_b != GAME_CROP_NONE) {
+                    set_crop_inventory(state, recipe->crop_b, saturating_add_u16(
+                        crop_inventory(state, recipe->crop_b), recipe->crop_b_count));
+                }
+                state->inventory_berries = saturating_add_u16(
+                    state->inventory_berries, recipe->berries);
+            } else if (task->kind == GAME_TASK_RECIPE_RESEARCH) {
+                state->inventory_berries = saturating_add_u16(
+                    state->inventory_berries, 1U);
+            } else {
+                return false;
+            }
+            state->atuan.job = GAME_JOB_REST;
+            break;
+        }
+        case GAME_CANCEL_TRAVEL:
+            task = &state->travel;
+            if (!task->active || action.now != state->last_settled_time ||
+                action.now >= task->ends_at) return false;
+            if ((task->option & 0x80U) != 0U) {
+                state->inventory_premium_hot_bread = saturating_add_u16(
+                    state->inventory_premium_hot_bread, 1U);
+            } else {
+                state->inventory_hot_bread = saturating_add_u16(
+                    state->inventory_hot_bread, 1U);
+            }
+            state->amai.job = GAME_JOB_REST;
+            state->atuan.job = GAME_JOB_REST;
+            break;
+        case GAME_CANCEL_CONSTRUCTION: {
+            task = &state->construction;
+            if (!task->active || task->building >= GAME_BUILD_COUNT ||
+                action.now != state->last_settled_time ||
+                action.now >= task->ends_at) return false;
+            const game_building_definition_t *building =
+                game_building_definition(task->building);
+            if (!building) return false;
+            state->inventory_wood = saturating_add_u16(
+                state->inventory_wood, building->wood);
+            state->coins = saturating_add_u32(state->coins, building->coins);
+            uint16_t fragments = (uint16_t)state->road_fragments +
+                building->road_fragments;
+            state->road_fragments = fragments > UINT8_MAX
+                ? UINT8_MAX : (uint8_t)fragments;
+            break;
+        }
+        default:
+            return false;
+        }
+        memset(task, 0, sizeof(*task));
         state->commit_sequence++;
         return true;
     }

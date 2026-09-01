@@ -51,6 +51,9 @@ A normal play loop is: claim the welcome report, plant crops, advance the
 injected clock, claim the harvest, cook a dish, assist the cooking task, advance
 time again, claim and sell the dish, then spend the proceeds on buildings.
 Use a later `TIME_STATION_NOW` value on each restart to advance timed work.
+Active forest, kitchen, travel, and construction tasks can be cancelled with
+OK on their task page. Cancellation restores the assigned pets and refunds the
+task's committed ingredients or building materials exactly once.
 
 The simulator uses timestamp `22600` by default. Inject a later trusted time to
 test offline settlement without waiting:

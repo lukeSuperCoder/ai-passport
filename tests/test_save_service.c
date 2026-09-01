@@ -193,7 +193,7 @@ int main(void)
     second.last_forest_result = 2U;
     second.last_travel_goal = GAME_TRAVEL_OLD_ROAD;
     second.notifications = 3U;
-    second.travel.option = GAME_TRAVEL_OLD_ROAD;
+    second.travel.option = (uint8_t)(0x80U | GAME_TRAVEL_OLD_ROAD);
     assert(save_service_store(&save, &second));
     assert(save_service_load(&save, &loaded));
     assert(loaded.coins == 80U);
@@ -262,7 +262,7 @@ int main(void)
     assert(loaded.last_forest_result == 2U);
     assert(loaded.last_travel_goal == GAME_TRAVEL_OLD_ROAD);
     assert(loaded.notifications == 3U);
-    assert(loaded.travel.option == GAME_TRAVEL_OLD_ROAD);
+    assert(loaded.travel.option == (uint8_t)(0x80U | GAME_TRAVEL_OLD_ROAD));
 
     /* A valid v13 slot migrates with every v14-only field at its safe default. */
     memory_storage_t legacy = storage;

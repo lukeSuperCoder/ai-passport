@@ -21,6 +21,10 @@
 #define GAME_NOTICE_RESEARCH     0x04U
 #define GAME_NOTICE_PREMIUM_DISH 0x08U
 #define GAME_NOTICE_FOREST       0x10U
+#define GAME_CANCEL_FOREST       0U
+#define GAME_CANCEL_KITCHEN      1U
+#define GAME_CANCEL_TRAVEL       2U
+#define GAME_CANCEL_CONSTRUCTION 3U
 
 typedef enum {
     GAME_JOB_REST = 0,
@@ -233,6 +237,7 @@ typedef enum {
     GAME_ACTION_START_RESEARCH,
     GAME_ACTION_CLEAR_NOTIFICATIONS,
     GAME_ACTION_FINISH_HEAT_GAME,
+    GAME_ACTION_CANCEL_TASK,
 } game_action_type_t;
 
 typedef struct {

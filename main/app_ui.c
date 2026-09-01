@@ -487,7 +487,7 @@ static void build_forest(void)
           ? "SAFE: WOOD + BERRIES"
           : "RISK: WEATHER / RARE FINDS",
           10, 84, &lv_font_montserrat_14, COLOR_INK);
-    label(card, s_game.forest.active ? "AMAI IS EXPLORING" : "OK: SEND AMAI",
+    label(card, s_game.forest.active ? "OK: CANCEL + RETURN" : "OK: SEND AMAI",
           10, 124, &lv_font_montserrat_14,
           s_game.forest.active ? COLOR_MUTED : COLOR_RED);
     label(screen, "UP/DOWN DURATION  HOLD OK: BACK", 10, 276,
@@ -514,6 +514,8 @@ static void build_travel(void)
                  (unsigned long)(remaining / 3600U),
                  (unsigned long)((remaining / 60U) % 60U));
         label(card, eta, 10, 78, &lv_font_montserrat_14, COLOR_MUTED);
+        label(card, "OK: CANCEL + REFUND BREAD", 10, 103,
+              &lv_font_montserrat_14, COLOR_RED);
     } else if (s_game.spring_day < 8U) {
         label(card, "LOCKED UNTIL SPRING 8", 10, 51,
               &lv_font_montserrat_14, COLOR_MUTED);
@@ -589,7 +591,9 @@ static void build_buildings(void)
         label(row, line, 6, 6, &lv_font_montserrat_14,
               done ? COLOR_MUTED : COLOR_INK);
     }
-    label(screen, "OK BUILD  HOLD OK: BACK", 10, 276,
+    label(screen, s_game.construction.active
+          ? "OK ACTIVE BUILD: CANCEL  HOLD: BACK"
+          : "OK BUILD  HOLD OK: BACK", 10, 276,
           &lv_font_montserrat_14, COLOR_INK);
     activate_screen();
 }
@@ -841,6 +845,29 @@ static void build_cook_assist(void)
     s_heat_timer = lv_timer_create(heat_timer_cb, 50U, NULL);
 }
 
+static void cancel_active_task(uint8_t target)
+{
+    uint32_t now = s_game.last_settled_time;
+    clock_service_now(&now);
+    s_now = now;
+    game_state_t candidate = s_game;
+    if (now > candidate.last_settled_time) {
+        game_reduce(&candidate, (game_action_t){
+            .type = GAME_ACTION_SETTLE_TO_TIME, .now = now,
+        });
+    }
+    if (game_reduce(&candidate, (game_action_t){
+            .type = GAME_ACTION_CANCEL_TASK,
+            .now = now,
+            .target = target,
+        }) && app_persistence_store(&candidate)) {
+        s_game = candidate;
+    } else if (candidate.commit_sequence != s_game.commit_sequence &&
+               app_persistence_store(&candidate)) {
+        s_game = candidate;
+    }
+}
+
 void app_ui_start(const bool ok[APP_UI_DEMO_COUNT])
 {
     (void)ok;
@@ -1027,6 +1054,10 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
                    s_game.kitchen.option == 0U) {
             s_page = PAGE_COOK_ASSIST;
             build_cook_assist();
+        } else if (ev == BSP_BTN_CLICK && btn == BSP_BTN_OK &&
+                   s_game.kitchen.active) {
+            cancel_active_task(GAME_CANCEL_KITCHEN);
+            build_kitchen();
         }
         return;
     }
@@ -1060,6 +1091,10 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
                 s_game = candidate;
             }
             build_forest();
+        } else if (ev == BSP_BTN_CLICK && btn == BSP_BTN_OK &&
+                   s_game.forest.active) {
+            cancel_active_task(GAME_CANCEL_FOREST);
+            build_forest();
         }
         return;
     }
@@ -1073,6 +1108,12 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
             int delta = btn == BSP_BTN_UP ? -1 : 1;
             s_building_selection = (s_building_selection + delta +
                                     GAME_BUILD_COUNT) % GAME_BUILD_COUNT;
+            build_buildings();
+        } else if (ev == BSP_BTN_CLICK && btn == BSP_BTN_OK &&
+                   s_game.construction.active &&
+                   s_game.construction.building ==
+                       (game_building_t)s_building_selection) {
+            cancel_active_task(GAME_CANCEL_CONSTRUCTION);
             build_buildings();
         } else if (ev == BSP_BTN_CLICK && btn == BSP_BTN_OK) {
             uint32_t now = s_game.last_trusted_time;
@@ -1177,6 +1218,10 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
             int delta = btn == BSP_BTN_UP ? -1 : 1;
             s_travel_goal = (s_travel_goal + delta +
                              GAME_TRAVEL_GOAL_COUNT) % GAME_TRAVEL_GOAL_COUNT;
+            build_travel();
+        } else if (s_page == PAGE_TRAVEL && ev == BSP_BTN_CLICK &&
+                   btn == BSP_BTN_OK && s_game.travel.active) {
+            cancel_active_task(GAME_CANCEL_TRAVEL);
             build_travel();
         } else if (s_page == PAGE_TRAVEL && ev == BSP_BTN_CLICK &&
                    btn == BSP_BTN_OK && !s_game.travel.active) {

@@ -885,6 +885,92 @@ static void test_two_hour_forest_and_travel_goals_have_distinct_results(void)
     }));
 }
 
+static void test_task_cancellation_refunds_inputs_once(void)
+{
+    game_state_t forest;
+    game_state_init(&forest, 0U);
+    assert(game_reduce(&forest, (game_action_t){
+        .type = GAME_ACTION_START_FOREST_2H,
+    }));
+    assert(game_reduce(&forest, (game_action_t){
+        .type = GAME_ACTION_CANCEL_TASK,
+        .target = GAME_CANCEL_FOREST,
+    }));
+    assert(!forest.forest.active);
+    assert(forest.amai.job == GAME_JOB_REST);
+
+    game_state_t kitchen;
+    game_state_init(&kitchen, 0U);
+    kitchen.inventory_wheat = 2U;
+    assert(game_reduce(&kitchen, (game_action_t){
+        .type = GAME_ACTION_START_RECIPE,
+        .target = GAME_RECIPE_HOT_BREAD,
+    }));
+    assert(kitchen.inventory_wheat == 0U);
+    assert(game_reduce(&kitchen, (game_action_t){
+        .type = GAME_ACTION_CANCEL_TASK,
+        .target = GAME_CANCEL_KITCHEN,
+    }));
+    assert(kitchen.inventory_wheat == 2U);
+    assert(kitchen.atuan.job == GAME_JOB_REST);
+    assert(!game_reduce(&kitchen, (game_action_t){
+        .type = GAME_ACTION_CANCEL_TASK,
+        .target = GAME_CANCEL_KITCHEN,
+    }));
+
+    game_state_t research;
+    game_state_init(&research, 0U);
+    research.inventory_berries = 1U;
+    assert(game_reduce(&research, (game_action_t){
+        .type = GAME_ACTION_START_RESEARCH,
+        .target = GAME_RECIPE_CARROT_STEW,
+    }));
+    assert(game_reduce(&research, (game_action_t){
+        .type = GAME_ACTION_CANCEL_TASK,
+        .target = GAME_CANCEL_KITCHEN,
+    }));
+    assert(research.inventory_berries == 1U);
+    assert(research.recipe_research[GAME_RECIPE_CARROT_STEW] == 0U);
+
+    game_state_t travel;
+    game_state_init(&travel, 0U);
+    travel.spring_day = 8U;
+    travel.completed_buildings |= (uint8_t)(1U << GAME_BUILD_SIGNPOST);
+    travel.inventory_premium_hot_bread = 1U;
+    assert(game_reduce(&travel, (game_action_t){
+        .type = GAME_ACTION_START_TRAVEL,
+        .option = GAME_TRAVEL_SCENERY,
+    }));
+    assert(travel.inventory_premium_hot_bread == 0U);
+    assert((travel.travel.option & 0x80U) != 0U);
+    assert(game_reduce(&travel, (game_action_t){
+        .type = GAME_ACTION_CANCEL_TASK,
+        .target = GAME_CANCEL_TRAVEL,
+    }));
+    assert(travel.inventory_premium_hot_bread == 1U);
+    assert(travel.amai.job == GAME_JOB_REST);
+    assert(travel.atuan.job == GAME_JOB_REST);
+
+    game_state_t construction;
+    game_state_init(&construction, 0U);
+    const game_building_definition_t *building =
+        game_building_definition(GAME_BUILD_GUEST_ROOM);
+    construction.inventory_wood = building->wood;
+    construction.coins = building->coins;
+    construction.road_fragments = building->road_fragments;
+    assert(game_reduce(&construction, (game_action_t){
+        .type = GAME_ACTION_START_BUILDING,
+        .target = GAME_BUILD_GUEST_ROOM,
+    }));
+    assert(game_reduce(&construction, (game_action_t){
+        .type = GAME_ACTION_CANCEL_TASK,
+        .target = GAME_CANCEL_CONSTRUCTION,
+    }));
+    assert(construction.inventory_wood == building->wood);
+    assert(construction.coins == building->coins);
+    assert(construction.road_fragments == building->road_fragments);
+}
+
 int main(void)
 {
     test_offline_acceptance_duration_matrix();
@@ -911,6 +997,7 @@ int main(void)
     test_heat_game_is_single_use_and_boosts_quality();
     test_premium_dish_is_claimed_and_sells_for_bonus();
     test_two_hour_forest_and_travel_goals_have_distinct_results();
+    test_task_cancellation_refunds_inputs_once();
     test_all_crops_and_recipes_form_production_chains();
     test_main_story_can_reach_spring_14_without_deadlock();
     return 0;

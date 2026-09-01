@@ -32,6 +32,9 @@ The complete CTest suite currently contains 10 tests and passes 10/10.
   visitor progress records, event history, and Spring 7/14 milestones.
 - Seven-day offline cap, weather/calendar settlement, task completion notices,
   and deterministic replay inputs.
+- Cancellation for forest, kitchen, research, travel, and construction tasks;
+  committed inputs are refunded once, including the exact bread quality used
+  for travel.
 - Explicit v14 serialization in an A/B, CRC-protected save format with legacy
   payload decoding.
 
@@ -40,14 +43,13 @@ The complete CTest suite currently contains 10 tests and passes 10/10.
 These items are present in the product and technical design but are not yet
 implemented as complete playable features:
 
-1. Player cancellation of active timed tasks with deterministic material refund.
-2. Day/night loop music, pet/UI sound effects, and their silent-failure path.
-3. Read-only asset pack v1, font-subset pipeline, and release asset-size report.
-4. Simulator injection for battery failure, audio failure, save corruption, and
+1. Day/night loop music, pet/UI sound effects, and their silent-failure path.
+2. Read-only asset pack v1, font-subset pipeline, and release asset-size report.
+3. Simulator injection for battery failure, audio failure, save corruption, and
    direct development time jumps. Trusted startup time injection already exists.
-5. A development diagnostics page showing live heap/DMA blocks, save sequence,
+4. A development diagnostics page showing live heap/DMA blocks, save sequence,
    state size, and resource-pack version.
-6. Automated text-overflow/image comparison coverage. Current UI tests validate
+5. Automated text-overflow/image comparison coverage. Current UI tests validate
    page reachability and memory-safe repeated transitions, not pixel fidelity.
 
 ## Required device acceptance

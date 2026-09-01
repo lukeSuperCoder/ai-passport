@@ -422,7 +422,7 @@ static bool decode_payload(const uint8_t payload[SAVE_PAYLOAD_SIZE],
         decoded.weather > GAME_WEATHER_STORM ||
         decoded.last_forest_result > 2U ||
         decoded.last_travel_goal >= GAME_TRAVEL_GOAL_COUNT ||
-        decoded.travel.option >= GAME_TRAVEL_GOAL_COUNT ||
+        (decoded.travel.option & 0x7FU) >= GAME_TRAVEL_GOAL_COUNT ||
         decoded.kitchen.option > 41U ||
         (decoded.notifications & ~(GAME_NOTICE_TRAVEL |
                                    GAME_NOTICE_BUILDING |
