@@ -8,6 +8,8 @@
 
 typedef struct {
     uint8_t bytes[SAVE_SLOT_SIZE * SAVE_SLOT_COUNT];
+    unsigned write_count;
+    unsigned fail_write_at;
 } memory_storage_t;
 
 static bool memory_read(void *context, size_t offset, void *data, size_t size)
@@ -21,6 +23,7 @@ static bool memory_read(void *context, size_t offset, void *data, size_t size)
 static bool memory_write(void *context, size_t offset, const void *data, size_t size)
 {
     memory_storage_t *storage = context;
+    if (storage->write_count++ == storage->fail_write_at) return false;
     if (offset + size > sizeof(storage->bytes)) return false;
     memcpy(storage->bytes + offset, data, size);
     return true;
@@ -48,6 +51,8 @@ int main(void)
 {
     memory_storage_t storage;
     memset(&storage, 0xFF, sizeof(storage));
+    storage.write_count = 0U;
+    storage.fail_write_at = UINT32_MAX;
     save_backend_t save = backend(&storage);
     game_state_t loaded;
     assert(!save_service_load(&save, &loaded));
@@ -58,6 +63,21 @@ int main(void)
     assert(save_service_store(&save, &first));
     assert(save_service_load(&save, &loaded));
     assert(loaded.coins == 25U);
+
+    /* Every interrupted write stage must preserve the previous committed slot. */
+    memory_storage_t baseline = storage;
+    for (unsigned failure = 0U; failure < 3U; failure++) {
+        memory_storage_t interrupted = baseline;
+        interrupted.write_count = 0U;
+        interrupted.fail_write_at = failure;
+        save_backend_t interrupted_save = backend(&interrupted);
+        game_state_t replacement = first;
+        replacement.coins = 999U;
+        assert(!save_service_store(&interrupted_save, &replacement));
+        interrupted.fail_write_at = UINT32_MAX;
+        assert(save_service_load(&interrupted_save, &loaded));
+        assert(loaded.coins == 25U);
+    }
 
     game_state_t second = first;
     second.coins = 80U;
@@ -89,6 +109,35 @@ int main(void)
     second.spring_day = 7U;
     second.weather = GAME_WEATHER_RAIN;
     second.calendar_milestones = 0x01U;
+    second.pending_events = GAME_EVENT_MARKET;
+    second.completed_events = GAME_EVENT_FESTIVAL;
+    second.pending.mushrooms = 1U;
+    second.inventory_mushrooms = 2U;
+    second.travel_journal_count = 3U;
+    second.travel.active = true;
+    second.travel.kind = GAME_TASK_TRAVEL_8H;
+    second.travel.task_id = 9U;
+    second.travel.started_at = 4000U;
+    second.travel.ends_at = 32800U;
+    second.inventory_crops[GAME_CROP_CARROT] = 4U;
+    second.inventory_seeds[GAME_CROP_STRAWBERRY] = 5U;
+    second.inventory_dishes[GAME_RECIPE_HERB_TEA] = 2U;
+    second.pending_crops[GAME_CROP_HERB] = 3U;
+    second.pending_dishes[GAME_RECIPE_FOREST_CAKE] = 1U;
+    second.unlocked_recipes = 0x1FU;
+    second.kitchen.recipe = GAME_RECIPE_CARROT_STEW;
+    second.quest_stage = 9U;
+    second.completed_buildings = 0x1FU;
+    second.reputation = 17U;
+    second.forest_runs = 4U;
+    second.road_fragments = 3U;
+    second.total_crops_harvested = 12U;
+    second.cooked_counts[GAME_RECIPE_HERB_TEA] = 2U;
+    second.construction.active = true;
+    second.construction.kind = GAME_TASK_BUILDING;
+    second.construction.building = GAME_BUILD_SIGNPOST;
+    second.construction.started_at = 5000U;
+    second.construction.ends_at = 19400U;
     assert(save_service_store(&save, &second));
     assert(save_service_load(&save, &loaded));
     assert(loaded.coins == 80U);
@@ -109,6 +158,29 @@ int main(void)
     assert(loaded.weather_seed == 5678U);
     assert(loaded.spring_day == 7U);
     assert(loaded.weather == GAME_WEATHER_RAIN);
+    assert(loaded.pending_events == GAME_EVENT_MARKET);
+    assert(loaded.completed_events == GAME_EVENT_FESTIVAL);
+    assert(loaded.pending.mushrooms == 1U);
+    assert(loaded.inventory_mushrooms == 2U);
+    assert(loaded.travel_journal_count == 3U);
+    assert(loaded.travel.active);
+    assert(loaded.travel.ends_at == 32800U);
+    assert(loaded.inventory_crops[GAME_CROP_CARROT] == 4U);
+    assert(loaded.inventory_seeds[GAME_CROP_STRAWBERRY] == 5U);
+    assert(loaded.inventory_dishes[GAME_RECIPE_HERB_TEA] == 2U);
+    assert(loaded.pending_crops[GAME_CROP_HERB] == 3U);
+    assert(loaded.pending_dishes[GAME_RECIPE_FOREST_CAKE] == 1U);
+    assert(loaded.unlocked_recipes == 0x1FU);
+    assert(loaded.kitchen.recipe == GAME_RECIPE_CARROT_STEW);
+    assert(loaded.quest_stage == 9U);
+    assert(loaded.completed_buildings == 0x1FU);
+    assert(loaded.reputation == 17U);
+    assert(loaded.forest_runs == 4U);
+    assert(loaded.road_fragments == 3U);
+    assert(loaded.total_crops_harvested == 12U);
+    assert(loaded.cooked_counts[GAME_RECIPE_HERB_TEA] == 2U);
+    assert(loaded.construction.active);
+    assert(loaded.construction.building == GAME_BUILD_SIGNPOST);
 
     /* Slot 1 is newest. Corrupt its payload and verify fallback to slot 0. */
     storage.bytes[SAVE_SLOT_SIZE + 28U] ^= 0x01U;

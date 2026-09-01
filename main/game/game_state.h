@@ -7,6 +7,8 @@
 #define GAME_RECEPTION_CAP_SECONDS (8U * 60U * 60U)
 #define GAME_FARM_PLOT_COUNT 4U
 #define GAME_SPRING_DAY_COUNT 14U
+#define GAME_EVENT_MARKET 0x01U
+#define GAME_EVENT_FESTIVAL 0x02U
 
 typedef enum {
     GAME_JOB_REST = 0,
@@ -20,6 +22,8 @@ typedef enum {
     GAME_TASK_NONE = 0,
     GAME_TASK_FOREST_30M,
     GAME_TASK_HOT_BREAD,
+    GAME_TASK_TRAVEL_8H,
+    GAME_TASK_BUILDING,
 } game_task_kind_t;
 
 typedef enum {
@@ -31,7 +35,30 @@ typedef enum {
 typedef enum {
     GAME_CROP_NONE = 0,
     GAME_CROP_WHEAT,
+    GAME_CROP_CARROT,
+    GAME_CROP_STRAWBERRY,
+    GAME_CROP_HERB,
+    GAME_CROP_COUNT,
 } game_crop_t;
+
+typedef enum {
+    GAME_RECIPE_HOT_BREAD = 0,
+    GAME_RECIPE_CARROT_STEW,
+    GAME_RECIPE_STRAWBERRY_JAM,
+    GAME_RECIPE_HERB_TEA,
+    GAME_RECIPE_FOREST_CAKE,
+    GAME_RECIPE_COUNT,
+} game_recipe_t;
+
+typedef enum {
+    GAME_BUILD_FRONT_DESK = 0,
+    GAME_BUILD_KITCHEN,
+    GAME_BUILD_FARM,
+    GAME_BUILD_GUEST_ROOM,
+    GAME_BUILD_SINK,
+    GAME_BUILD_SIGNPOST,
+    GAME_BUILD_COUNT,
+} game_building_t;
 
 typedef enum {
     GAME_WEATHER_CLEAR = 0,
@@ -54,6 +81,8 @@ typedef struct {
     uint32_t task_id;
     uint32_t started_at;
     uint32_t ends_at;
+    game_recipe_t recipe;
+    game_building_t building;
 } game_timed_task_t;
 
 typedef struct {
@@ -69,6 +98,7 @@ typedef struct {
     uint16_t berries;
     uint16_t hot_bread;
     uint16_t wheat;
+    uint16_t mushrooms;
     uint32_t elapsed_seconds;
     bool available;
 } game_pending_report_t;
@@ -83,17 +113,37 @@ typedef struct {
     uint8_t spring_day;
     game_weather_t weather;
     uint8_t calendar_milestones;
+    uint8_t pending_events;
+    uint8_t completed_events;
     game_pet_state_t momo;
     game_pet_state_t amai;
     game_pet_state_t atuan;
     game_pet_state_t lulu;
     game_timed_task_t forest;
     game_timed_task_t kitchen;
+    game_timed_task_t travel;
     uint16_t inventory_wheat;
     uint16_t inventory_wood;
     uint16_t inventory_berries;
     uint16_t inventory_hot_bread;
     uint16_t inventory_wheat_seed;
+    uint16_t inventory_mushrooms;
+    uint8_t travel_journal_count;
+    uint16_t inventory_crops[GAME_CROP_COUNT];
+    uint16_t inventory_seeds[GAME_CROP_COUNT];
+    uint16_t inventory_dishes[GAME_RECIPE_COUNT];
+    uint16_t pending_crops[GAME_CROP_COUNT];
+    uint16_t pending_dishes[GAME_RECIPE_COUNT];
+    uint8_t unlocked_recipes;
+    uint8_t quest_stage;
+    uint8_t completed_buildings;
+    uint8_t reputation;
+    uint8_t forest_runs;
+    uint8_t road_fragments;
+    uint16_t total_crops_harvested;
+    uint16_t cooked_counts[GAME_RECIPE_COUNT];
+    bool chapter_complete;
+    game_timed_task_t construction;
     game_farm_plot_t farm[GAME_FARM_PLOT_COUNT];
     game_pending_report_t pending;
     bool time_anomaly;
@@ -106,12 +156,18 @@ typedef enum {
     GAME_ACTION_START_AMAI_FOREST,
     GAME_ACTION_START_ATUAN_HOT_BREAD,
     GAME_ACTION_PLANT_WHEAT,
+    GAME_ACTION_RESOLVE_EVENT,
+    GAME_ACTION_START_TRAVEL,
+    GAME_ACTION_START_RECIPE,
+    GAME_ACTION_PLANT_CROP,
+    GAME_ACTION_START_BUILDING,
 } game_action_type_t;
 
 typedef struct {
     game_action_type_t type;
     uint32_t now;
     uint8_t target;
+    uint8_t option;
 } game_action_t;
 
 void game_state_init(game_state_t *state, uint32_t now);

@@ -4,6 +4,7 @@ idf_component_register(
          "ui_pixel.c"
          "ui_pixel_math.c"
          "game/game_state.c"
+         "game/game_content.c"
          "services/save_service.c"
          "services/app_persistence_esp.c"
          "services/clock_service_esp.c"

@@ -36,7 +36,29 @@ TIME_STATION_NOW=44200 ./simulator/build/ai_passport_sim
 
 Delete `simulator/build/time_station.save` to create a fresh simulator save.
 
+For repeatable headless smoke tests, set `SDL_VIDEODRIVER=dummy` and provide a
+`TIME_STATION_SCRIPT`. The characters are `U`/`D` (direction), `O` (OK), and
+`L` (long OK). This example opens and returns from all five top-level modules:
+
+```bash
+SDL_VIDEODRIVER=dummy TIME_STATION_SCRIPT=DOLDDOLDDDOLDDDDOL \
+  ./simulator/build/ai_passport_sim
+```
+
+The CTest suite also traverses Farm Detail, Kitchen recipes, Backpack, and
+Buildings. It is therefore the preferred regression command after UI changes.
+
 ## Host logic tests
+
+All host logic and scripted UI navigation tests can be run together:
+
+```bash
+cmake -S simulator -B simulator/build -G Ninja
+cmake --build simulator/build
+ctest --test-dir simulator/build --output-on-failure
+```
+
+Individual compiler commands are retained below for minimal environments.
 
 ```bash
 cc -std=c11 -Wall -Wextra -Werror -Imain \

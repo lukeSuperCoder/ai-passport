@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 project(ai_passport_simulator LANGUAGES C CXX)
 
+include(CTest)
+
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -40,6 +42,7 @@ add_executable(ai_passport_sim
     ${APP_DIR}/ui_pixel.c
     ${APP_DIR}/ui_pixel_math.c
     ${APP_DIR}/game/game_state.c
+    ${APP_DIR}/game/game_content.c
     ${APP_DIR}/services/save_service.c
     ${APP_DIR}/demo_display.c
     ${APP_DIR}/demo_button.c
@@ -62,4 +65,70 @@ target_compile_options(ai_passport_sim PRIVATE -Wall -Wextra -Wpedantic)
 if(SIM_ENABLE_SANITIZERS AND CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(ai_passport_sim PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(ai_passport_sim PRIVATE -fsanitize=address,undefined)
+endif()
+
+if(BUILD_TESTING)
+    add_executable(test_game_state
+        ../tests/test_game_state.c
+        ${APP_DIR}/game/game_state.c
+        ${APP_DIR}/game/game_content.c
+    )
+    target_include_directories(test_game_state PRIVATE ${APP_DIR})
+    target_compile_options(test_game_state PRIVATE -Wall -Wextra -Werror)
+    add_test(NAME game_state COMMAND test_game_state)
+
+    add_executable(test_save_service
+        ../tests/test_save_service.c
+        ${APP_DIR}/game/game_state.c
+        ${APP_DIR}/game/game_content.c
+        ${APP_DIR}/services/save_service.c
+    )
+    target_include_directories(test_save_service PRIVATE ${APP_DIR})
+    target_compile_options(test_save_service PRIVATE -Wall -Wextra -Werror)
+    add_test(NAME save_service COMMAND test_save_service)
+
+    add_executable(test_clock_service_sim
+        ../tests/test_clock_service_sim.c
+        src/clock_service_sim.c
+    )
+    target_include_directories(test_clock_service_sim PRIVATE ${APP_DIR})
+    target_compile_options(test_clock_service_sim PRIVATE -Wall -Wextra -Werror)
+    add_test(NAME clock_service_sim COMMAND test_clock_service_sim)
+
+    add_executable(test_ui_pixel_math
+        ../tests/test_ui_pixel_math.c
+        ${APP_DIR}/ui_pixel_math.c
+    )
+    target_include_directories(test_ui_pixel_math PRIVATE ${APP_DIR})
+    target_compile_options(test_ui_pixel_math PRIVATE -Wall -Wextra -Werror)
+    add_test(NAME ui_pixel_math COMMAND test_ui_pixel_math)
+
+    add_test(NAME simulator_navigation COMMAND ai_passport_sim)
+    set_tests_properties(simulator_navigation PROPERTIES
+        ENVIRONMENT "SDL_VIDEODRIVER=dummy;TIME_STATION_SCRIPT=DOLDDOLDDDOLDDDDOL"
+        PASS_REGULAR_EXPRESSION "page_schedule.*page_farm.*page_travel.*page_backpack.*Scripted simulator run completed"
+        TIMEOUT 10
+    )
+    add_test(NAME simulator_deep_navigation COMMAND ai_passport_sim)
+    set_tests_properties(simulator_deep_navigation PROPERTIES
+        ENVIRONMENT "SDL_VIDEODRIVER=dummy;TIME_STATION_SCRIPT=DODDDODLLDDOODOLLDDDDODDODDDOLL"
+        PASS_REGULAR_EXPRESSION "page_kitchen.*page_farm_detail.*page_buildings.*Scripted simulator run completed"
+        TIMEOUT 10
+    )
+    add_test(NAME simulator_navigation_stress COMMAND ai_passport_sim)
+    set_tests_properties(simulator_navigation_stress PROPERTIES
+        ENVIRONMENT "SDL_VIDEODRIVER=dummy;TIME_STATION_SCRIPT=DOLDDOLDDDOLDDDDOL;TIME_STATION_SCRIPT_REPEAT=100"
+        PASS_REGULAR_EXPRESSION "Scripted simulator run completed"
+        TIMEOUT 30
+    )
+
+    if(SIM_ENABLE_SANITIZERS AND CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+        foreach(test_target test_game_state test_save_service
+                            test_clock_service_sim test_ui_pixel_math)
+            target_compile_options(${test_target} PRIVATE
+                -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(${test_target} PRIVATE
+                -fsanitize=address,undefined)
+        endforeach()
+    endif()
 endif()

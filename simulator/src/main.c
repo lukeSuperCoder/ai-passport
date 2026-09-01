@@ -10,6 +10,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #define LONG_PRESS_MS 700U
 
@@ -55,6 +56,31 @@ static void poll_keys(void)
     }
 }
 
+static void run_script(const char *script)
+{
+    if (!script) return;
+    for (const char *cursor = script; *cursor; cursor++) {
+        bsp_btn_t button;
+        bsp_btn_ev_t event = BSP_BTN_CLICK;
+        switch (*cursor) {
+        case 'U': button = BSP_BTN_UP; break;
+        case 'D': button = BSP_BTN_DOWN; break;
+        case 'O': button = BSP_BTN_OK; break;
+        case 'L':
+            button = BSP_BTN_OK;
+            event = BSP_BTN_LONG;
+            break;
+        default:
+            continue;
+        }
+        bsp_mock_button_emit(button, event);
+        if (bsp_lvgl_lock(1000)) {
+            lv_timer_handler();
+            bsp_lvgl_unlock();
+        }
+    }
+}
+
 int main(void)
 {
     lv_init();
@@ -79,6 +105,20 @@ int main(void)
     }
 
     puts("Controls: Up/Down arrows, Enter; hold Enter for 700ms to return.");
+    const char *script = getenv("TIME_STATION_SCRIPT");
+    if (script && script[0] != '\0') {
+        unsigned repeat = 1U;
+        const char *repeat_text = getenv("TIME_STATION_SCRIPT_REPEAT");
+        if (repeat_text && repeat_text[0] != '\0') {
+            unsigned long parsed = strtoul(repeat_text, NULL, 10);
+            if (parsed > 0U && parsed <= 1000U) repeat = (unsigned)parsed;
+        }
+        for (unsigned i = 0U; i < repeat; i++) run_script(script);
+        puts("Scripted simulator run completed.");
+        lv_sdl_quit();
+        lv_deinit();
+        return 0;
+    }
     while (SDL_WasInit(SDL_INIT_VIDEO) && lv_display_get_default()) {
         if (bsp_lvgl_lock(1000)) {
             lv_timer_handler();

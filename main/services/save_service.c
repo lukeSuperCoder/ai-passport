@@ -3,14 +3,18 @@
 #include <string.h>
 
 #define SAVE_MAGIC 0x5453544EU /* TSTN */
-#define SAVE_FORMAT_VERSION 5U
+#define SAVE_FORMAT_VERSION 9U
 #define SAVE_HEADER_SIZE 28U
 #define SAVE_COMMIT_MARKER 0x434F4D4DU /* COMM */
 #define SAVE_PAYLOAD_V1_SIZE 36U
 #define SAVE_PAYLOAD_V2_SIZE 64U
 #define SAVE_PAYLOAD_V3_SIZE 104U
 #define SAVE_PAYLOAD_V4_SIZE 168U
-#define SAVE_PAYLOAD_SIZE 184U
+#define SAVE_PAYLOAD_V5_SIZE 184U
+#define SAVE_PAYLOAD_V6_SIZE 184U
+#define SAVE_PAYLOAD_V7_SIZE 204U
+#define SAVE_PAYLOAD_V8_SIZE 256U
+#define SAVE_PAYLOAD_SIZE 292U
 
 typedef struct {
     uint32_t sequence;
@@ -120,6 +124,43 @@ static void encode_payload(const game_state_t *state, uint8_t payload[SAVE_PAYLO
     payload[176] = state->spring_day;
     payload[177] = (uint8_t)state->weather;
     payload[178] = state->calendar_milestones;
+    payload[179] = state->pending_events;
+    payload[180] = state->completed_events;
+    write_u16(payload + 182, state->pending.mushrooms);
+    write_u16(payload + 184, state->inventory_mushrooms);
+    payload[186] = state->travel_journal_count;
+    payload[188] = state->travel.active ? 1U : 0U;
+    payload[189] = (uint8_t)state->travel.kind;
+    write_u32(payload + 192, state->travel.task_id);
+    write_u32(payload + 196, state->travel.started_at);
+    write_u32(payload + 200, state->travel.ends_at);
+    for (size_t i = 0; i < GAME_CROP_COUNT; i++) {
+        write_u16(payload + 204U + i * 2U, state->inventory_crops[i]);
+        write_u16(payload + 214U + i * 2U, state->inventory_seeds[i]);
+        write_u16(payload + 234U + i * 2U, state->pending_crops[i]);
+    }
+    for (size_t i = 0; i < GAME_RECIPE_COUNT; i++) {
+        write_u16(payload + 224U + i * 2U, state->inventory_dishes[i]);
+        write_u16(payload + 244U + i * 2U, state->pending_dishes[i]);
+    }
+    payload[254] = state->unlocked_recipes;
+    payload[255] = (uint8_t)state->kitchen.recipe;
+    payload[256] = state->quest_stage;
+    payload[257] = state->completed_buildings;
+    payload[258] = state->reputation;
+    payload[259] = state->forest_runs;
+    payload[260] = state->road_fragments;
+    payload[261] = state->chapter_complete ? 1U : 0U;
+    write_u16(payload + 262, state->total_crops_harvested);
+    for (size_t i = 0; i < GAME_RECIPE_COUNT; i++) {
+        write_u16(payload + 264U + i * 2U, state->cooked_counts[i]);
+    }
+    payload[274] = state->construction.active ? 1U : 0U;
+    payload[275] = (uint8_t)state->construction.kind;
+    payload[276] = (uint8_t)state->construction.building;
+    write_u32(payload + 280, state->construction.task_id);
+    write_u32(payload + 284, state->construction.started_at);
+    write_u32(payload + 288, state->construction.ends_at);
 }
 
 static bool decode_payload(const uint8_t payload[SAVE_PAYLOAD_SIZE],
@@ -196,6 +237,10 @@ static bool decode_payload(const uint8_t payload[SAVE_PAYLOAD_SIZE],
         decoded.spring_day = payload[176];
         decoded.weather = (game_weather_t)payload[177];
         decoded.calendar_milestones = payload[178];
+        if (version >= 6U) {
+            decoded.pending_events = payload[179];
+            decoded.completed_events = payload[180];
+        }
     } else {
         decoded.season_started_at = decoded.last_trusted_time;
         decoded.weather_seed = decoded.last_trusted_time ^ 0x54494D45U;
@@ -203,27 +248,79 @@ static bool decode_payload(const uint8_t payload[SAVE_PAYLOAD_SIZE],
         decoded.weather = GAME_WEATHER_CLEAR;
         decoded.calendar_milestones = 0U;
     }
+    if (version >= 7U) {
+        decoded.pending.mushrooms = read_u16(payload + 182);
+        decoded.inventory_mushrooms = read_u16(payload + 184);
+        decoded.travel_journal_count = payload[186];
+        decoded.travel.active = payload[188] != 0U;
+        decoded.travel.kind = (game_task_kind_t)payload[189];
+        decoded.travel.task_id = read_u32(payload + 192);
+        decoded.travel.started_at = read_u32(payload + 196);
+        decoded.travel.ends_at = read_u32(payload + 200);
+    }
+    if (version >= 8U) {
+        for (size_t i = 0; i < GAME_CROP_COUNT; i++) {
+            decoded.inventory_crops[i] = read_u16(payload + 204U + i * 2U);
+            decoded.inventory_seeds[i] = read_u16(payload + 214U + i * 2U);
+            decoded.pending_crops[i] = read_u16(payload + 234U + i * 2U);
+        }
+        for (size_t i = 0; i < GAME_RECIPE_COUNT; i++) {
+            decoded.inventory_dishes[i] = read_u16(payload + 224U + i * 2U);
+            decoded.pending_dishes[i] = read_u16(payload + 244U + i * 2U);
+        }
+        decoded.unlocked_recipes = payload[254];
+        decoded.kitchen.recipe = (game_recipe_t)payload[255];
+    }
+    if (version >= 9U) {
+        decoded.quest_stage = payload[256];
+        decoded.completed_buildings = payload[257];
+        decoded.reputation = payload[258];
+        decoded.forest_runs = payload[259];
+        decoded.road_fragments = payload[260];
+        decoded.chapter_complete = payload[261] != 0U;
+        decoded.total_crops_harvested = read_u16(payload + 262);
+        for (size_t i = 0; i < GAME_RECIPE_COUNT; i++) {
+            decoded.cooked_counts[i] = read_u16(payload + 264U + i * 2U);
+        }
+        decoded.construction.active = payload[274] != 0U;
+        decoded.construction.kind = (game_task_kind_t)payload[275];
+        decoded.construction.building = (game_building_t)payload[276];
+        decoded.construction.task_id = read_u32(payload + 280);
+        decoded.construction.started_at = read_u32(payload + 284);
+        decoded.construction.ends_at = read_u32(payload + 288);
+    }
 
     if (decoded.momo.job > GAME_JOB_FARM ||
         decoded.amai.job > GAME_JOB_FARM ||
         decoded.atuan.job > GAME_JOB_FARM ||
         decoded.lulu.job > GAME_JOB_FARM ||
-        decoded.forest.kind > GAME_TASK_HOT_BREAD ||
-        decoded.kitchen.kind > GAME_TASK_HOT_BREAD ||
+        decoded.forest.kind > GAME_TASK_BUILDING ||
+        decoded.kitchen.kind > GAME_TASK_BUILDING ||
+        decoded.travel.kind > GAME_TASK_BUILDING ||
+        decoded.construction.kind > GAME_TASK_BUILDING ||
+        decoded.construction.building >= GAME_BUILD_COUNT ||
+        decoded.quest_stage < 2U || decoded.quest_stage > 11U ||
+        (decoded.completed_buildings & ~((1U << GAME_BUILD_COUNT) - 1U)) != 0U ||
+        decoded.kitchen.recipe >= GAME_RECIPE_COUNT ||
+        (decoded.unlocked_recipes & ~((1U << GAME_RECIPE_COUNT) - 1U)) != 0U ||
         decoded.forest.actor > GAME_ACTOR_ATUAN ||
         decoded.kitchen.actor > GAME_ACTOR_ATUAN ||
         decoded.spring_day < 1U || decoded.spring_day > GAME_SPRING_DAY_COUNT ||
         decoded.weather > GAME_WEATHER_STORM ||
+        (decoded.pending_events & ~(GAME_EVENT_MARKET | GAME_EVENT_FESTIVAL)) != 0U ||
+        (decoded.completed_events & ~(GAME_EVENT_MARKET | GAME_EVENT_FESTIVAL)) != 0U ||
         decoded.momo.stamina > 100U || decoded.momo.mood > 100U ||
         decoded.amai.stamina > 100U || decoded.amai.mood > 100U ||
         decoded.atuan.stamina > 100U || decoded.atuan.mood > 100U ||
         decoded.lulu.stamina > 100U || decoded.lulu.mood > 100U ||
         (decoded.forest.active && decoded.forest.ends_at < decoded.forest.started_at) ||
-        (decoded.kitchen.active && decoded.kitchen.ends_at < decoded.kitchen.started_at)) {
+        (decoded.kitchen.active && decoded.kitchen.ends_at < decoded.kitchen.started_at) ||
+        (decoded.construction.active &&
+         decoded.construction.ends_at < decoded.construction.started_at)) {
         return false;
     }
     for (size_t i = 0; i < GAME_FARM_PLOT_COUNT; i++) {
-        if (decoded.farm[i].crop > GAME_CROP_WHEAT ||
+        if (decoded.farm[i].crop >= GAME_CROP_COUNT ||
             (decoded.farm[i].active &&
              decoded.farm[i].matures_at < decoded.farm[i].planted_at)) {
             return false;
@@ -255,7 +352,11 @@ static slot_info_t inspect_slot(const save_backend_t *backend, unsigned slot)
                  (version == 2U && info.payload_length == SAVE_PAYLOAD_V2_SIZE) ||
                  (version == 3U && info.payload_length == SAVE_PAYLOAD_V3_SIZE) ||
                  (version == 4U && info.payload_length == SAVE_PAYLOAD_V4_SIZE) ||
-                 (version == 5U && info.payload_length == SAVE_PAYLOAD_SIZE);
+                 (version == 5U && info.payload_length == SAVE_PAYLOAD_V5_SIZE) ||
+                 (version == 6U && info.payload_length == SAVE_PAYLOAD_V6_SIZE) ||
+                 (version == 7U && info.payload_length == SAVE_PAYLOAD_V7_SIZE) ||
+                 (version == 8U && info.payload_length == SAVE_PAYLOAD_V8_SIZE) ||
+                 (version == 9U && info.payload_length == SAVE_PAYLOAD_SIZE);
     return info;
 }
 
