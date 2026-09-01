@@ -39,6 +39,9 @@ add_executable(ai_passport_sim
     src/clock_service_sim.c
     src/telemetry_sim.c
     ${APP_DIR}/app_ui.c
+    ${APP_DIR}/app_i18n.c
+    ${APP_DIR}/fonts/app_font_zh_14.c
+    ${APP_DIR}/fonts/app_font_zh_20.c
     ${APP_DIR}/ui_pixel.c
     ${APP_DIR}/ui_pixel_math.c
     ${APP_DIR}/game/game_state.c
@@ -103,6 +106,15 @@ if(BUILD_TESTING)
     target_compile_options(test_ui_pixel_math PRIVATE -Wall -Wextra -Werror)
     add_test(NAME ui_pixel_math COMMAND test_ui_pixel_math)
 
+    add_executable(test_i18n
+        ../tests/test_i18n.c
+        ${APP_DIR}/app_i18n.c
+        ${APP_DIR}/game/game_content.c
+    )
+    target_include_directories(test_i18n PRIVATE ${APP_DIR})
+    target_compile_options(test_i18n PRIVATE -Wall -Wextra -Werror)
+    add_test(NAME i18n COMMAND test_i18n)
+
     add_test(NAME simulator_navigation COMMAND ai_passport_sim)
     set_tests_properties(simulator_navigation PROPERTIES
         ENVIRONMENT "SDL_VIDEODRIVER=dummy;TIME_STATION_SCRIPT=DOLDDOLDDDOLDDDDOL"
@@ -152,6 +164,13 @@ if(BUILD_TESTING)
     set_tests_properties(simulator_schedule_up_navigation PROPERTIES
         ENVIRONMENT "SDL_VIDEODRIVER=dummy;TIME_STATION_SCRIPT=DOUO"
         PASS_REGULAR_EXPRESSION "page_schedule.*page_kitchen.*Scripted simulator run completed"
+        TIMEOUT 10
+    )
+
+    add_test(NAME simulator_language_switch COMMAND ai_passport_sim)
+    set_tests_properties(simulator_language_switch PROPERTIES
+        ENVIRONMENT "SDL_VIDEODRIVER=dummy;TIME_STATION_SCRIPT=DDDDODDDDDODDDOO"
+        PASS_REGULAR_EXPRESSION "page_settings.*Scripted simulator run completed"
         TIMEOUT 10
     )
 

@@ -3,7 +3,7 @@
 #include <string.h>
 
 #define SAVE_MAGIC 0x5453544EU /* TSTN */
-#define SAVE_FORMAT_VERSION 14U
+#define SAVE_FORMAT_VERSION 15U
 #define SAVE_HEADER_SIZE 28U
 #define SAVE_COMMIT_MARKER 0x434F4D4DU /* COMM */
 #define SAVE_PAYLOAD_V1_SIZE 36U
@@ -19,7 +19,8 @@
 #define SAVE_PAYLOAD_V11_SIZE 348U
 #define SAVE_PAYLOAD_V12_SIZE 448U
 #define SAVE_PAYLOAD_V13_SIZE 472U
-#define SAVE_PAYLOAD_SIZE 508U
+#define SAVE_PAYLOAD_V14_SIZE 508U
+#define SAVE_PAYLOAD_SIZE 509U
 
 typedef struct {
     uint32_t sequence;
@@ -212,6 +213,7 @@ static void encode_payload(const game_state_t *state, uint8_t payload[SAVE_PAYLO
     payload[505] = state->kitchen.option;
     payload[506] = state->travel.option;
     payload[507] = state->construction.option;
+    payload[508] = state->language_english ? 1U : 0U;
 }
 
 static bool decode_payload(const uint8_t payload[SAVE_PAYLOAD_SIZE],
@@ -397,6 +399,9 @@ static bool decode_payload(const uint8_t payload[SAVE_PAYLOAD_SIZE],
         decoded.travel.option = payload[506];
         decoded.construction.option = payload[507];
     }
+    if (version >= 15U) {
+        decoded.language_english = payload[508] != 0U;
+    }
 
     if (decoded.momo.job > GAME_JOB_FARM ||
         decoded.amai.job > GAME_JOB_FARM ||
@@ -505,7 +510,8 @@ static slot_info_t inspect_slot(const save_backend_t *backend, unsigned slot)
                  (version == 11U && info.payload_length == SAVE_PAYLOAD_V11_SIZE) ||
                  (version == 12U && info.payload_length == SAVE_PAYLOAD_V12_SIZE) ||
                  (version == 13U && info.payload_length == SAVE_PAYLOAD_V13_SIZE) ||
-                 (version == 14U && info.payload_length == SAVE_PAYLOAD_SIZE);
+                 (version == 14U && info.payload_length == SAVE_PAYLOAD_V14_SIZE) ||
+                 (version == 15U && info.payload_length == SAVE_PAYLOAD_SIZE);
     return info;
 }
 

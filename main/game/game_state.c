@@ -595,6 +595,7 @@ void game_state_init(game_state_t *state, uint32_t now)
     state->sound_enabled = true;
     state->night_mute_enabled = true;
     state->clock_24_hour = true;
+    state->language_english = false;
     enqueue_event(state, 53U);
 }
 
@@ -918,6 +919,7 @@ bool game_reduce(game_state_t *state, game_action_t action)
         case 0U: state->sound_enabled = !state->sound_enabled; break;
         case 1U: state->night_mute_enabled = !state->night_mute_enabled; break;
         case 2U: state->clock_24_hour = !state->clock_24_hour; break;
+        case 3U: state->language_english = !state->language_english; break;
         default: return false;
         }
         state->commit_sequence++;

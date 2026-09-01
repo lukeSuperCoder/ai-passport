@@ -23,6 +23,10 @@ The first configure downloads the pinned LVGL `v9.5.0` source into the build
 directory. Use Up/Down to select an item, Enter to open or act, and hold Enter
 for at least 700 ms to return.
 
+The interface starts in Simplified Chinese. Open **Bag > Settings > Language**
+to switch between Simplified Chinese and English. The choice is saved and takes
+effect immediately across every page.
+
 A fresh save starts with a deterministic six-hour reception report. Open Plan
 and claim the 60-coin reward to begin the economy loop.
 
@@ -78,8 +82,9 @@ binary PPM image. This provides a deterministic input for visual regression
 checks without opening a desktop window.
 
 The CTest suite also traverses Farm Detail, Kitchen recipes, Backpack,
-Buildings, events, and the forest-duration selector. It is therefore the
-preferred regression command after UI changes.
+Buildings, events, the forest-duration selector, reverse navigation, and a
+Chinese-English-Chinese language round trip. It is therefore the preferred
+regression command after UI changes.
 
 ## Host logic tests
 

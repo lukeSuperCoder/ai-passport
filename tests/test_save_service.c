@@ -174,6 +174,7 @@ int main(void)
     second.sound_enabled = false;
     second.night_mute_enabled = false;
     second.clock_24_hour = false;
+    second.language_english = true;
     second.event_queue_count = 2U;
     second.event_queue[0] = (game_queued_event_t){ .id = 18U, .queued_day = 7U };
     second.event_queue[1] = (game_queued_event_t){ .id = 34U, .queued_day = 7U };
@@ -246,6 +247,7 @@ int main(void)
     assert(!loaded.sound_enabled);
     assert(!loaded.night_mute_enabled);
     assert(!loaded.clock_24_hour);
+    assert(loaded.language_english);
     assert(loaded.event_queue_count == 2U);
     assert(loaded.event_queue[0].id == 18U);
     assert(loaded.event_last_day[18] == 5U);
@@ -280,6 +282,18 @@ int main(void)
     assert(loaded.notifications == 0U);
     assert(loaded.last_travel_goal == GAME_TRAVEL_MATERIALS);
     assert(loaded.travel.option == GAME_TRAVEL_MATERIALS);
+
+    /* A valid v14 slot migrates to the new default Simplified Chinese UI. */
+    memory_storage_t v14 = storage;
+    uint8_t *v14_header = v14.bytes + SAVE_SLOT_SIZE;
+    uint8_t *v14_payload = v14_header + 28U;
+    write_u16(v14_header + 4U, 14U);
+    write_u32(v14_header + 12U, 508U);
+    write_u32(v14_header + 16U, test_crc32(v14_payload, 508U));
+    write_u32(v14_header + 20U, test_crc32(v14_header, 20U));
+    save_backend_t v14_save = backend(&v14);
+    assert(save_service_load(&v14_save, &loaded));
+    assert(!loaded.language_english);
 
     /* Slot 1 is newest. Corrupt its payload and verify fallback to slot 0. */
     storage.bytes[SAVE_SLOT_SIZE + 28U] ^= 0x01U;

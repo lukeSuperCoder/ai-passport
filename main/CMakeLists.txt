@@ -1,6 +1,9 @@
 idf_component_register(
     SRCS "main.c"
          "app_ui.c"
+         "app_i18n.c"
+         "fonts/app_font_zh_14.c"
+         "fonts/app_font_zh_20.c"
          "ui_pixel.c"
          "ui_pixel_math.c"
          "game/game_state.c"

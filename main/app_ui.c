@@ -1,4 +1,5 @@
 #include "app_ui.h"
+#include "app_i18n.h"
 #include "game/game_state.h"
 #include "game/game_content.h"
 #include "services/app_persistence.h"
@@ -7,6 +8,9 @@
 #include "lvgl.h"
 
 #include <stdio.h>
+
+LV_FONT_DECLARE(app_font_zh_14)
+LV_FONT_DECLARE(app_font_zh_20)
 
 #define COLOR_NIGHT       0x172637
 #define COLOR_SKY         0x78A58A
@@ -62,6 +66,26 @@ static uint32_t s_heat_started_at;
 static uint8_t s_heat_accuracy;
 static uint32_t s_last_input_tick;
 static bool s_menu_hidden;
+
+static app_language_t ui_language(void)
+{
+    return s_game.language_english ? APP_LANG_EN : APP_LANG_ZH_CN;
+}
+
+static const char *tr(const char *zh_cn, const char *en)
+{
+    return app_i18n_pick(ui_language(), zh_cn, en);
+}
+
+static const lv_font_t *ui_font_14(void)
+{
+    return &app_font_zh_14;
+}
+
+static const lv_font_t *ui_font_20(void)
+{
+    return &app_font_zh_20;
+}
 
 static uint16_t ui_crop_count(game_crop_t crop)
 {
@@ -205,17 +229,20 @@ static void draw_top_status(lv_obj_t *parent)
     snprintf(time_text, sizeof(time_text), "%02lu:%02lu",
              (unsigned long)hour,
              (unsigned long)((s_now / 60U) % 60U));
-    label(parent, time_text, 9, 7, &lv_font_montserrat_20, COLOR_PAPER);
-    char calendar[32];
-    snprintf(calendar, sizeof(calendar), "SPR %u / %s", s_game.spring_day,
-             game_weather_name(s_game.weather));
-    label(parent, calendar, 9, 29, &lv_font_montserrat_14, COLOR_GOLD);
-    label(parent, "82%", 197, 11, &lv_font_montserrat_14, COLOR_PAPER);
+    label(parent, time_text, 9, 7, ui_font_20(), COLOR_PAPER);
+    char calendar[128];
+    snprintf(calendar, sizeof(calendar), tr("春 %u日 / %s", "SPR %u / %s"),
+             s_game.spring_day, app_i18n_weather(ui_language(), s_game.weather));
+    label(parent, calendar, 9, 29, ui_font_14(), COLOR_GOLD);
+    label(parent, "82%", 197, 11, ui_font_14(), COLOR_PAPER);
 }
 
 static void draw_bottom_tabs(lv_obj_t *parent)
 {
-    const char *items[5] = { "INN", "PLAN", "FARM", "TRIP", "BAG" };
+    const char *items[5] = {
+        tr("驿站", "INN"), tr("计划", "PLAN"), tr("农田", "FARM"),
+        tr("旅行", "TRIP"), tr("背包", "BAG"),
+    };
     for (int i = 0; i < 5; i++) {
         int x = 3 + i * 47;
         lv_obj_t *tab = rect(parent, x, 278, 46, 32,
@@ -223,7 +250,7 @@ static void draw_bottom_tabs(lv_obj_t *parent)
         s_bottom_tabs[i] = tab;
         lv_obj_set_style_border_width(tab, 3, 0);
         lv_obj_set_style_border_color(tab, lv_color_hex(COLOR_INK), 0);
-        lv_obj_t *text = label(tab, items[i], 0, 7, &lv_font_montserrat_14, COLOR_INK);
+        lv_obj_t *text = label(tab, items[i], 0, 7, ui_font_14(), COLOR_INK);
         lv_obj_set_width(text, 42);
         lv_obj_set_style_text_align(text, LV_TEXT_ALIGN_CENTER, 0);
         if (s_menu_hidden) lv_obj_add_flag(tab, LV_OBJ_FLAG_HIDDEN);
@@ -251,26 +278,28 @@ static void build_station(void)
     lv_obj_t *note = rect(screen, 9, 187, 222, 77, COLOR_PAPER);
     lv_obj_set_style_border_width(note, 3, 0);
     lv_obj_set_style_border_color(note, lv_color_hex(COLOR_WOOD_DARK), 0);
-    label(note, "THE LANTERN IS LIT", 10, 9, &lv_font_montserrat_14, COLOR_RED);
+    label(note, tr("灯火已经点亮", "THE LANTERN IS LIT"),
+          10, 9, ui_font_14(), COLOR_RED);
     uint32_t hour = (s_now / 3600U) % 24U;
     uint8_t period = hour < 6U ? 3U : (hour < 11U ? 0U :
                      (hour < 17U ? 1U : (hour < 21U ? 2U : 3U)));
-    const char *dialogue = game_traveler_dialogue(
-        s_game.weather, period, s_game.weather_seed ^ s_game.spring_day);
+    const char *dialogue = app_i18n_dialogue(
+        ui_language(), s_game.weather, period,
+        s_game.weather_seed ^ s_game.spring_day);
     label_one_line(note, dialogue, 10, 31, 202,
-                   &lv_font_montserrat_14, COLOR_INK);
+                   ui_font_14(), COLOR_INK);
     if (s_game.pending_events != 0U || s_game.event_queue_count > 0U) {
-        label(note, "! STORY EVENT IN PLAN", 10, 52,
-              &lv_font_montserrat_14, COLOR_RED);
+        label(note, tr("！计划中有剧情事件", "! STORY EVENT IN PLAN"), 10, 52,
+              ui_font_14(), COLOR_RED);
     } else if (s_game.notifications != 0U) {
-        label(note, "! NEW TASK RESULT", 10, 52,
-              &lv_font_montserrat_14, COLOR_RED);
+        label(note, tr("！有新的任务结果", "! NEW TASK RESULT"), 10, 52,
+              ui_font_14(), COLOR_RED);
     } else if (s_game.pending.available) {
-        label(note, "! OFFLINE REPORT READY", 10, 52,
-              &lv_font_montserrat_14, COLOR_RED);
+        label(note, tr("！离线报告已生成", "! OFFLINE REPORT READY"), 10, 52,
+              ui_font_14(), COLOR_RED);
     } else if (s_game.travel.active) {
-        label(note, "TRAVEL TEAM IS AWAY", 10, 52,
-              &lv_font_montserrat_14, COLOR_RED);
+        label(note, tr("旅行队正在外出", "TRAVEL TEAM IS AWAY"), 10, 52,
+              ui_font_14(), COLOR_RED);
     }
     draw_bottom_tabs(screen);
     activate_screen();
@@ -288,7 +317,7 @@ static void build_schedule(void)
 {
     lv_obj_t *screen = new_screen(COLOR_PAPER);
     rect(screen, 0, 0, 240, 48, COLOR_NIGHT);
-    label(screen, "SCHEDULE", 10, 10, &lv_font_montserrat_20, COLOR_PAPER);
+    label(screen, tr("计划", "SCHEDULE"), 10, 10, ui_font_20(), COLOR_PAPER);
     s_schedule_rows[0] = rect(screen, 9, 52, 222, 45, COLOR_PAPER);
     s_schedule_rows[1] = rect(screen, 9, 102, 222, 45, COLOR_PAPER);
     s_schedule_rows[2] = rect(screen, 9, 152, 222, 45, COLOR_PAPER);
@@ -298,17 +327,19 @@ static void build_schedule(void)
         lv_obj_set_style_border_color(s_schedule_rows[i], lv_color_hex(COLOR_INK), 0);
     }
 
-    char report_line[40];
+    char report_line[128];
     if (s_game.pending_events & GAME_EVENT_MARKET) {
-        snprintf(report_line, sizeof(report_line), "ROAD MARKET - OK TO VISIT");
+        snprintf(report_line, sizeof(report_line), "%s",
+                 tr("路边集市 · 按OK前往", "ROAD MARKET - OK TO VISIT"));
     } else if (s_game.pending_events & GAME_EVENT_FESTIVAL) {
-        snprintf(report_line, sizeof(report_line), "LANTERN FEST - OK TO JOIN");
+        snprintf(report_line, sizeof(report_line), "%s",
+                 tr("灯会 · 按OK参加", "LANTERN FEST - OK TO JOIN"));
     } else if (s_game.event_queue_count > 0U) {
-        const game_event_definition_t *event =
-            game_event_definition(s_game.event_queue[0].id);
-        snprintf(report_line, sizeof(report_line), "%s", event->title);
+        snprintf(report_line, sizeof(report_line), "%s",
+                 app_i18n_event(ui_language(), s_game.event_queue[0].id));
     } else if (s_game.notifications != 0U) {
-        snprintf(report_line, sizeof(report_line), "%u RESULT(S) - OK TO VIEW",
+        snprintf(report_line, sizeof(report_line),
+                 tr("%u项结果 · 按OK查看", "%u RESULT(S) - OK TO VIEW"),
                  (unsigned)__builtin_popcount((unsigned)s_game.notifications));
     } else if (s_game.pending.available) {
         snprintf(report_line, sizeof(report_line), "+%luG +%uW +%uB +%uH +%uF",
@@ -316,49 +347,54 @@ static void build_schedule(void)
                  s_game.pending.wood, s_game.pending.berries,
                  s_game.pending.hot_bread, s_game.pending.wheat);
     } else {
-        snprintf(report_line, sizeof(report_line), "NO REWARD PENDING");
+        snprintf(report_line, sizeof(report_line), "%s",
+                 tr("暂无待领取奖励", "NO REWARD PENDING"));
     }
     label(s_schedule_rows[0],
-          (s_game.pending_events || s_game.event_queue_count) ? "STORY EVENT" :
-          (s_game.notifications ? "TASK RESULTS" : "OFFLINE REPORT"),
+          (s_game.pending_events || s_game.event_queue_count)
+              ? tr("剧情事件", "STORY EVENT")
+              : (s_game.notifications ? tr("任务结果", "TASK RESULTS")
+                                      : tr("离线报告", "OFFLINE REPORT")),
           9, 4,
-          &lv_font_montserrat_14, COLOR_RED);
+          ui_font_14(), COLOR_RED);
     label_one_line(s_schedule_rows[0], report_line, 9, 23, 198,
-                   &lv_font_montserrat_14, COLOR_INK);
-    label(s_schedule_rows[1], "RECEPTION", 9, 4,
-          &lv_font_montserrat_14, COLOR_RED);
-    label(s_schedule_rows[1], "MOMO", 9, 23,
-          &lv_font_montserrat_14, COLOR_INK);
-    char stamina[24];
+                   ui_font_14(), COLOR_INK);
+    label(s_schedule_rows[1], tr("前台接待", "RECEPTION"), 9, 4,
+          ui_font_14(), COLOR_RED);
+    label(s_schedule_rows[1], app_i18n_pet(ui_language(), GAME_PET_MOMO), 9, 23,
+          ui_font_14(), COLOR_INK);
+    char stamina[128];
     game_job_score_t reception_score = game_calculate_job_score(
         &s_game, GAME_PET_MOMO, GAME_JOB_RECEPTION, GAME_PET_COUNT);
-    snprintf(stamina, sizeof(stamina), "E%u SCORE %d",
+    snprintf(stamina, sizeof(stamina), tr("体%u 评分%d", "E%u SCORE %d"),
              s_game.momo.stamina, reception_score.score);
     label(s_schedule_rows[1], stamina, 128, 23,
-          &lv_font_montserrat_14, COLOR_MUTED);
+          ui_font_14(), COLOR_MUTED);
 
-    label(s_schedule_rows[2], "FOREST  /  30 MIN", 9, 4,
-          &lv_font_montserrat_14, COLOR_RED);
-    char forest_line[40];
+    label(s_schedule_rows[2], tr("森林 / 30分钟", "FOREST  /  30 MIN"), 9, 4,
+          ui_font_14(), COLOR_RED);
+    char forest_line[128];
     game_job_score_t forest_score = game_calculate_job_score(
         &s_game, GAME_PET_AMAI, GAME_JOB_FOREST, GAME_PET_COUNT);
-    snprintf(forest_line, sizeof(forest_line), "%s  SCORE %d",
-             s_game.forest.active ? "EXPLORING" : "OK SEND",
+    snprintf(forest_line, sizeof(forest_line), tr("%s  评分%d", "%s  SCORE %d"),
+             s_game.forest.active ? tr("探索中", "EXPLORING")
+                                  : tr("按OK派遣", "OK SEND"),
              forest_score.score);
     label(s_schedule_rows[2], forest_line, 9, 23,
-          &lv_font_montserrat_14, COLOR_INK);
-    label(s_schedule_rows[3], "KITCHEN / HOT BREAD", 9, 4,
-          &lv_font_montserrat_14, COLOR_RED);
-    char kitchen_line[40];
-    snprintf(kitchen_line, sizeof(kitchen_line), "%s  WHEAT %u",
-             s_game.kitchen.active ? "ATUAN COOKING" : "OK TO COOK",
+          ui_font_14(), COLOR_INK);
+    label(s_schedule_rows[3], tr("厨房 / 热面包", "KITCHEN / HOT BREAD"), 9, 4,
+          ui_font_14(), COLOR_RED);
+    char kitchen_line[128];
+    snprintf(kitchen_line, sizeof(kitchen_line), tr("%s  小麦%u", "%s  WHEAT %u"),
+             s_game.kitchen.active ? tr("阿团烹饪中", "ATUAN COOKING")
+                                   : tr("按OK烹饪", "OK TO COOK"),
              s_game.inventory_wheat);
     label(s_schedule_rows[3], kitchen_line, 9, 23,
-          &lv_font_montserrat_14, COLOR_INK);
-    label(screen, "UP/DOWN SELECT   OK ACTION", 10, 252,
-          &lv_font_montserrat_14, COLOR_MUTED);
-    label(screen, "HOLD OK: STATION", 10, 282,
-          &lv_font_montserrat_14, COLOR_INK);
+          ui_font_14(), COLOR_INK);
+    label(screen, tr("上下选择  OK操作", "UP/DOWN SELECT   OK ACTION"), 10, 252,
+          ui_font_14(), COLOR_MUTED);
+    label(screen, tr("长按OK：返回驿站", "HOLD OK: STATION"), 10, 282,
+          ui_font_14(), COLOR_INK);
     refresh_schedule_selection();
     activate_screen();
 }
@@ -367,11 +403,11 @@ static void build_farm(void)
 {
     lv_obj_t *screen = new_screen(COLOR_GRASS);
     rect(screen, 0, 0, 240, 48, COLOR_NIGHT);
-    label(screen, "FARM", 10, 10, &lv_font_montserrat_20, COLOR_PAPER);
-    char stock[32];
-    snprintf(stock, sizeof(stock), "SEEDS %u  WHEAT %u",
+    label(screen, tr("农田", "FARM"), 10, 10, ui_font_20(), COLOR_PAPER);
+    char stock[128];
+    snprintf(stock, sizeof(stock), tr("种子%u  小麦%u", "SEEDS %u  WHEAT %u"),
              s_game.inventory_wheat_seed, s_game.inventory_wheat);
-    label(screen, stock, 78, 16, &lv_font_montserrat_14, COLOR_GOLD);
+    label(screen, stock, 78, 16, ui_font_14(), COLOR_GOLD);
 
     uint8_t plot_count = game_available_farm_plots(&s_game);
     for (int i = 0; i < plot_count; i++) {
@@ -380,16 +416,17 @@ static void build_farm(void)
                               i == s_farm_selection ? COLOR_GOLD : COLOR_PAPER);
         lv_obj_set_style_border_width(plot, 3, 0);
         lv_obj_set_style_border_color(plot, lv_color_hex(COLOR_WOOD_DARK), 0);
-        char line[36];
-        const game_crop_definition_t *crop = s_game.farm[i].active
-            ? game_crop_definition(s_game.farm[i].crop) : NULL;
-        snprintf(line, sizeof(line), "PLOT %d  %s", i + 1,
-                 crop ? crop->name : "OK FOR DETAILS");
+        char line[128];
+        game_crop_t crop = s_game.farm[i].crop;
+        snprintf(line, sizeof(line), tr("田地%d  %s", "PLOT %d  %s"), i + 1,
+                 s_game.farm[i].active
+                     ? app_i18n_crop(ui_language(), crop)
+                     : tr("按OK查看", "OK FOR DETAILS"));
         label_one_line(plot, line, 8, 5, 198,
-                       &lv_font_montserrat_14, COLOR_INK);
+                       ui_font_14(), COLOR_INK);
     }
-    label(screen, "HOLD OK: STATION", 10, 276,
-          &lv_font_montserrat_14, COLOR_INK);
+    label(screen, tr("长按OK：返回驿站", "HOLD OK: STATION"), 10, 276,
+          ui_font_14(), COLOR_INK);
     activate_screen();
 }
 
@@ -397,38 +434,37 @@ static void build_farm_detail(void)
 {
     lv_obj_t *screen = new_screen(COLOR_GRASS);
     rect(screen, 0, 0, 240, 48, COLOR_NIGHT);
-    char title[24];
-    snprintf(title, sizeof(title), "PLOT %d", s_farm_selection + 1);
-    label(screen, title, 10, 10, &lv_font_montserrat_20, COLOR_PAPER);
+    char title[128];
+    snprintf(title, sizeof(title), tr("田地 %d", "PLOT %d"), s_farm_selection + 1);
+    label(screen, title, 10, 10, ui_font_20(), COLOR_PAPER);
     lv_obj_t *card = rect(screen, 10, 61, 220, 174, COLOR_PAPER);
     lv_obj_set_style_border_width(card, 3, 0);
     lv_obj_set_style_border_color(card, lv_color_hex(COLOR_WOOD_DARK), 0);
     if (s_game.farm[s_farm_selection].active) {
-        const game_crop_definition_t *definition =
-            game_crop_definition(s_game.farm[s_farm_selection].crop);
-        label(card, definition->name, 10, 12, &lv_font_montserrat_20, COLOR_RED);
+        label(card, app_i18n_crop(ui_language(), s_game.farm[s_farm_selection].crop),
+              10, 12, ui_font_20(), COLOR_RED);
         uint32_t remaining = s_game.farm[s_farm_selection].matures_at > s_now
             ? s_game.farm[s_farm_selection].matures_at - s_now : 0U;
-        char line[36];
-        snprintf(line, sizeof(line), "HEALTHY / %luh %02lum",
+        char line[128];
+        snprintf(line, sizeof(line), tr("生长良好 / %lu时%02lu分", "HEALTHY / %luh %02lum"),
                  (unsigned long)(remaining / 3600U),
                  (unsigned long)((remaining / 60U) % 60U));
-        label(card, line, 10, 55, &lv_font_montserrat_14, COLOR_INK);
-        label(card, "CARETAKER: LULU", 10, 88, &lv_font_montserrat_14, COLOR_INK);
+        label(card, line, 10, 55, ui_font_14(), COLOR_INK);
+        label(card, tr("照料者：露露", "CARETAKER: LULU"), 10, 88, ui_font_14(), COLOR_INK);
     } else {
         game_crop_t crop = (game_crop_t)s_farm_crop_selection;
         const game_crop_definition_t *definition = game_crop_definition(crop);
-        label(card, definition->name, 10, 12, &lv_font_montserrat_20, COLOR_RED);
-        char line[36];
-        snprintf(line, sizeof(line), "SEEDS %u / GROW %luh",
+        label(card, app_i18n_crop(ui_language(), crop), 10, 12, ui_font_20(), COLOR_RED);
+        char line[128];
+        snprintf(line, sizeof(line), tr("种子%u / 生长%lu小时", "SEEDS %u / GROW %luh"),
                  ui_seed_count(crop),
                  (unsigned long)(definition->grow_seconds / 3600U));
-        label(card, line, 10, 55, &lv_font_montserrat_14, COLOR_INK);
-        label(card, "UP/DOWN: CHOOSE CROP", 10, 88,
-              &lv_font_montserrat_14, COLOR_MUTED);
-        label(card, "OK: PLANT", 10, 120, &lv_font_montserrat_14, COLOR_RED);
+        label(card, line, 10, 55, ui_font_14(), COLOR_INK);
+        label(card, tr("上下：选择作物", "UP/DOWN: CHOOSE CROP"), 10, 88,
+              ui_font_14(), COLOR_MUTED);
+        label(card, tr("OK：播种", "OK: PLANT"), 10, 120, ui_font_14(), COLOR_RED);
     }
-    label(screen, "HOLD OK: BACK", 10, 276, &lv_font_montserrat_14, COLOR_INK);
+    label(screen, tr("长按OK：返回", "HOLD OK: BACK"), 10, 276, ui_font_14(), COLOR_INK);
     activate_screen();
 }
 
@@ -436,7 +472,7 @@ static void build_kitchen(void)
 {
     lv_obj_t *screen = new_screen(COLOR_PAPER);
     rect(screen, 0, 0, 240, 48, COLOR_NIGHT);
-    label(screen, "KITCHEN", 10, 10, &lv_font_montserrat_20, COLOR_PAPER);
+    label(screen, tr("厨房", "KITCHEN"), 10, 10, ui_font_20(), COLOR_PAPER);
     game_recipe_t recipe = (game_recipe_t)s_recipe_selection;
     const game_recipe_definition_t *definition = game_recipe_definition(recipe);
     game_job_score_t kitchen_score = game_calculate_job_score(
@@ -444,33 +480,36 @@ static void build_kitchen(void)
     lv_obj_t *card = rect(screen, 10, 62, 220, 178, COLOR_GOLD);
     lv_obj_set_style_border_width(card, 3, 0);
     lv_obj_set_style_border_color(card, lv_color_hex(COLOR_INK), 0);
-    label(card, definition->name, 10, 12, &lv_font_montserrat_20, COLOR_RED);
-    char line[42];
+    label(card, app_i18n_recipe(ui_language(), recipe),
+          10, 12, ui_font_20(), COLOR_RED);
+    char line[128];
     bool unlocked = (s_game.unlocked_recipes & (1U << recipe)) != 0U;
-    snprintf(line, sizeof(line), "%s / %luM / SCORE %d",
-             unlocked ? "UNLOCKED" : "LOCKED",
+    snprintf(line, sizeof(line), tr("%s / %lu分 / 评分%d", "%s / %luM / SCORE %d"),
+             unlocked ? tr("已解锁", "UNLOCKED") : tr("未解锁", "LOCKED"),
              (unsigned long)(definition->cook_seconds / 60U),
              kitchen_score.score);
-    label(card, line, 10, 52, &lv_font_montserrat_14, COLOR_INK);
-    snprintf(line, sizeof(line), "CROP %u  BERRIES %u",
+    label(card, line, 10, 52, ui_font_14(), COLOR_INK);
+    snprintf(line, sizeof(line), tr("作物%u  浆果%u", "CROP %u  BERRIES %u"),
              ui_crop_count(definition->crop_a), s_game.inventory_berries);
-    label(card, line, 10, 84, &lv_font_montserrat_14, COLOR_INK);
-    char action_line[36];
+    label(card, line, 10, 84, ui_font_14(), COLOR_INK);
+    char action_line[128];
     if (s_game.kitchen.active) {
         snprintf(action_line, sizeof(action_line), "%s",
                  s_game.kitchen.kind == GAME_TASK_RECIPE_RESEARCH
-                 ? "ATUAN IS RESEARCHING" : "ATUAN IS COOKING");
+                 ? tr("阿团研究中", "ATUAN IS RESEARCHING")
+                 : tr("阿团烹饪中", "ATUAN IS COOKING"));
     } else if (unlocked) {
-        snprintf(action_line, sizeof(action_line), "OK: START COOKING");
+        snprintf(action_line, sizeof(action_line), "%s",
+                 tr("OK：开始烹饪", "OK: START COOKING"));
     } else {
-        snprintf(action_line, sizeof(action_line), "OK: RESEARCH %u%%",
+        snprintf(action_line, sizeof(action_line), tr("OK：研究 %u%%", "OK: RESEARCH %u%%"),
                  s_game.recipe_research[recipe]);
     }
     label(card, action_line,
-          10, 124, &lv_font_montserrat_14,
+          10, 124, ui_font_14(),
           s_game.kitchen.active ? COLOR_MUTED : COLOR_RED);
-    label(screen, "UP/DOWN RECIPE  HOLD OK: BACK", 10, 276,
-          &lv_font_montserrat_14, COLOR_INK);
+    label(screen, tr("上下选配方  长按OK返回", "UP/DOWN RECIPE  HOLD OK: BACK"), 10, 276,
+          ui_font_14(), COLOR_INK);
     activate_screen();
 }
 
@@ -478,28 +517,31 @@ static void build_forest(void)
 {
     lv_obj_t *screen = new_screen(COLOR_GRASS);
     rect(screen, 0, 0, 240, 48, COLOR_NIGHT);
-    label(screen, "FOREST EXPEDITION", 10, 10,
-          &lv_font_montserrat_20, COLOR_PAPER);
+    label(screen, tr("森林探索", "FOREST EXPEDITION"), 10, 10,
+          ui_font_20(), COLOR_PAPER);
     lv_obj_t *card = rect(screen, 10, 62, 220, 178, COLOR_PAPER);
     lv_obj_set_style_border_width(card, 3, 0);
     lv_obj_set_style_border_color(card, lv_color_hex(COLOR_WOOD_DARK), 0);
     game_job_score_t score = game_calculate_job_score(
         &s_game, GAME_PET_AMAI, GAME_JOB_FOREST, GAME_PET_COUNT);
-    label(card, s_forest_duration == 0 ? "QUICK SEARCH" : "LONG EXPEDITION",
-          10, 12, &lv_font_montserrat_20, COLOR_RED);
-    char line[40];
-    snprintf(line, sizeof(line), "%s / SCORE %d",
-             s_forest_duration == 0 ? "30 MIN" : "2 HOURS", score.score);
-    label(card, line, 10, 52, &lv_font_montserrat_14, COLOR_INK);
+    label(card, s_forest_duration == 0 ? tr("快速搜寻", "QUICK SEARCH")
+                                       : tr("长途探索", "LONG EXPEDITION"),
+          10, 12, ui_font_20(), COLOR_RED);
+    char line[128];
+    snprintf(line, sizeof(line), tr("%s / 评分%d", "%s / SCORE %d"),
+             s_forest_duration == 0 ? tr("30分钟", "30 MIN")
+                                    : tr("2小时", "2 HOURS"), score.score);
+    label(card, line, 10, 52, ui_font_14(), COLOR_INK);
     label(card, s_forest_duration == 0
-          ? "SAFE: WOOD + BERRIES"
-          : "RISK: WEATHER / RARE FINDS",
-          10, 84, &lv_font_montserrat_14, COLOR_INK);
-    label(card, s_game.forest.active ? "OK: CANCEL + RETURN" : "OK: SEND AMAI",
-          10, 124, &lv_font_montserrat_14,
+          ? tr("稳妥：木材 + 浆果", "SAFE: WOOD + BERRIES")
+          : tr("风险：天气 / 稀有发现", "RISK: WEATHER / RARE FINDS"),
+          10, 84, ui_font_14(), COLOR_INK);
+    label(card, s_game.forest.active ? tr("OK：取消并返回", "OK: CANCEL + RETURN")
+                                     : tr("OK：派遣阿麦", "OK: SEND AMAI"),
+          10, 124, ui_font_14(),
           s_game.forest.active ? COLOR_MUTED : COLOR_RED);
-    label(screen, "UP/DOWN TIME  HOLD: BACK", 10, 276,
-          &lv_font_montserrat_14, COLOR_INK);
+    label(screen, tr("上下选时长  长按返回", "UP/DOWN TIME  HOLD: BACK"), 10, 276,
+          ui_font_14(), COLOR_INK);
     activate_screen();
 }
 
@@ -507,44 +549,45 @@ static void build_travel(void)
 {
     lv_obj_t *screen = new_screen(COLOR_HILL);
     rect(screen, 0, 0, 240, 48, COLOR_NIGHT);
-    label(screen, "TRAVEL", 10, 10, &lv_font_montserrat_20, COLOR_PAPER);
+    label(screen, tr("旅行", "TRAVEL"), 10, 10, ui_font_20(), COLOR_PAPER);
     lv_obj_t *card = rect(screen, 10, 60, 220, 172, COLOR_PAPER);
     lv_obj_set_style_border_width(card, 3, 0);
     lv_obj_set_style_border_color(card, lv_color_hex(COLOR_WOOD_DARK), 0);
-    label(card, "MISTPINE FOREST", 10, 12, &lv_font_montserrat_20, COLOR_RED);
+    label(card, tr("雾松林", "MISTPINE FOREST"), 10, 12, ui_font_20(), COLOR_RED);
     if (s_game.travel.active) {
-        label(card, "AMAI + ATUAN EXPLORING", 10, 51,
-              &lv_font_montserrat_14, COLOR_INK);
-        char eta[32];
+        label(card, tr("阿麦 + 阿团探索中", "AMAI + ATUAN EXPLORING"), 10, 51,
+              ui_font_14(), COLOR_INK);
+        char eta[128];
         uint32_t remaining = s_game.travel.ends_at > s_now
             ? s_game.travel.ends_at - s_now : 0U;
-        snprintf(eta, sizeof(eta), "RETURN IN %luh %02lum",
+        snprintf(eta, sizeof(eta), tr("%lu时%02lu分后返回", "RETURN IN %luh %02lum"),
                  (unsigned long)(remaining / 3600U),
                  (unsigned long)((remaining / 60U) % 60U));
-        label(card, eta, 10, 78, &lv_font_montserrat_14, COLOR_MUTED);
-        label(card, "OK: CANCEL + REFUND BREAD", 10, 103,
-              &lv_font_montserrat_14, COLOR_RED);
+        label(card, eta, 10, 78, ui_font_14(), COLOR_MUTED);
+        label(card, tr("OK：取消并退还面包", "OK: CANCEL + REFUND BREAD"), 10, 103,
+              ui_font_14(), COLOR_RED);
     } else if (s_game.spring_day < 8U) {
-        label(card, "LOCKED UNTIL SPRING 8", 10, 51,
-              &lv_font_montserrat_14, COLOR_MUTED);
+        label(card, tr("春季第8日解锁", "LOCKED UNTIL SPRING 8"), 10, 51,
+              ui_font_14(), COLOR_MUTED);
     } else {
-        static const char *goals[GAME_TRAVEL_GOAL_COUNT] = {
-            "MATERIALS", "OLD ROAD", "SCENERY",
+        const char *goals[GAME_TRAVEL_GOAL_COUNT] = {
+            tr("材料", "MATERIALS"), tr("旧路", "OLD ROAD"),
+            tr("风景", "SCENERY"),
         };
-        label(card, "8 HOURS / 1 HOT BREAD", 10, 51,
-              &lv_font_montserrat_14, COLOR_INK);
-        char goal[32];
-        snprintf(goal, sizeof(goal), "GOAL: %s", goals[s_travel_goal]);
-        label(card, goal, 10, 78, &lv_font_montserrat_14, COLOR_RED);
-        label(card, "OK: SEND / UP-DOWN GOAL", 10, 103,
-              &lv_font_montserrat_14, COLOR_RED);
+        label(card, tr("8小时 / 1个热面包", "8 HOURS / 1 HOT BREAD"), 10, 51,
+              ui_font_14(), COLOR_INK);
+        char goal[128];
+        snprintf(goal, sizeof(goal), tr("目标：%s", "GOAL: %s"), goals[s_travel_goal]);
+        label(card, goal, 10, 78, ui_font_14(), COLOR_RED);
+        label(card, tr("OK派遣 / 上下选目标", "OK: SEND / UP-DOWN GOAL"), 10, 103,
+              ui_font_14(), COLOR_RED);
     }
-    char journal[32];
-    snprintf(journal, sizeof(journal), "TRAVEL JOURNALS %u",
+    char journal[128];
+    snprintf(journal, sizeof(journal), tr("旅行日志 %u", "TRAVEL JOURNALS %u"),
              s_game.travel_journal_count);
-    label(card, journal, 10, 137, &lv_font_montserrat_14, COLOR_INK);
-    label(screen, "HOLD OK: STATION", 10, 276,
-          &lv_font_montserrat_14, COLOR_INK);
+    label(card, journal, 10, 137, ui_font_14(), COLOR_INK);
+    label(screen, tr("长按OK：返回驿站", "HOLD OK: STATION"), 10, 276,
+          ui_font_14(), COLOR_INK);
     activate_screen();
 }
 
@@ -552,8 +595,11 @@ static void build_backpack(void)
 {
     lv_obj_t *screen = new_screen(COLOR_PAPER);
     rect(screen, 0, 0, 240, 48, COLOR_NIGHT);
-    label(screen, "BACKPACK", 10, 10, &lv_font_montserrat_20, COLOR_PAPER);
-    const char *titles[] = { "ITEMS", "PARTNERS", "STATION", "TASKS", "ALBUM", "SETTINGS" };
+    label(screen, tr("背包", "BACKPACK"), 10, 10, ui_font_20(), COLOR_PAPER);
+    const char *titles[] = {
+        tr("物品", "ITEMS"), tr("伙伴", "PARTNERS"), tr("驿站", "STATION"),
+        tr("任务", "TASKS"), tr("图鉴", "ALBUM"), tr("设置", "SETTINGS"),
+    };
     for (int i = 0; i < 6; i++) {
         int x = 9 + (i % 2) * 113;
         int y = 57 + (i / 2) * 59;
@@ -561,21 +607,21 @@ static void build_backpack(void)
                               i == s_backpack_selection ? COLOR_GOLD : COLOR_PAPER);
         lv_obj_set_style_border_width(card, 2, 0);
         lv_obj_set_style_border_color(card, lv_color_hex(COLOR_INK), 0);
-        label(card, titles[i], 7, 5, &lv_font_montserrat_14, COLOR_RED);
+        label(card, titles[i], 7, 5, ui_font_14(), COLOR_RED);
     }
-    char inventory[48];
+    char inventory[128];
     snprintf(inventory, sizeof(inventory), "G%lu W%u B%u F%u M%u J%u",
              (unsigned long)s_game.coins, s_game.inventory_wood,
              s_game.inventory_berries, s_game.inventory_hot_bread,
              s_game.inventory_mushrooms, s_game.travel_journal_count);
-    label(screen, inventory, 10, 236, &lv_font_montserrat_14, COLOR_INK);
-    char quest[40];
-    snprintf(quest, sizeof(quest), "MAIN QUEST %u/10%s",
+    label(screen, inventory, 10, 236, ui_font_14(), COLOR_INK);
+    char quest[128];
+    snprintf(quest, sizeof(quest), tr("主线任务 %u/10%s", "MAIN QUEST %u/10%s"),
              s_game.quest_stage > 10U ? 10U : s_game.quest_stage,
-             s_game.chapter_complete ? " COMPLETE" : "");
-    label(screen, quest, 10, 256, &lv_font_montserrat_14, COLOR_RED);
-    label(screen, "HOLD OK: STATION", 10, 276,
-          &lv_font_montserrat_14, COLOR_INK);
+             s_game.chapter_complete ? tr(" 已完成", " COMPLETE") : "");
+    label(screen, quest, 10, 256, ui_font_14(), COLOR_RED);
+    label(screen, tr("长按OK：返回驿站", "HOLD OK: STATION"), 10, 276,
+          ui_font_14(), COLOR_INK);
     activate_screen();
 }
 
@@ -583,7 +629,7 @@ static void build_buildings(void)
 {
     lv_obj_t *screen = new_screen(COLOR_PAPER);
     rect(screen, 0, 0, 240, 48, COLOR_NIGHT);
-    label(screen, "BUILDINGS", 10, 10, &lv_font_montserrat_20, COLOR_PAPER);
+    label(screen, tr("建筑", "BUILDINGS"), 10, 10, ui_font_20(), COLOR_PAPER);
     for (int i = 0; i < GAME_BUILD_COUNT; i++) {
         const game_building_definition_t *definition =
             game_building_definition((game_building_t)i);
@@ -592,50 +638,52 @@ static void build_buildings(void)
                              i == s_building_selection ? COLOR_GOLD : COLOR_PAPER);
         lv_obj_set_style_border_width(row, 2, 0);
         lv_obj_set_style_border_color(row, lv_color_hex(COLOR_INK), 0);
-        char line[42];
+        char line[128];
         bool done = (s_game.completed_buildings & (1U << i)) != 0U;
-        snprintf(line, sizeof(line), "%s  %s W%u G%u", definition->name,
-                 done ? "DONE" : "", definition->wood, definition->coins);
-        label(row, line, 6, 6, &lv_font_montserrat_14,
+        snprintf(line, sizeof(line), tr("%s  %s 木%u 金%u", "%s  %s W%u G%u"),
+                 app_i18n_building(ui_language(), (game_building_t)i),
+                 done ? tr("完成", "DONE") : "", definition->wood, definition->coins);
+        label(row, line, 6, 6, ui_font_14(),
               done ? COLOR_MUTED : COLOR_INK);
     }
     label(screen, s_game.construction.active
-          ? "OK ACTIVE BUILD: CANCEL  HOLD: BACK"
-          : "OK BUILD  HOLD OK: BACK", 10, 276,
-          &lv_font_montserrat_14, COLOR_INK);
+          ? tr("OK取消建设  长按返回", "OK ACTIVE BUILD: CANCEL  HOLD: BACK")
+          : tr("OK建设  长按返回", "OK BUILD  HOLD OK: BACK"), 10, 276,
+          ui_font_14(), COLOR_INK);
     activate_screen();
 }
 
 static void build_backpack_detail(void)
 {
-    static const char *titles[6] = {
-        "ITEMS", "PARTNERS", "BUILDINGS", "TASKS", "ALBUM", "SETTINGS",
+    const char *titles[6] = {
+        tr("物品", "ITEMS"), tr("伙伴", "PARTNERS"), tr("建筑", "BUILDINGS"),
+        tr("任务", "TASKS"), tr("图鉴", "ALBUM"), tr("设置", "SETTINGS"),
     };
     lv_obj_t *screen = new_screen(COLOR_PAPER);
     rect(screen, 0, 0, 240, 48, COLOR_NIGHT);
     label(screen, titles[s_backpack_selection], 10, 10,
-          &lv_font_montserrat_20, COLOR_PAPER);
+          ui_font_20(), COLOR_PAPER);
     lv_obj_t *card = rect(screen, 10, 61, 220, 190, COLOR_PAPER);
     lv_obj_set_style_border_width(card, 3, 0);
     lv_obj_set_style_border_color(card, lv_color_hex(COLOR_INK), 0);
-    char line[48];
+    char line[128];
     if (s_backpack_selection == 0) {
-        snprintf(line, sizeof(line), "WOOD%u  BERRY%u  MUSH%u",
+        snprintf(line, sizeof(line), tr("木%u  浆果%u  蘑菇%u", "WOOD%u  BERRY%u  MUSH%u"),
                  s_game.inventory_wood, s_game.inventory_berries,
                  s_game.inventory_mushrooms);
         label_one_line(card, line, 9, 12, 196,
-                       &lv_font_montserrat_14, COLOR_INK);
-        snprintf(line, sizeof(line), "WHEAT%u  CARROT%u  BRD%u",
+                       ui_font_14(), COLOR_INK);
+        snprintf(line, sizeof(line), tr("麦%u  胡萝卜%u  面包%u", "WHEAT%u  CARROT%u  BRD%u"),
                  s_game.inventory_wheat,
                  s_game.inventory_crops[GAME_CROP_CARROT],
                  s_game.inventory_hot_bread);
         label_one_line(card, line, 9, 48, 196,
-                       &lv_font_montserrat_14, COLOR_INK);
-        snprintf(line, sizeof(line), "SEED W%u C%u S%u H%u",
+                       ui_font_14(), COLOR_INK);
+        snprintf(line, sizeof(line), tr("种子 麦%u 胡%u 莓%u 草%u", "SEED W%u C%u S%u H%u"),
                  ui_seed_count(GAME_CROP_WHEAT), ui_seed_count(GAME_CROP_CARROT),
                  ui_seed_count(GAME_CROP_STRAWBERRY), ui_seed_count(GAME_CROP_HERB));
         label_one_line(card, line, 9, 84, 196,
-                       &lv_font_montserrat_14, COLOR_INK);
+                       ui_font_14(), COLOR_INK);
         game_recipe_t recipe = (game_recipe_t)s_item_selection;
         const game_recipe_definition_t *dish = game_recipe_definition(recipe);
         uint16_t stock = recipe == GAME_RECIPE_HOT_BREAD
@@ -643,96 +691,105 @@ static void build_backpack_detail(void)
         uint16_t premium = recipe == GAME_RECIPE_HOT_BREAD
             ? s_game.inventory_premium_hot_bread
             : s_game.inventory_premium_dishes[recipe];
-        snprintf(line, sizeof(line), "> %s x%u +%uQ / %uG",
-                 dish->name, stock, premium, dish->sell_price);
+        snprintf(line, sizeof(line), tr("> %s x%u +%u优 / %u金", "> %s x%u +%uQ / %uG"),
+                 app_i18n_recipe(ui_language(), recipe), stock, premium, dish->sell_price);
         label_one_line(card, line, 9, 126, 196,
-                       &lv_font_montserrat_14, COLOR_RED);
-        label(card, "UP/DOWN DISH  OK: SELL", 9, 157,
-              &lv_font_montserrat_14, COLOR_MUTED);
+                       ui_font_14(), COLOR_RED);
+        label(card, tr("上下选料理  OK出售", "UP/DOWN DISH  OK: SELL"), 9, 157,
+              ui_font_14(), COLOR_MUTED);
     } else if (s_backpack_selection == 1) {
         game_pet_id_t pet = (game_pet_id_t)s_partner_selection;
         const game_pet_definition_t *definition = game_pet_definition(pet);
-        label(card, definition->name, 9, 10, &lv_font_montserrat_20, COLOR_RED);
-        snprintf(line, sizeof(line), "%s / %s", definition->species,
-                 definition->personality);
-        label(card, line, 9, 43, &lv_font_montserrat_14, COLOR_INK);
-        snprintf(line, sizeof(line), "STA %u DEX %u PER %u CHA %u FOC %u",
+        label(card, app_i18n_pet(ui_language(), pet), 9, 10, ui_font_20(), COLOR_RED);
+        snprintf(line, sizeof(line), "%s / %s",
+                 app_i18n_pet_species(ui_language(), pet),
+                 app_i18n_pet_personality(ui_language(), pet));
+        label(card, line, 9, 43, ui_font_14(), COLOR_INK);
+        snprintf(line, sizeof(line), tr("体%u 敏%u 察%u 魅%u 专%u",
+                                        "STA %u DEX %u PER %u CHA %u FOC %u"),
                  definition->stamina, definition->dexterity,
                  definition->perception, definition->charm, definition->focus);
-        label(card, line, 9, 75, &lv_font_montserrat_14, COLOR_INK);
-        snprintf(line, sizeof(line), "AFFINITY %u  ACTIONS %u",
+        label(card, line, 9, 75, ui_font_14(), COLOR_INK);
+        snprintf(line, sizeof(line), tr("亲密%u  今日互动%u", "AFFINITY %u  ACTIONS %u"),
                  s_game.player_affinity[pet], s_game.companion_actions);
-        label(card, line, 9, 107, &lv_font_montserrat_14, COLOR_INK);
-        label(card, "UP/DOWN PET  OK: TALK", 9, 143,
-              &lv_font_montserrat_14, COLOR_RED);
+        label(card, line, 9, 107, ui_font_14(), COLOR_INK);
+        label(card, tr("上下选伙伴  OK交谈", "UP/DOWN PET  OK: TALK"), 9, 143,
+              ui_font_14(), COLOR_RED);
     } else if (s_backpack_selection == 3) {
-        snprintf(line, sizeof(line), "FIRST CHAPTER  %u / 10",
+        snprintf(line, sizeof(line), tr("第一章  %u / 10", "FIRST CHAPTER  %u / 10"),
                  s_game.quest_stage > 10U ? 10U : s_game.quest_stage);
-        label(card, line, 9, 12, &lv_font_montserrat_20, COLOR_RED);
-        label(card, s_game.chapter_complete ? "THE ROAD IS RELIT" : "NEXT OBJECTIVE ACTIVE",
-              9, 55, &lv_font_montserrat_14, COLOR_INK);
-        snprintf(line, sizeof(line), "FOREST %u  HARVEST %u  JOURNALS %u",
+        label(card, line, 9, 12, ui_font_20(), COLOR_RED);
+        label(card, s_game.chapter_complete ? tr("道路已重新点亮", "THE ROAD IS RELIT")
+                                            : tr("下一目标进行中", "NEXT OBJECTIVE ACTIVE"),
+              9, 55, ui_font_14(), COLOR_INK);
+        snprintf(line, sizeof(line), tr("森林%u  收获%u  日志%u",
+                                        "FOREST %u  HARVEST %u  JOURNALS %u"),
                  s_game.forest_runs, s_game.total_crops_harvested,
                  s_game.travel_journal_count);
-        label(card, line, 9, 91, &lv_font_montserrat_14, COLOR_INK);
-        label(card, "RECENT EVENTS", 9, 125, &lv_font_montserrat_14, COLOR_RED);
+        label(card, line, 9, 91, ui_font_14(), COLOR_INK);
+        label(card, tr("近期事件", "RECENT EVENTS"), 9, 125, ui_font_14(), COLOR_RED);
         if (s_game.event_history_count > 0U) {
             uint8_t shown = s_game.event_history_count > 2U ? 2U
                 : s_game.event_history_count;
             for (uint8_t i = 0U; i < shown; i++) {
                 uint8_t history_index = (uint8_t)(s_game.event_history_count - 1U - i);
-                const game_event_definition_t *event = game_event_definition(
-                    s_game.event_history[history_index]);
-                lv_obj_t *history = label(card, event->title, 9, 148 + i * 19,
-                                          &lv_font_montserrat_14, COLOR_MUTED);
+                uint8_t event_id = s_game.event_history[history_index];
+                lv_obj_t *history = label(card, app_i18n_event(ui_language(), event_id),
+                                          9, 148 + i * 19,
+                                          ui_font_14(), COLOR_MUTED);
                 lv_obj_set_width(history, 196);
                 lv_label_set_long_mode(history, LV_LABEL_LONG_DOT);
             }
         }
     } else if (s_backpack_selection == 4) {
-        snprintf(line, sizeof(line), "PETS 4/4  RECIPES %u/5",
+        snprintf(line, sizeof(line), tr("伙伴 4/4  配方 %u/5", "PETS 4/4  RECIPES %u/5"),
                  (unsigned)__builtin_popcount((unsigned)s_game.unlocked_recipes));
-        label(card, line, 9, 12, &lv_font_montserrat_14, COLOR_INK);
-        snprintf(line, sizeof(line), "VISITORS 6  EVENTS %u",
+        label(card, line, 9, 12, ui_font_14(), COLOR_INK);
+        snprintf(line, sizeof(line), tr("访客 6  事件 %u", "VISITORS 6  EVENTS %u"),
                  GAME_CONTENT_EVENT_COUNT);
-        label(card, line, 9, 48, &lv_font_montserrat_14, COLOR_INK);
-        snprintf(line, sizeof(line), "TRAVEL PHOTOS %u/8",
+        label(card, line, 9, 48, ui_font_14(), COLOR_INK);
+        snprintf(line, sizeof(line), tr("旅行照片 %u/8", "TRAVEL PHOTOS %u/8"),
                  s_game.travel_journal_count > 8U ? 8U : s_game.travel_journal_count);
-        label(card, line, 9, 84, &lv_font_montserrat_14, COLOR_INK);
+        label(card, line, 9, 84, ui_font_14(), COLOR_INK);
     } else if (s_backpack_selection == 5) {
-        snprintf(line, sizeof(line), "%c SOUND: %s",
+        snprintf(line, sizeof(line), tr("%c 声音：%s", "%c SOUND: %s"),
                  s_partner_selection == 0 ? '>' : ' ',
-                 s_game.sound_enabled ? "ON" : "OFF");
-        label(card, line, 9, 12, &lv_font_montserrat_14, COLOR_INK);
-        snprintf(line, sizeof(line), "%c NIGHT MUTE: %s",
+                 s_game.sound_enabled ? tr("开", "ON") : tr("关", "OFF"));
+        label(card, line, 9, 12, ui_font_14(), COLOR_INK);
+        snprintf(line, sizeof(line), tr("%c 夜间静音：%s", "%c NIGHT MUTE: %s"),
                  s_partner_selection == 1 ? '>' : ' ',
-                 s_game.night_mute_enabled ? "ON" : "OFF");
-        label(card, line, 9, 48, &lv_font_montserrat_14, COLOR_INK);
-        snprintf(line, sizeof(line), "%c CLOCK: %s",
+                 s_game.night_mute_enabled ? tr("开", "ON") : tr("关", "OFF"));
+        label(card, line, 9, 48, ui_font_14(), COLOR_INK);
+        snprintf(line, sizeof(line), tr("%c 时钟：%s", "%c CLOCK: %s"),
                  s_partner_selection == 2 ? '>' : ' ',
-                 s_game.clock_24_hour ? "24 HOUR" : "12 HOUR");
-        label(card, line, 9, 84, &lv_font_montserrat_14, COLOR_INK);
-        label(card, "SAVE: A/B CRC V14", 9, 120, &lv_font_montserrat_14, COLOR_INK);
+                 s_game.clock_24_hour ? tr("24小时", "24 HOUR")
+                                      : tr("12小时", "12 HOUR"));
+        label(card, line, 9, 84, ui_font_14(), COLOR_INK);
+        snprintf(line, sizeof(line), tr("%c 语言：%s", "%c LANGUAGE: %s"),
+                 s_partner_selection == 3 ? '>' : ' ',
+                 s_game.language_english ? "ENGLISH" : "简体中文");
+        label(card, line, 9, 120, ui_font_14(), COLOR_INK);
+        label(card, tr("存档：A/B CRC V15", "SAVE: A/B CRC V15"),
+              9, 154, ui_font_14(), COLOR_MUTED);
     }
-    label(screen, "HOLD OK: BACK", 10, 276, &lv_font_montserrat_14, COLOR_INK);
+    label(screen, tr("长按OK：返回", "HOLD OK: BACK"), 10, 276, ui_font_14(), COLOR_INK);
     activate_screen();
 }
 
 static void build_event(void)
 {
     lv_obj_t *screen = new_screen(COLOR_NIGHT);
-    const game_event_definition_t *event =
-        game_event_definition(s_game.event_queue[0].id);
-    label(screen, "EVENT", 10, 10, &lv_font_montserrat_20, COLOR_PAPER);
+    uint8_t event_id = s_game.event_queue[0].id;
+    label(screen, tr("事件", "EVENT"), 10, 10, ui_font_20(), COLOR_PAPER);
     lv_obj_t *card = rect(screen, 9, 52, 222, 208, COLOR_PAPER);
     lv_obj_set_style_border_width(card, 3, 0);
     lv_obj_set_style_border_color(card, lv_color_hex(COLOR_WOOD_DARK), 0);
-    lv_obj_t *title = label(card, event->title, 9, 12,
-                            &lv_font_montserrat_14, COLOR_RED);
+    lv_obj_t *title = label(card, app_i18n_event(ui_language(), event_id), 9, 12,
+                            ui_font_14(), COLOR_RED);
     lv_obj_set_width(title, 198);
     lv_label_set_long_mode(title, LV_LABEL_LONG_WRAP);
-    label(card, "A traveler waits for your answer.", 9, 58,
-          &lv_font_montserrat_14, COLOR_INK);
+    label(card, tr("旅人正在等待你的回答。", "A traveler waits for your answer."), 9, 58,
+          ui_font_14(), COLOR_INK);
     lv_obj_t *choice_a = rect(card, 8, 96, 200, 38,
                               s_event_choice == 0 ? COLOR_GOLD : COLOR_PAPER);
     lv_obj_t *choice_b = rect(card, 8, 143, 200, 38,
@@ -741,44 +798,44 @@ static void build_event(void)
     lv_obj_set_style_border_width(choice_b, 2, 0);
     lv_obj_set_style_border_color(choice_a, lv_color_hex(COLOR_INK), 0);
     lv_obj_set_style_border_color(choice_b, lv_color_hex(COLOR_INK), 0);
-    label(choice_a, "PRACTICAL HELP / REWARD", 7, 9,
-          &lv_font_montserrat_14, COLOR_INK);
-    label(choice_b, "LISTEN / RELATIONSHIP", 7, 9,
-          &lv_font_montserrat_14, COLOR_INK);
-    label(screen, "UP/DOWN CHOOSE  OK CONFIRM", 10, 278,
-          &lv_font_montserrat_14, COLOR_PAPER);
+    label(choice_a, tr("实际帮助 / 奖励", "PRACTICAL HELP / REWARD"), 7, 9,
+          ui_font_14(), COLOR_INK);
+    label(choice_b, tr("倾听 / 关系", "LISTEN / RELATIONSHIP"), 7, 9,
+          ui_font_14(), COLOR_INK);
+    label(screen, tr("上下选择  OK确认", "UP/DOWN CHOOSE  OK CONFIRM"), 10, 278,
+          ui_font_14(), COLOR_PAPER);
     activate_screen();
 }
 
 static void build_notice(void)
 {
     lv_obj_t *screen = new_screen(COLOR_NIGHT);
-    label(screen, "TASK RESULTS", 10, 10, &lv_font_montserrat_20, COLOR_PAPER);
+    label(screen, tr("任务结果", "TASK RESULTS"), 10, 10, ui_font_20(), COLOR_PAPER);
     lv_obj_t *card = rect(screen, 9, 52, 222, 202, COLOR_PAPER);
     lv_obj_set_style_border_width(card, 3, 0);
     lv_obj_set_style_border_color(card, lv_color_hex(COLOR_WOOD_DARK), 0);
     int y = 12;
     if (s_game.notifications & GAME_NOTICE_TRAVEL) {
-        label(card, "TRAVEL TEAM RETURNED", 9, y, &lv_font_montserrat_14, COLOR_RED);
+        label(card, tr("旅行队已经归来", "TRAVEL TEAM RETURNED"), 9, y, ui_font_14(), COLOR_RED);
         y += 29;
     }
     if (s_game.notifications & GAME_NOTICE_BUILDING) {
-        label(card, "BUILDING COMPLETED", 9, y, &lv_font_montserrat_14, COLOR_RED);
+        label(card, tr("建筑已经完成", "BUILDING COMPLETED"), 9, y, ui_font_14(), COLOR_RED);
         y += 29;
     }
     if (s_game.notifications & GAME_NOTICE_RESEARCH) {
-        label(card, "RECIPE RESEARCH UPDATED", 9, y, &lv_font_montserrat_14, COLOR_RED);
+        label(card, tr("配方研究有进展", "RECIPE RESEARCH UPDATED"), 9, y, ui_font_14(), COLOR_RED);
         y += 29;
     }
     if (s_game.notifications & GAME_NOTICE_PREMIUM_DISH) {
-        label(card, "QUALITY DISH READY", 9, y, &lv_font_montserrat_14, COLOR_RED);
+        label(card, tr("优质料理已完成", "QUALITY DISH READY"), 9, y, ui_font_14(), COLOR_RED);
         y += 29;
     }
     if (s_game.notifications & GAME_NOTICE_FOREST) {
-        label(card, "LONG EXPEDITION COMPLETE", 9, y, &lv_font_montserrat_14, COLOR_RED);
+        label(card, tr("长途探索已完成", "LONG EXPEDITION COMPLETE"), 9, y, ui_font_14(), COLOR_RED);
     }
-    label(screen, "OK: ACKNOWLEDGE  HOLD: BACK", 10, 276,
-          &lv_font_montserrat_14, COLOR_PAPER);
+    label(screen, tr("OK确认  长按返回", "OK: ACKNOWLEDGE  HOLD: BACK"), 10, 276,
+          ui_font_14(), COLOR_PAPER);
     activate_screen();
 }
 
@@ -834,21 +891,21 @@ static void heat_timer_cb(lv_timer_t *timer)
 static void build_cook_assist(void)
 {
     lv_obj_t *screen = new_screen(COLOR_NIGHT);
-    label(screen, "FIRE CONTROL", 10, 10, &lv_font_montserrat_20, COLOR_PAPER);
+    label(screen, tr("火候控制", "FIRE CONTROL"), 10, 10, ui_font_20(), COLOR_PAPER);
     lv_obj_t *card = rect(screen, 15, 65, 210, 164, COLOR_PAPER);
     lv_obj_set_style_border_width(card, 3, 0);
     lv_obj_set_style_border_color(card, lv_color_hex(COLOR_RED), 0);
-    label(card, "KEEP THE FLAME STEADY", 10, 15,
-          &lv_font_montserrat_14, COLOR_RED);
+    label(card, tr("保持火焰稳定", "KEEP THE FLAME STEADY"), 10, 15,
+          ui_font_14(), COLOR_RED);
     rect(card, 18, 65, 174, 28, COLOR_WOOD_DARK);
     rect(card, 67, 68, 76, 22, COLOR_GOLD);
     s_heat_marker = rect(card, 18, 61, 8, 36, COLOR_RED);
-    label(card, "OK IN THE GOLD ZONE", 18, 112,
-          &lv_font_montserrat_14, COLOR_INK);
-    label(screen, "25 SEC / STOP NEAR CENTER", 23, 248,
-          &lv_font_montserrat_14, COLOR_GOLD);
-    label(screen, "OK STOP  HOLD OK BACK", 10, 278,
-          &lv_font_montserrat_14, COLOR_PAPER);
+    label(card, tr("指针进入金色区时按OK", "OK IN THE GOLD ZONE"), 18, 112,
+          ui_font_14(), COLOR_INK);
+    label(screen, tr("25秒 / 尽量停在中央", "25 SEC / STOP NEAR CENTER"), 23, 248,
+          ui_font_14(), COLOR_GOLD);
+    label(screen, tr("OK停止  长按OK返回", "OK STOP  HOLD OK BACK"), 10, 278,
+          ui_font_14(), COLOR_PAPER);
     activate_screen();
     s_heat_started_at = lv_tick_get();
     s_heat_accuracy = 0U;
@@ -1188,7 +1245,7 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
         } else if (s_backpack_selection == 5 && ev == BSP_BTN_CLICK &&
                    (btn == BSP_BTN_UP || btn == BSP_BTN_DOWN)) {
             int delta = btn == BSP_BTN_UP ? -1 : 1;
-            s_partner_selection = (s_partner_selection + delta + 3) % 3;
+            s_partner_selection = (s_partner_selection + delta + 4) % 4;
             build_backpack_detail();
         } else if (s_backpack_selection == 5 && ev == BSP_BTN_CLICK &&
                    btn == BSP_BTN_OK) {

@@ -434,14 +434,16 @@ static void test_settings_toggle_deterministically(void)
     game_state_t state;
     game_state_init(&state, 0U);
     assert(state.sound_enabled && state.night_mute_enabled && state.clock_24_hour);
-    for (uint8_t setting = 0U; setting < 3U; setting++) {
+    assert(!state.language_english);
+    for (uint8_t setting = 0U; setting < 4U; setting++) {
         assert(game_reduce(&state, (game_action_t){
             .type = GAME_ACTION_TOGGLE_SETTING, .target = setting,
         }));
     }
     assert(!state.sound_enabled && !state.night_mute_enabled && !state.clock_24_hour);
+    assert(state.language_english);
     assert(!game_reduce(&state, (game_action_t){
-        .type = GAME_ACTION_TOGGLE_SETTING, .target = 3U,
+        .type = GAME_ACTION_TOGGLE_SETTING, .target = 4U,
     }));
 }
 

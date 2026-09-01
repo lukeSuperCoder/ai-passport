@@ -201,6 +201,7 @@ typedef struct {
     bool sound_enabled;
     bool night_mute_enabled;
     bool clock_24_hour;
+    bool language_english;
     game_queued_event_t event_queue[GAME_EVENT_QUEUE_SIZE];
     uint8_t event_queue_count;
     uint8_t event_last_day[GAME_CONTENT_EVENT_COUNT];

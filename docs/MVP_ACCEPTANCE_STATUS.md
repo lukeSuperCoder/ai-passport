@@ -10,17 +10,20 @@ items remain unverified until they are run on a FoloToy AI Passport.
 | Area | Status | Evidence |
 | --- | --- | --- |
 | Pure C game rules | PASS | `test_game_state`; includes offline caps, economy, crops, recipes, research, quality, relationships, events, travel, buildings, and the Spring 14 no-deadlock path |
-| Save safety | PASS | `test_save_service`; includes v14 round trip, interrupted writes, CRC rejection, A/B fallback, and v13-to-v14 migration defaults |
-| Simulator navigation | PASS | 6 scripted UI tests, including 100 repeated top-level traversals, deep pages, event choice, and forest-duration selection |
+| Save safety | PASS | `test_save_service`; includes v15 bilingual-setting round trip, interrupted writes, CRC rejection, A/B fallback, and v14-to-v15 migration defaults |
+| Localization | PASS | Simplified Chinese is the default; all game pages can switch immediately to English; `test_i18n` and a scripted Chinese-English-Chinese round trip pass |
+| Simulator navigation | PASS | 9 scripted UI tests, including 100 repeated top-level traversals, deep pages, reverse navigation, event choice, forest-duration selection, and language switching |
 | Host memory safety | PASS | game and save tests run with AddressSanitizer and UndefinedBehaviorSanitizer |
 | ESP-IDF build | NOT RUN | ESP-IDF 5.5.3 / `idf.py` is not installed in the current shell |
 | Device tests | NOT RUN | No physical ESP32-C3 board is available in this task |
 
-The complete CTest suite currently contains 10 tests and passes 10/10.
+The complete CTest suite currently contains 14 tests and passes 14/14.
 
 ## Implemented playable scope
 
 - Five top-level modules and three-button navigation.
+- Complete Simplified Chinese and English UI, with Chinese as the default and a
+  persistent language selector in Settings.
 - Four pets, four crops, five recipes, six buildings, six farm plots, and three
   travel goals.
 - Reception, farming, cooking, recipe research, quality dishes, 30-minute and
@@ -35,7 +38,7 @@ The complete CTest suite currently contains 10 tests and passes 10/10.
 - Cancellation for forest, kitchen, research, travel, and construction tasks;
   committed inputs are refunded once, including the exact bread quality used
   for travel.
-- Explicit v14 serialization in an A/B, CRC-protected save format with legacy
+- Explicit v15 serialization in an A/B, CRC-protected save format with legacy
   payload decoding.
 
 ## Remaining simulator-capable MVP work
@@ -44,7 +47,8 @@ These items are present in the product and technical design but are not yet
 implemented as complete playable features:
 
 1. Day/night loop music, pet/UI sound effects, and their silent-failure path.
-2. Read-only asset pack v1, font-subset pipeline, and release asset-size report.
+2. Read-only asset pack v1 and release asset-size report. The UI now uses
+   generated 14 px and 20 px Chinese glyph subsets with Latin fallback.
 3. Simulator injection for battery failure, audio failure, save corruption, and
    direct development time jumps. Trusted startup time injection already exists.
 4. A development diagnostics page showing live heap/DMA blocks, save sequence,
