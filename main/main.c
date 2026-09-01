@@ -11,6 +11,7 @@
 #include "bsp_battery.h"
 #include "bsp_pins.h"      // 错误日志里要打印 BSP_LCD_* 引脚号
 #include "app_ui.h"
+#include "services/telemetry.h"
 #include "esp_log.h"
 
 static const char *TAG = "main";
@@ -28,7 +29,8 @@ static void on_key(bsp_btn_t btn, bsp_btn_ev_t ev, void *user) {
 }
 
 void app_main(void) {
-    ESP_LOGI(TAG, "FoloToy-Card BSP demo 启动");
+    ESP_LOGI(TAG, "Time Station MVP 启动");
+    telemetry_log_memory("boot");
 
     bsp_i2c_init();
     bsp_i2c_scan();
@@ -42,14 +44,17 @@ void app_main(void) {
         return;
     }
     bsp_display_backlight(100);
+    telemetry_log_memory("display_lvgl_ready");
 
     // 其余外设单项失败不阻塞:菜单里标 [FAIL],其他项照常可测。
     s_ok[0] = true;                                   // Display 已确认可用
     s_ok[1] = (bsp_button_init(on_key, NULL) == ESP_OK);
-    s_ok[2] = (bsp_audio_init() == ESP_OK);
+    s_ok[2] = (bsp_audio_init_playback() == ESP_OK);
     s_ok[3] = (bsp_battery_init() == ESP_OK);
+    telemetry_log_memory("peripherals_ready");
 
     if (bsp_lvgl_lock(1000)) { app_ui_start(s_ok); bsp_lvgl_unlock(); }
+    telemetry_log_memory("station_ready");
 
     ESP_LOGI(TAG, "就绪:Display=%d Button=%d Audio=%d Battery=%d",
              s_ok[0], s_ok[1], s_ok[2], s_ok[3]);

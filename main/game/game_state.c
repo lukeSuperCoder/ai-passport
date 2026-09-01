@@ -12,6 +12,11 @@ static uint32_t saturating_add_u32(uint32_t left, uint32_t right)
     return UINT32_MAX - left < right ? UINT32_MAX : left + right;
 }
 
+static uint16_t saturating_add_u16(uint16_t left, uint16_t right)
+{
+    return UINT16_MAX - left < right ? UINT16_MAX : (uint16_t)(left + right);
+}
+
 static void settle_reception(game_state_t *state, uint32_t elapsed)
 {
     uint32_t productive = elapsed;
@@ -23,8 +28,6 @@ static void settle_reception(game_state_t *state, uint32_t elapsed)
     if (hours == 0) return;
 
     state->pending.coins = saturating_add_u32(state->pending.coins, hours * 10U);
-    state->pending.elapsed_seconds = saturating_add_u32(
-        state->pending.elapsed_seconds, elapsed);
     state->pending.available = true;
 
     uint32_t stamina_cost = hours * 4U;
@@ -44,6 +47,9 @@ void game_state_init(game_state_t *state, uint32_t now)
     state->momo.job = GAME_JOB_REST;
     state->momo.stamina = 100U;
     state->momo.mood = 80U;
+    state->amai.job = GAME_JOB_REST;
+    state->amai.stamina = 100U;
+    state->amai.mood = 90U;
 }
 
 bool game_reduce(game_state_t *state, game_action_t action)
@@ -77,8 +83,38 @@ bool game_reduce(game_state_t *state, game_action_t action)
         if (state->momo.job == GAME_JOB_RECEPTION) {
             settle_reception(state, elapsed);
         }
+        if (state->forest.active && state->forest.ends_at <= action.now) {
+            state->pending.wood = saturating_add_u16(state->pending.wood, 3U);
+            state->pending.berries = saturating_add_u16(state->pending.berries, 1U);
+            state->pending.available = true;
+            state->forest.active = false;
+            state->amai.job = GAME_JOB_REST;
+            state->amai.stamina = state->amai.stamina > 5U
+                ? (uint8_t)(state->amai.stamina - 5U) : 0U;
+        }
+        if (state->pending.available) {
+            state->pending.elapsed_seconds = saturating_add_u32(
+                state->pending.elapsed_seconds, elapsed);
+        }
         state->last_settled_time = action.now;
         state->last_trusted_time = action.now;
+        state->commit_sequence++;
+        return true;
+
+    case GAME_ACTION_START_AMAI_FOREST:
+        if (state->forest.active || state->amai.job != GAME_JOB_REST ||
+            action.now > UINT32_MAX - 30U * 60U ||
+            action.now < state->last_trusted_time) {
+            return false;
+        }
+        state->forest.active = true;
+        state->forest.task_id = state->commit_sequence + 1U;
+        state->forest.started_at = action.now;
+        state->forest.ends_at = action.now + 30U * 60U;
+        state->amai.job = GAME_JOB_FOREST;
+        state->amai.job_started_at = action.now;
+        state->last_trusted_time = action.now;
+        state->last_settled_time = action.now;
         state->commit_sequence++;
         return true;
     }

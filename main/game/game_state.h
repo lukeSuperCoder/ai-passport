@@ -9,6 +9,7 @@
 typedef enum {
     GAME_JOB_REST = 0,
     GAME_JOB_RECEPTION,
+    GAME_JOB_FOREST,
 } game_job_t;
 
 typedef struct {
@@ -19,7 +20,16 @@ typedef struct {
 } game_pet_state_t;
 
 typedef struct {
+    bool active;
+    uint32_t task_id;
+    uint32_t started_at;
+    uint32_t ends_at;
+} game_timed_task_t;
+
+typedef struct {
     uint32_t coins;
+    uint16_t wood;
+    uint16_t berries;
     uint32_t elapsed_seconds;
     bool available;
 } game_pending_report_t;
@@ -30,6 +40,8 @@ typedef struct {
     uint32_t last_settled_time;
     uint32_t commit_sequence;
     game_pet_state_t momo;
+    game_pet_state_t amai;
+    game_timed_task_t forest;
     game_pending_report_t pending;
     bool time_anomaly;
 } game_state_t;
@@ -38,6 +50,7 @@ typedef enum {
     GAME_ACTION_ASSIGN_MOMO_RECEPTION = 0,
     GAME_ACTION_SETTLE_TO_TIME,
     GAME_ACTION_CLAIM_REPORT,
+    GAME_ACTION_START_AMAI_FOREST,
 } game_action_type_t;
 
 typedef struct {
@@ -47,4 +60,3 @@ typedef struct {
 
 void game_state_init(game_state_t *state, uint32_t now);
 bool game_reduce(game_state_t *state, game_action_t action);
-

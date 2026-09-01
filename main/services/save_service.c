@@ -3,15 +3,17 @@
 #include <string.h>
 
 #define SAVE_MAGIC 0x5453544EU /* TSTN */
-#define SAVE_FORMAT_VERSION 1U
+#define SAVE_FORMAT_VERSION 2U
 #define SAVE_HEADER_SIZE 28U
 #define SAVE_COMMIT_MARKER 0x434F4D4DU /* COMM */
-#define SAVE_PAYLOAD_SIZE 36U
+#define SAVE_PAYLOAD_V1_SIZE 36U
+#define SAVE_PAYLOAD_SIZE 64U
 
 typedef struct {
     uint32_t sequence;
     uint32_t payload_length;
     uint32_t payload_crc;
+    uint16_t format_version;
     bool valid;
 } slot_info_t;
 
@@ -70,12 +72,23 @@ static void encode_payload(const game_state_t *state, uint8_t payload[SAVE_PAYLO
     write_u32(payload + 24, state->pending.coins);
     write_u32(payload + 28, state->pending.elapsed_seconds);
     payload[32] = state->pending.available ? 1U : 0U;
+    write_u16(payload + 34, state->pending.wood);
+    write_u16(payload + 36, state->pending.berries);
+    payload[38] = (uint8_t)state->amai.job;
+    payload[39] = state->amai.stamina;
+    payload[40] = state->amai.mood;
+    write_u32(payload + 44, state->amai.job_started_at);
+    payload[48] = state->forest.active ? 1U : 0U;
+    write_u32(payload + 52, state->forest.task_id);
+    write_u32(payload + 56, state->forest.started_at);
+    write_u32(payload + 60, state->forest.ends_at);
 }
 
-static bool decode_payload(const uint8_t payload[SAVE_PAYLOAD_SIZE], game_state_t *state)
+static bool decode_payload(const uint8_t payload[SAVE_PAYLOAD_SIZE],
+                           uint16_t version, game_state_t *state)
 {
     game_state_t decoded;
-    memset(&decoded, 0, sizeof(decoded));
+    game_state_init(&decoded, 0U);
     decoded.coins = read_u32(payload + 0);
     decoded.last_trusted_time = read_u32(payload + 4);
     decoded.last_settled_time = read_u32(payload + 8);
@@ -89,8 +102,24 @@ static bool decode_payload(const uint8_t payload[SAVE_PAYLOAD_SIZE], game_state_
     decoded.pending.elapsed_seconds = read_u32(payload + 28);
     decoded.pending.available = payload[32] != 0U;
 
-    if (decoded.momo.job > GAME_JOB_RECEPTION ||
-        decoded.momo.stamina > 100U || decoded.momo.mood > 100U) {
+    if (version >= 2U) {
+        decoded.pending.wood = read_u16(payload + 34);
+        decoded.pending.berries = read_u16(payload + 36);
+        decoded.amai.job = (game_job_t)payload[38];
+        decoded.amai.stamina = payload[39];
+        decoded.amai.mood = payload[40];
+        decoded.amai.job_started_at = read_u32(payload + 44);
+        decoded.forest.active = payload[48] != 0U;
+        decoded.forest.task_id = read_u32(payload + 52);
+        decoded.forest.started_at = read_u32(payload + 56);
+        decoded.forest.ends_at = read_u32(payload + 60);
+    }
+
+    if (decoded.momo.job > GAME_JOB_FOREST ||
+        decoded.amai.job > GAME_JOB_FOREST ||
+        decoded.momo.stamina > 100U || decoded.momo.mood > 100U ||
+        decoded.amai.stamina > 100U || decoded.amai.mood > 100U ||
+        (decoded.forest.active && decoded.forest.ends_at < decoded.forest.started_at)) {
         return false;
     }
     *state = decoded;
@@ -103,28 +132,31 @@ static slot_info_t inspect_slot(const save_backend_t *backend, unsigned slot)
     uint8_t header[SAVE_HEADER_SIZE];
     size_t offset = (size_t)slot * SAVE_SLOT_SIZE;
     if (!backend->read(backend->context, offset, header, sizeof(header))) return info;
+    uint16_t version = read_u16(header + 4);
     if (read_u32(header + 0) != SAVE_MAGIC ||
-        read_u16(header + 4) != SAVE_FORMAT_VERSION ||
+        (version != 1U && version != SAVE_FORMAT_VERSION) ||
         read_u16(header + 6) != SAVE_HEADER_SIZE ||
         read_u32(header + 24) != SAVE_COMMIT_MARKER) {
         return info;
     }
     if (read_u32(header + 20) != crc32(header, 20U)) return info;
     info.sequence = read_u32(header + 8);
+    info.format_version = version;
     info.payload_length = read_u32(header + 12);
     info.payload_crc = read_u32(header + 16);
-    info.valid = info.payload_length == SAVE_PAYLOAD_SIZE;
+    info.valid = (version == 1U && info.payload_length == SAVE_PAYLOAD_V1_SIZE) ||
+                 (version == 2U && info.payload_length == SAVE_PAYLOAD_SIZE);
     return info;
 }
 
 static bool read_slot(const save_backend_t *backend, unsigned slot,
                       const slot_info_t *info, game_state_t *state)
 {
-    uint8_t payload[SAVE_PAYLOAD_SIZE];
+    uint8_t payload[SAVE_PAYLOAD_SIZE] = {0};
     size_t offset = (size_t)slot * SAVE_SLOT_SIZE + SAVE_HEADER_SIZE;
-    if (!backend->read(backend->context, offset, payload, sizeof(payload))) return false;
-    if (crc32(payload, sizeof(payload)) != info->payload_crc) return false;
-    return decode_payload(payload, state);
+    if (!backend->read(backend->context, offset, payload, info->payload_length)) return false;
+    if (crc32(payload, info->payload_length) != info->payload_crc) return false;
+    return decode_payload(payload, info->format_version, state);
 }
 
 bool save_service_load(const save_backend_t *backend, game_state_t *state)
@@ -186,4 +218,3 @@ bool save_service_store(const save_backend_t *backend, const game_state_t *state
     write_u32(marker, SAVE_COMMIT_MARKER);
     return backend->write(backend->context, base + 24U, marker, sizeof(marker));
 }
-

@@ -7,6 +7,7 @@ idf_component_register(
          "services/save_service.c"
          "services/app_persistence_esp.c"
          "services/clock_service_esp.c"
+         "services/telemetry_esp.c"
          "demo_display.c"
          "demo_button.c"
          "demo_audio.c"

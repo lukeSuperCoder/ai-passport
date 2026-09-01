@@ -62,10 +62,20 @@ int main(void)
     game_state_t second = first;
     second.coins = 80U;
     second.momo.stamina = 71U;
+    second.amai.stamina = 95U;
+    second.forest.active = true;
+    second.forest.task_id = 7U;
+    second.forest.started_at = 1000U;
+    second.forest.ends_at = 2800U;
+    second.pending.wood = 3U;
     assert(save_service_store(&save, &second));
     assert(save_service_load(&save, &loaded));
     assert(loaded.coins == 80U);
     assert(loaded.momo.stamina == 71U);
+    assert(loaded.amai.stamina == 95U);
+    assert(loaded.forest.active);
+    assert(loaded.forest.ends_at == 2800U);
+    assert(loaded.pending.wood == 3U);
 
     /* Slot 1 is newest. Corrupt its payload and verify fallback to slot 0. */
     storage.bytes[SAVE_SLOT_SIZE + 28U] ^= 0x01U;
@@ -74,4 +84,3 @@ int main(void)
 
     return 0;
 }
-

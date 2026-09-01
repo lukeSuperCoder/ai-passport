@@ -6,8 +6,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
-// 初始化 codec 与 I2S。内部会调 bsp_i2c_init()(幂等),无需外部先调。
+// 初始化 codec 与 I2S 全双工通道。硬件验证页需要录音时使用。
 esp_err_t bsp_audio_init(void);
+
+// 仅初始化播放通道。正式应用不需要麦克风时使用，可省去 RX DMA。
+// 两种初始化接口都是幂等的；首次成功初始化选定本次启动的模式。
+esp_err_t bsp_audio_init_playback(void);
 
 // 设置采样格式。同格式重复调用是廉价的(直接复用已打开的 codec)。
 //
@@ -17,6 +21,7 @@ esp_err_t bsp_audio_init(void);
 esp_err_t bsp_audio_set_format(uint32_t hz, uint8_t bits, uint8_t ch);
 
 // 播放 / 录音。bytes 为字节数(16bit 单声道时 = 采样数 x 2)。
+// 仅播放模式下 bsp_audio_read() 返回 ESP_ERR_NOT_SUPPORTED。
 esp_err_t bsp_audio_write(const void *pcm, size_t bytes);
 esp_err_t bsp_audio_read(void *pcm, size_t bytes);
 

@@ -59,10 +59,45 @@ static void test_time_anomaly_and_eight_hour_income_cap(void)
     assert(state.momo.stamina == 68U);
 }
 
+static void test_forest_task_completes_once(void)
+{
+    game_state_t state;
+    game_state_init(&state, 100U);
+    assert(game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_START_AMAI_FOREST,
+        .now = 100U,
+    }));
+    assert(state.forest.active);
+    assert(state.amai.job == GAME_JOB_FOREST);
+
+    assert(game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_SETTLE_TO_TIME,
+        .now = 100U + 29U * 60U,
+    }));
+    assert(state.forest.active);
+    assert(!state.pending.available);
+
+    assert(game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_SETTLE_TO_TIME,
+        .now = 100U + 30U * 60U,
+    }));
+    assert(!state.forest.active);
+    assert(state.amai.job == GAME_JOB_REST);
+    assert(state.amai.stamina == 95U);
+    assert(state.pending.wood == 3U);
+    assert(state.pending.berries == 1U);
+
+    assert(!game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_SETTLE_TO_TIME,
+        .now = 100U + 30U * 60U,
+    }));
+    assert(state.pending.wood == 3U);
+}
+
 int main(void)
 {
     test_six_hour_reception_loop();
     test_time_anomaly_and_eight_hour_income_cap();
+    test_forest_task_completes_once();
     return 0;
 }
-

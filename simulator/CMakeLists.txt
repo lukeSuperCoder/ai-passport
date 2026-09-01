@@ -35,6 +35,7 @@ add_executable(ai_passport_sim
     src/freertos_mock.c
     src/app_persistence_file.c
     src/clock_service_sim.c
+    src/telemetry_sim.c
     ${APP_DIR}/app_ui.c
     ${APP_DIR}/ui_pixel.c
     ${APP_DIR}/ui_pixel_math.c

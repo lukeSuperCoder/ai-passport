@@ -56,7 +56,9 @@ cc -std=c11 -Wall -Wextra -Werror -Imain \
 ```
 
 The mocks currently provide a stable 82%/3970 mV battery, ADC values matching
-the three-button resistor ladder, and timed in-memory audio input/output. They
+the three-button resistor ladder, and timed in-memory audio input/output. The
+Time Station entry point initializes playback-only audio, so capture calls
+return `ESP_ERR_NOT_SUPPORTED`, matching the device BSP contract. They
 test application behavior, not electrical characteristics or audio quality.
 
 To diagnose host memory errors:

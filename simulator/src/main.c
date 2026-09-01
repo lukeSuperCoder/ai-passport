@@ -69,7 +69,7 @@ int main(void)
     bool ok[APP_UI_DEMO_COUNT] = {
         true,
         bsp_button_init(on_button, NULL) == ESP_OK,
-        bsp_audio_init() == ESP_OK,
+        bsp_audio_init_playback() == ESP_OK,
         bsp_battery_init() == ESP_OK,
     };
 

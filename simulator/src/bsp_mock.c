@@ -15,6 +15,7 @@ static int s_pressed = -1;
 static pthread_mutex_t s_lvgl_mutex;
 static pthread_once_t s_mutex_once = PTHREAD_ONCE_INIT;
 static uint32_t s_audio_hz = 16000;
+static bool s_audio_capture;
 
 static void mutex_init(void)
 {
@@ -73,7 +74,17 @@ esp_err_t bsp_battery_init(void) { return ESP_OK; }
 int bsp_battery_soc(void) { return 82; }
 int bsp_battery_mv(void) { return 3970; }
 
-esp_err_t bsp_audio_init(void) { return ESP_OK; }
+esp_err_t bsp_audio_init(void)
+{
+    s_audio_capture = true;
+    return ESP_OK;
+}
+
+esp_err_t bsp_audio_init_playback(void)
+{
+    s_audio_capture = false;
+    return ESP_OK;
+}
 esp_err_t bsp_audio_set_format(uint32_t hz, uint8_t bits, uint8_t ch)
 {
     if (!hz || bits != 16 || ch != 1) return ESP_ERR_INVALID_ARG;
@@ -90,6 +101,7 @@ esp_err_t bsp_audio_write(const void *pcm, size_t bytes)
 
 esp_err_t bsp_audio_read(void *pcm, size_t bytes)
 {
+    if (!s_audio_capture) return ESP_ERR_NOT_SUPPORTED;
     int16_t *samples = pcm;
     size_t count = bytes / sizeof(*samples);
     static uint32_t phase;
