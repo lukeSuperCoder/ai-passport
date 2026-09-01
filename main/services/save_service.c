@@ -3,11 +3,12 @@
 #include <string.h>
 
 #define SAVE_MAGIC 0x5453544EU /* TSTN */
-#define SAVE_FORMAT_VERSION 2U
+#define SAVE_FORMAT_VERSION 3U
 #define SAVE_HEADER_SIZE 28U
 #define SAVE_COMMIT_MARKER 0x434F4D4DU /* COMM */
 #define SAVE_PAYLOAD_V1_SIZE 36U
-#define SAVE_PAYLOAD_SIZE 64U
+#define SAVE_PAYLOAD_V2_SIZE 64U
+#define SAVE_PAYLOAD_SIZE 104U
 
 typedef struct {
     uint32_t sequence;
@@ -82,6 +83,23 @@ static void encode_payload(const game_state_t *state, uint8_t payload[SAVE_PAYLO
     write_u32(payload + 52, state->forest.task_id);
     write_u32(payload + 56, state->forest.started_at);
     write_u32(payload + 60, state->forest.ends_at);
+    write_u16(payload + 64, state->pending.hot_bread);
+    payload[66] = (uint8_t)state->atuan.job;
+    payload[67] = state->atuan.stamina;
+    payload[68] = state->atuan.mood;
+    write_u32(payload + 72, state->atuan.job_started_at);
+    payload[76] = (uint8_t)state->forest.kind;
+    payload[77] = (uint8_t)state->forest.actor;
+    payload[78] = state->kitchen.active ? 1U : 0U;
+    payload[79] = (uint8_t)state->kitchen.kind;
+    payload[80] = (uint8_t)state->kitchen.actor;
+    write_u32(payload + 84, state->kitchen.task_id);
+    write_u32(payload + 88, state->kitchen.started_at);
+    write_u32(payload + 92, state->kitchen.ends_at);
+    write_u16(payload + 96, state->inventory_wheat);
+    write_u16(payload + 98, state->inventory_wood);
+    write_u16(payload + 100, state->inventory_berries);
+    write_u16(payload + 102, state->inventory_hot_bread);
 }
 
 static bool decode_payload(const uint8_t payload[SAVE_PAYLOAD_SIZE],
@@ -113,13 +131,43 @@ static bool decode_payload(const uint8_t payload[SAVE_PAYLOAD_SIZE],
         decoded.forest.task_id = read_u32(payload + 52);
         decoded.forest.started_at = read_u32(payload + 56);
         decoded.forest.ends_at = read_u32(payload + 60);
+        if (decoded.forest.active) {
+            decoded.forest.kind = GAME_TASK_FOREST_30M;
+            decoded.forest.actor = GAME_ACTOR_AMAI;
+        }
+    }
+    if (version >= 3U) {
+        decoded.pending.hot_bread = read_u16(payload + 64);
+        decoded.atuan.job = (game_job_t)payload[66];
+        decoded.atuan.stamina = payload[67];
+        decoded.atuan.mood = payload[68];
+        decoded.atuan.job_started_at = read_u32(payload + 72);
+        decoded.forest.kind = (game_task_kind_t)payload[76];
+        decoded.forest.actor = (game_actor_id_t)payload[77];
+        decoded.kitchen.active = payload[78] != 0U;
+        decoded.kitchen.kind = (game_task_kind_t)payload[79];
+        decoded.kitchen.actor = (game_actor_id_t)payload[80];
+        decoded.kitchen.task_id = read_u32(payload + 84);
+        decoded.kitchen.started_at = read_u32(payload + 88);
+        decoded.kitchen.ends_at = read_u32(payload + 92);
+        decoded.inventory_wheat = read_u16(payload + 96);
+        decoded.inventory_wood = read_u16(payload + 98);
+        decoded.inventory_berries = read_u16(payload + 100);
+        decoded.inventory_hot_bread = read_u16(payload + 102);
     }
 
-    if (decoded.momo.job > GAME_JOB_FOREST ||
-        decoded.amai.job > GAME_JOB_FOREST ||
+    if (decoded.momo.job > GAME_JOB_KITCHEN ||
+        decoded.amai.job > GAME_JOB_KITCHEN ||
+        decoded.atuan.job > GAME_JOB_KITCHEN ||
+        decoded.forest.kind > GAME_TASK_HOT_BREAD ||
+        decoded.kitchen.kind > GAME_TASK_HOT_BREAD ||
+        decoded.forest.actor > GAME_ACTOR_ATUAN ||
+        decoded.kitchen.actor > GAME_ACTOR_ATUAN ||
         decoded.momo.stamina > 100U || decoded.momo.mood > 100U ||
         decoded.amai.stamina > 100U || decoded.amai.mood > 100U ||
-        (decoded.forest.active && decoded.forest.ends_at < decoded.forest.started_at)) {
+        decoded.atuan.stamina > 100U || decoded.atuan.mood > 100U ||
+        (decoded.forest.active && decoded.forest.ends_at < decoded.forest.started_at) ||
+        (decoded.kitchen.active && decoded.kitchen.ends_at < decoded.kitchen.started_at)) {
         return false;
     }
     *state = decoded;
@@ -134,7 +182,7 @@ static slot_info_t inspect_slot(const save_backend_t *backend, unsigned slot)
     if (!backend->read(backend->context, offset, header, sizeof(header))) return info;
     uint16_t version = read_u16(header + 4);
     if (read_u32(header + 0) != SAVE_MAGIC ||
-        (version != 1U && version != SAVE_FORMAT_VERSION) ||
+        (version < 1U || version > SAVE_FORMAT_VERSION) ||
         read_u16(header + 6) != SAVE_HEADER_SIZE ||
         read_u32(header + 24) != SAVE_COMMIT_MARKER) {
         return info;
@@ -145,7 +193,8 @@ static slot_info_t inspect_slot(const save_backend_t *backend, unsigned slot)
     info.payload_length = read_u32(header + 12);
     info.payload_crc = read_u32(header + 16);
     info.valid = (version == 1U && info.payload_length == SAVE_PAYLOAD_V1_SIZE) ||
-                 (version == 2U && info.payload_length == SAVE_PAYLOAD_SIZE);
+                 (version == 2U && info.payload_length == SAVE_PAYLOAD_V2_SIZE) ||
+                 (version == 3U && info.payload_length == SAVE_PAYLOAD_SIZE);
     return info;
 }
 

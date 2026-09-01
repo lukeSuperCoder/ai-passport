@@ -27,7 +27,7 @@ typedef enum {
 static game_state_t s_game;
 static lv_obj_t *s_screen;
 static lv_obj_t *s_previous_screen;
-static lv_obj_t *s_schedule_rows[3];
+static lv_obj_t *s_schedule_rows[4];
 static app_page_t s_page;
 static int s_top_selection;
 static int s_schedule_selection;
@@ -153,7 +153,7 @@ static void build_station(void)
 
 static void refresh_schedule_selection(void)
 {
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
         lv_obj_set_style_bg_color(s_schedule_rows[i],
             lv_color_hex(i == s_schedule_selection ? COLOR_GOLD : COLOR_PAPER), 0);
     }
@@ -164,42 +164,52 @@ static void build_schedule(void)
     lv_obj_t *screen = new_screen(COLOR_PAPER);
     rect(screen, 0, 0, 240, 48, COLOR_NIGHT);
     label(screen, "SCHEDULE", 10, 10, &lv_font_montserrat_20, COLOR_PAPER);
-    s_schedule_rows[0] = rect(screen, 9, 57, 222, 55, COLOR_PAPER);
-    s_schedule_rows[1] = rect(screen, 9, 120, 222, 55, COLOR_PAPER);
-    s_schedule_rows[2] = rect(screen, 9, 183, 222, 55, COLOR_PAPER);
-    for (int i = 0; i < 3; i++) {
+    s_schedule_rows[0] = rect(screen, 9, 52, 222, 45, COLOR_PAPER);
+    s_schedule_rows[1] = rect(screen, 9, 102, 222, 45, COLOR_PAPER);
+    s_schedule_rows[2] = rect(screen, 9, 152, 222, 45, COLOR_PAPER);
+    s_schedule_rows[3] = rect(screen, 9, 202, 222, 45, COLOR_PAPER);
+    for (int i = 0; i < 4; i++) {
         lv_obj_set_style_border_width(s_schedule_rows[i], 3, 0);
         lv_obj_set_style_border_color(s_schedule_rows[i], lv_color_hex(COLOR_INK), 0);
     }
 
     char report_line[40];
     if (s_game.pending.available) {
-        snprintf(report_line, sizeof(report_line), "+%luG  +%uW  +%uB",
+        snprintf(report_line, sizeof(report_line), "+%luG +%uW +%uB +%uH",
                  (unsigned long)s_game.pending.coins,
-                 s_game.pending.wood, s_game.pending.berries);
+                 s_game.pending.wood, s_game.pending.berries,
+                 s_game.pending.hot_bread);
     } else {
         snprintf(report_line, sizeof(report_line), "NO REWARD PENDING");
     }
-    label(s_schedule_rows[0], "OFFLINE REPORT", 9, 9,
+    label(s_schedule_rows[0], "OFFLINE REPORT", 9, 4,
           &lv_font_montserrat_14, COLOR_RED);
-    label(s_schedule_rows[0], report_line, 9, 29,
+    label(s_schedule_rows[0], report_line, 9, 23,
           &lv_font_montserrat_14, COLOR_INK);
-    label(s_schedule_rows[1], "RECEPTION", 9, 9,
+    label(s_schedule_rows[1], "RECEPTION", 9, 4,
           &lv_font_montserrat_14, COLOR_RED);
-    label(s_schedule_rows[1], "MOMO", 9, 28,
+    label(s_schedule_rows[1], "MOMO", 9, 23,
           &lv_font_montserrat_14, COLOR_INK);
     char stamina[24];
     snprintf(stamina, sizeof(stamina), "ENERGY %u", s_game.momo.stamina);
-    label(s_schedule_rows[1], stamina, 128, 28,
+    label(s_schedule_rows[1], stamina, 128, 23,
           &lv_font_montserrat_14, COLOR_MUTED);
 
-    label(s_schedule_rows[2], "FOREST  /  30 MIN", 9, 7,
+    label(s_schedule_rows[2], "FOREST  /  30 MIN", 9, 4,
           &lv_font_montserrat_14, COLOR_RED);
     label(s_schedule_rows[2], s_game.forest.active ? "AMAI EXPLORING" : "OK TO SEND AMAI",
-          9, 29, &lv_font_montserrat_14, COLOR_INK);
-    label(screen, "UP/DOWN SELECT   OK ACTION", 10, 249,
+          9, 23, &lv_font_montserrat_14, COLOR_INK);
+    label(s_schedule_rows[3], "KITCHEN / HOT BREAD", 9, 4,
+          &lv_font_montserrat_14, COLOR_RED);
+    char kitchen_line[40];
+    snprintf(kitchen_line, sizeof(kitchen_line), "%s  WHEAT %u",
+             s_game.kitchen.active ? "ATUAN COOKING" : "OK TO COOK",
+             s_game.inventory_wheat);
+    label(s_schedule_rows[3], kitchen_line, 9, 23,
+          &lv_font_montserrat_14, COLOR_INK);
+    label(screen, "UP/DOWN SELECT   OK ACTION", 10, 252,
           &lv_font_montserrat_14, COLOR_MUTED);
-    label(screen, "HOLD OK: STATION", 10, 279,
+    label(screen, "HOLD OK: STATION", 10, 282,
           &lv_font_montserrat_14, COLOR_INK);
     refresh_schedule_selection();
     activate_screen();
@@ -248,7 +258,7 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
             build_station();
         } else if (ev == BSP_BTN_CLICK &&
                    (btn == BSP_BTN_UP || btn == BSP_BTN_DOWN)) {
-            s_schedule_selection = (s_schedule_selection + 1) % 3;
+            s_schedule_selection = (s_schedule_selection + 1) % 4;
             refresh_schedule_selection();
         } else if (ev == BSP_BTN_CLICK && btn == BSP_BTN_OK &&
                    s_schedule_selection == 0 && s_game.pending.available) {
@@ -261,10 +271,34 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
             }
             build_schedule();
         } else if (ev == BSP_BTN_CLICK && btn == BSP_BTN_OK &&
+                   s_schedule_selection == 3 && !s_game.kitchen.active) {
+            uint32_t now = s_game.last_trusted_time;
+            clock_service_now(&now);
+            game_state_t candidate = s_game;
+            if (now > candidate.last_settled_time) {
+                game_reduce(&candidate, (game_action_t){
+                    .type = GAME_ACTION_SETTLE_TO_TIME,
+                    .now = now,
+                });
+            }
+            if (game_reduce(&candidate, (game_action_t){
+                    .type = GAME_ACTION_START_ATUAN_HOT_BREAD,
+                    .now = now,
+                }) && app_persistence_store(&candidate)) {
+                s_game = candidate;
+            }
+            build_schedule();
+        } else if (ev == BSP_BTN_CLICK && btn == BSP_BTN_OK &&
                    s_schedule_selection == 2 && !s_game.forest.active) {
             uint32_t now = s_game.last_trusted_time;
             clock_service_now(&now);
             game_state_t candidate = s_game;
+            if (now > candidate.last_settled_time) {
+                game_reduce(&candidate, (game_action_t){
+                    .type = GAME_ACTION_SETTLE_TO_TIME,
+                    .now = now,
+                });
+            }
             if (game_reduce(&candidate, (game_action_t){
                     .type = GAME_ACTION_START_AMAI_FOREST,
                     .now = now,

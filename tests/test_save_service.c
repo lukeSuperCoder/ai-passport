@@ -68,6 +68,15 @@ int main(void)
     second.forest.started_at = 1000U;
     second.forest.ends_at = 2800U;
     second.pending.wood = 3U;
+    second.pending.hot_bread = 1U;
+    second.atuan.stamina = 96U;
+    second.kitchen.active = true;
+    second.kitchen.kind = GAME_TASK_HOT_BREAD;
+    second.kitchen.actor = GAME_ACTOR_ATUAN;
+    second.kitchen.task_id = 8U;
+    second.kitchen.started_at = 2000U;
+    second.kitchen.ends_at = 2600U;
+    second.inventory_wheat = 2U;
     assert(save_service_store(&save, &second));
     assert(save_service_load(&save, &loaded));
     assert(loaded.coins == 80U);
@@ -76,6 +85,10 @@ int main(void)
     assert(loaded.forest.active);
     assert(loaded.forest.ends_at == 2800U);
     assert(loaded.pending.wood == 3U);
+    assert(loaded.pending.hot_bread == 1U);
+    assert(loaded.kitchen.active);
+    assert(loaded.kitchen.kind == GAME_TASK_HOT_BREAD);
+    assert(loaded.inventory_wheat == 2U);
 
     /* Slot 1 is newest. Corrupt its payload and verify fallback to slot 0. */
     storage.bytes[SAVE_SLOT_SIZE + 28U] ^= 0x01U;
