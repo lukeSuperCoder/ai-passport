@@ -3,12 +3,14 @@
 #include <string.h>
 
 #define SAVE_MAGIC 0x5453544EU /* TSTN */
-#define SAVE_FORMAT_VERSION 3U
+#define SAVE_FORMAT_VERSION 5U
 #define SAVE_HEADER_SIZE 28U
 #define SAVE_COMMIT_MARKER 0x434F4D4DU /* COMM */
 #define SAVE_PAYLOAD_V1_SIZE 36U
 #define SAVE_PAYLOAD_V2_SIZE 64U
-#define SAVE_PAYLOAD_SIZE 104U
+#define SAVE_PAYLOAD_V3_SIZE 104U
+#define SAVE_PAYLOAD_V4_SIZE 168U
+#define SAVE_PAYLOAD_SIZE 184U
 
 typedef struct {
     uint32_t sequence;
@@ -100,6 +102,24 @@ static void encode_payload(const game_state_t *state, uint8_t payload[SAVE_PAYLO
     write_u16(payload + 98, state->inventory_wood);
     write_u16(payload + 100, state->inventory_berries);
     write_u16(payload + 102, state->inventory_hot_bread);
+    write_u16(payload + 104, state->pending.wheat);
+    payload[106] = (uint8_t)state->lulu.job;
+    payload[107] = state->lulu.stamina;
+    payload[108] = state->lulu.mood;
+    write_u32(payload + 112, state->lulu.job_started_at);
+    write_u16(payload + 116, state->inventory_wheat_seed);
+    for (size_t i = 0; i < GAME_FARM_PLOT_COUNT; i++) {
+        size_t offset = 120U + i * 12U;
+        payload[offset] = state->farm[i].active ? 1U : 0U;
+        payload[offset + 1U] = (uint8_t)state->farm[i].crop;
+        write_u32(payload + offset + 4U, state->farm[i].planted_at);
+        write_u32(payload + offset + 8U, state->farm[i].matures_at);
+    }
+    write_u32(payload + 168, state->season_started_at);
+    write_u32(payload + 172, state->weather_seed);
+    payload[176] = state->spring_day;
+    payload[177] = (uint8_t)state->weather;
+    payload[178] = state->calendar_milestones;
 }
 
 static bool decode_payload(const uint8_t payload[SAVE_PAYLOAD_SIZE],
@@ -155,20 +175,59 @@ static bool decode_payload(const uint8_t payload[SAVE_PAYLOAD_SIZE],
         decoded.inventory_berries = read_u16(payload + 100);
         decoded.inventory_hot_bread = read_u16(payload + 102);
     }
+    if (version >= 4U) {
+        decoded.pending.wheat = read_u16(payload + 104);
+        decoded.lulu.job = (game_job_t)payload[106];
+        decoded.lulu.stamina = payload[107];
+        decoded.lulu.mood = payload[108];
+        decoded.lulu.job_started_at = read_u32(payload + 112);
+        decoded.inventory_wheat_seed = read_u16(payload + 116);
+        for (size_t i = 0; i < GAME_FARM_PLOT_COUNT; i++) {
+            size_t offset = 120U + i * 12U;
+            decoded.farm[i].active = payload[offset] != 0U;
+            decoded.farm[i].crop = (game_crop_t)payload[offset + 1U];
+            decoded.farm[i].planted_at = read_u32(payload + offset + 4U);
+            decoded.farm[i].matures_at = read_u32(payload + offset + 8U);
+        }
+    }
+    if (version >= 5U) {
+        decoded.season_started_at = read_u32(payload + 168);
+        decoded.weather_seed = read_u32(payload + 172);
+        decoded.spring_day = payload[176];
+        decoded.weather = (game_weather_t)payload[177];
+        decoded.calendar_milestones = payload[178];
+    } else {
+        decoded.season_started_at = decoded.last_trusted_time;
+        decoded.weather_seed = decoded.last_trusted_time ^ 0x54494D45U;
+        decoded.spring_day = 1U;
+        decoded.weather = GAME_WEATHER_CLEAR;
+        decoded.calendar_milestones = 0U;
+    }
 
-    if (decoded.momo.job > GAME_JOB_KITCHEN ||
-        decoded.amai.job > GAME_JOB_KITCHEN ||
-        decoded.atuan.job > GAME_JOB_KITCHEN ||
+    if (decoded.momo.job > GAME_JOB_FARM ||
+        decoded.amai.job > GAME_JOB_FARM ||
+        decoded.atuan.job > GAME_JOB_FARM ||
+        decoded.lulu.job > GAME_JOB_FARM ||
         decoded.forest.kind > GAME_TASK_HOT_BREAD ||
         decoded.kitchen.kind > GAME_TASK_HOT_BREAD ||
         decoded.forest.actor > GAME_ACTOR_ATUAN ||
         decoded.kitchen.actor > GAME_ACTOR_ATUAN ||
+        decoded.spring_day < 1U || decoded.spring_day > GAME_SPRING_DAY_COUNT ||
+        decoded.weather > GAME_WEATHER_STORM ||
         decoded.momo.stamina > 100U || decoded.momo.mood > 100U ||
         decoded.amai.stamina > 100U || decoded.amai.mood > 100U ||
         decoded.atuan.stamina > 100U || decoded.atuan.mood > 100U ||
+        decoded.lulu.stamina > 100U || decoded.lulu.mood > 100U ||
         (decoded.forest.active && decoded.forest.ends_at < decoded.forest.started_at) ||
         (decoded.kitchen.active && decoded.kitchen.ends_at < decoded.kitchen.started_at)) {
         return false;
+    }
+    for (size_t i = 0; i < GAME_FARM_PLOT_COUNT; i++) {
+        if (decoded.farm[i].crop > GAME_CROP_WHEAT ||
+            (decoded.farm[i].active &&
+             decoded.farm[i].matures_at < decoded.farm[i].planted_at)) {
+            return false;
+        }
     }
     *state = decoded;
     return true;
@@ -194,7 +253,9 @@ static slot_info_t inspect_slot(const save_backend_t *backend, unsigned slot)
     info.payload_crc = read_u32(header + 16);
     info.valid = (version == 1U && info.payload_length == SAVE_PAYLOAD_V1_SIZE) ||
                  (version == 2U && info.payload_length == SAVE_PAYLOAD_V2_SIZE) ||
-                 (version == 3U && info.payload_length == SAVE_PAYLOAD_SIZE);
+                 (version == 3U && info.payload_length == SAVE_PAYLOAD_V3_SIZE) ||
+                 (version == 4U && info.payload_length == SAVE_PAYLOAD_V4_SIZE) ||
+                 (version == 5U && info.payload_length == SAVE_PAYLOAD_SIZE);
     return info;
 }
 

@@ -77,6 +77,18 @@ int main(void)
     second.kitchen.started_at = 2000U;
     second.kitchen.ends_at = 2600U;
     second.inventory_wheat = 2U;
+    second.inventory_wheat_seed = 3U;
+    second.pending.wheat = 2U;
+    second.lulu.job = GAME_JOB_FARM;
+    second.farm[0].active = true;
+    second.farm[0].crop = GAME_CROP_WHEAT;
+    second.farm[0].planted_at = 3000U;
+    second.farm[0].matures_at = 89400U;
+    second.season_started_at = 1234U;
+    second.weather_seed = 5678U;
+    second.spring_day = 7U;
+    second.weather = GAME_WEATHER_RAIN;
+    second.calendar_milestones = 0x01U;
     assert(save_service_store(&save, &second));
     assert(save_service_load(&save, &loaded));
     assert(loaded.coins == 80U);
@@ -89,6 +101,14 @@ int main(void)
     assert(loaded.kitchen.active);
     assert(loaded.kitchen.kind == GAME_TASK_HOT_BREAD);
     assert(loaded.inventory_wheat == 2U);
+    assert(loaded.inventory_wheat_seed == 3U);
+    assert(loaded.pending.wheat == 2U);
+    assert(loaded.farm[0].active);
+    assert(loaded.farm[0].matures_at == 89400U);
+    assert(loaded.season_started_at == 1234U);
+    assert(loaded.weather_seed == 5678U);
+    assert(loaded.spring_day == 7U);
+    assert(loaded.weather == GAME_WEATHER_RAIN);
 
     /* Slot 1 is newest. Corrupt its payload and verify fallback to slot 0. */
     storage.bytes[SAVE_SLOT_SIZE + 28U] ^= 0x01U;

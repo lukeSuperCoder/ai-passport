@@ -22,6 +22,7 @@
 typedef enum {
     PAGE_STATION = 0,
     PAGE_SCHEDULE,
+    PAGE_FARM,
 } app_page_t;
 
 static game_state_t s_game;
@@ -31,6 +32,7 @@ static lv_obj_t *s_schedule_rows[4];
 static app_page_t s_page;
 static int s_top_selection;
 static int s_schedule_selection;
+static int s_farm_selection;
 
 static lv_obj_t *rect(lv_obj_t *parent, int x, int y, int w, int h, uint32_t color)
 {
@@ -74,7 +76,9 @@ static void activate_screen(void)
         lv_obj_delete(s_previous_screen);
         s_previous_screen = NULL;
     }
-    telemetry_log_memory(s_page == PAGE_STATION ? "page_station" : "page_schedule");
+    const char *checkpoint = s_page == PAGE_STATION ? "page_station" :
+        (s_page == PAGE_SCHEDULE ? "page_schedule" : "page_farm");
+    telemetry_log_memory(checkpoint);
 }
 
 static void draw_cat(lv_obj_t *parent, int x, int y)
@@ -113,21 +117,24 @@ static void draw_inn(lv_obj_t *parent)
 static void draw_top_status(lv_obj_t *parent)
 {
     label(parent, "08:42", 9, 7, &lv_font_montserrat_20, COLOR_PAPER);
-    label(parent, "SPR 6  /  RAIN", 9, 29, &lv_font_montserrat_14, COLOR_GOLD);
+    char calendar[32];
+    snprintf(calendar, sizeof(calendar), "SPR %u / %s", s_game.spring_day,
+             game_weather_name(s_game.weather));
+    label(parent, calendar, 9, 29, &lv_font_montserrat_14, COLOR_GOLD);
     label(parent, "82%", 197, 11, &lv_font_montserrat_14, COLOR_PAPER);
 }
 
 static void draw_bottom_tabs(lv_obj_t *parent)
 {
-    const char *items[2] = { "STATION", "SCHEDULE" };
-    for (int i = 0; i < 2; i++) {
-        int x = 8 + i * 113;
-        lv_obj_t *tab = rect(parent, x, 278, 105, 32,
+    const char *items[3] = { "STATION", "SCHEDULE", "FARM" };
+    for (int i = 0; i < 3; i++) {
+        int x = 5 + i * 79;
+        lv_obj_t *tab = rect(parent, x, 278, 74, 32,
                              s_top_selection == i ? COLOR_GOLD : COLOR_PAPER);
         lv_obj_set_style_border_width(tab, 3, 0);
         lv_obj_set_style_border_color(tab, lv_color_hex(COLOR_INK), 0);
         lv_obj_t *text = label(tab, items[i], 0, 6, &lv_font_montserrat_14, COLOR_INK);
-        lv_obj_set_width(text, 99);
+        lv_obj_set_width(text, 68);
         lv_obj_set_style_text_align(text, LV_TEXT_ALIGN_CENTER, 0);
     }
 }
@@ -175,10 +182,10 @@ static void build_schedule(void)
 
     char report_line[40];
     if (s_game.pending.available) {
-        snprintf(report_line, sizeof(report_line), "+%luG +%uW +%uB +%uH",
+        snprintf(report_line, sizeof(report_line), "+%luG +%uW +%uB +%uH +%uF",
                  (unsigned long)s_game.pending.coins,
                  s_game.pending.wood, s_game.pending.berries,
-                 s_game.pending.hot_bread);
+                 s_game.pending.hot_bread, s_game.pending.wheat);
     } else {
         snprintf(report_line, sizeof(report_line), "NO REWARD PENDING");
     }
@@ -215,6 +222,32 @@ static void build_schedule(void)
     activate_screen();
 }
 
+static void build_farm(void)
+{
+    lv_obj_t *screen = new_screen(COLOR_GRASS);
+    rect(screen, 0, 0, 240, 48, COLOR_NIGHT);
+    label(screen, "FARM", 10, 10, &lv_font_montserrat_20, COLOR_PAPER);
+    char stock[32];
+    snprintf(stock, sizeof(stock), "SEEDS %u  WHEAT %u",
+             s_game.inventory_wheat_seed, s_game.inventory_wheat);
+    label(screen, stock, 78, 16, &lv_font_montserrat_14, COLOR_GOLD);
+
+    for (int i = 0; i < (int)GAME_FARM_PLOT_COUNT; i++) {
+        int y = 58 + i * 51;
+        lv_obj_t *plot = rect(screen, 10, y, 220, 43,
+                              i == s_farm_selection ? COLOR_GOLD : COLOR_PAPER);
+        lv_obj_set_style_border_width(plot, 3, 0);
+        lv_obj_set_style_border_color(plot, lv_color_hex(COLOR_WOOD_DARK), 0);
+        char line[36];
+        snprintf(line, sizeof(line), "PLOT %d  %s", i + 1,
+                 s_game.farm[i].active ? "WHEAT GROWING" : "OK TO PLANT");
+        label(plot, line, 8, 11, &lv_font_montserrat_14, COLOR_INK);
+    }
+    label(screen, "HOLD OK: STATION", 10, 276,
+          &lv_font_montserrat_14, COLOR_INK);
+    activate_screen();
+}
+
 void app_ui_start(const bool ok[APP_UI_DEMO_COUNT])
 {
     (void)ok;
@@ -244,12 +277,45 @@ void app_ui_start(const bool ok[APP_UI_DEMO_COUNT])
     s_page = PAGE_STATION;
     s_top_selection = 0;
     s_schedule_selection = 0;
+    s_farm_selection = 0;
     build_station();
 }
 
 void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
 {
     if (ev != BSP_BTN_CLICK && ev != BSP_BTN_LONG) return;
+
+    if (s_page == PAGE_FARM) {
+        if (btn == BSP_BTN_OK && ev == BSP_BTN_LONG) {
+            s_page = PAGE_STATION;
+            s_top_selection = 0;
+            build_station();
+        } else if (ev == BSP_BTN_CLICK &&
+                   (btn == BSP_BTN_UP || btn == BSP_BTN_DOWN)) {
+            s_farm_selection = (s_farm_selection + 1) % GAME_FARM_PLOT_COUNT;
+            build_farm();
+        } else if (ev == BSP_BTN_CLICK && btn == BSP_BTN_OK &&
+                   !s_game.farm[s_farm_selection].active) {
+            uint32_t now = s_game.last_trusted_time;
+            clock_service_now(&now);
+            game_state_t candidate = s_game;
+            if (now > candidate.last_settled_time) {
+                game_reduce(&candidate, (game_action_t){
+                    .type = GAME_ACTION_SETTLE_TO_TIME,
+                    .now = now,
+                });
+            }
+            if (game_reduce(&candidate, (game_action_t){
+                    .type = GAME_ACTION_PLANT_WHEAT,
+                    .now = now,
+                    .target = (uint8_t)s_farm_selection,
+                }) && app_persistence_store(&candidate)) {
+                s_game = candidate;
+            }
+            build_farm();
+        }
+        return;
+    }
 
     if (s_page == PAGE_SCHEDULE) {
         if (btn == BSP_BTN_OK && ev == BSP_BTN_LONG) {
@@ -312,11 +378,15 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
 
     if (ev != BSP_BTN_CLICK) return;
     if (btn == BSP_BTN_UP || btn == BSP_BTN_DOWN) {
-        s_top_selection = (s_top_selection + 1) % 2;
+        s_top_selection = (s_top_selection + 1) % 3;
         build_station();
     } else if (btn == BSP_BTN_OK && s_top_selection == 1) {
         s_page = PAGE_SCHEDULE;
         s_schedule_selection = 0;
         build_schedule();
+    } else if (btn == BSP_BTN_OK && s_top_selection == 2) {
+        s_page = PAGE_FARM;
+        s_farm_selection = 0;
+        build_farm();
     }
 }

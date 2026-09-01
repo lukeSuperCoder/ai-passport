@@ -5,12 +5,15 @@
 
 #define GAME_OFFLINE_CAP_SECONDS (7U * 24U * 60U * 60U)
 #define GAME_RECEPTION_CAP_SECONDS (8U * 60U * 60U)
+#define GAME_FARM_PLOT_COUNT 4U
+#define GAME_SPRING_DAY_COUNT 14U
 
 typedef enum {
     GAME_JOB_REST = 0,
     GAME_JOB_RECEPTION,
     GAME_JOB_FOREST,
     GAME_JOB_KITCHEN,
+    GAME_JOB_FARM,
 } game_job_t;
 
 typedef enum {
@@ -24,6 +27,18 @@ typedef enum {
     GAME_ACTOR_AMAI,
     GAME_ACTOR_ATUAN,
 } game_actor_id_t;
+
+typedef enum {
+    GAME_CROP_NONE = 0,
+    GAME_CROP_WHEAT,
+} game_crop_t;
+
+typedef enum {
+    GAME_WEATHER_CLEAR = 0,
+    GAME_WEATHER_CLOUDY,
+    GAME_WEATHER_RAIN,
+    GAME_WEATHER_STORM,
+} game_weather_t;
 
 typedef struct {
     game_job_t job;
@@ -42,10 +57,18 @@ typedef struct {
 } game_timed_task_t;
 
 typedef struct {
+    bool active;
+    game_crop_t crop;
+    uint32_t planted_at;
+    uint32_t matures_at;
+} game_farm_plot_t;
+
+typedef struct {
     uint32_t coins;
     uint16_t wood;
     uint16_t berries;
     uint16_t hot_bread;
+    uint16_t wheat;
     uint32_t elapsed_seconds;
     bool available;
 } game_pending_report_t;
@@ -55,15 +78,23 @@ typedef struct {
     uint32_t last_trusted_time;
     uint32_t last_settled_time;
     uint32_t commit_sequence;
+    uint32_t season_started_at;
+    uint32_t weather_seed;
+    uint8_t spring_day;
+    game_weather_t weather;
+    uint8_t calendar_milestones;
     game_pet_state_t momo;
     game_pet_state_t amai;
     game_pet_state_t atuan;
+    game_pet_state_t lulu;
     game_timed_task_t forest;
     game_timed_task_t kitchen;
     uint16_t inventory_wheat;
     uint16_t inventory_wood;
     uint16_t inventory_berries;
     uint16_t inventory_hot_bread;
+    uint16_t inventory_wheat_seed;
+    game_farm_plot_t farm[GAME_FARM_PLOT_COUNT];
     game_pending_report_t pending;
     bool time_anomaly;
 } game_state_t;
@@ -74,12 +105,15 @@ typedef enum {
     GAME_ACTION_CLAIM_REPORT,
     GAME_ACTION_START_AMAI_FOREST,
     GAME_ACTION_START_ATUAN_HOT_BREAD,
+    GAME_ACTION_PLANT_WHEAT,
 } game_action_type_t;
 
 typedef struct {
     game_action_type_t type;
     uint32_t now;
+    uint8_t target;
 } game_action_t;
 
 void game_state_init(game_state_t *state, uint32_t now);
 bool game_reduce(game_state_t *state, game_action_t action);
+const char *game_weather_name(game_weather_t weather);

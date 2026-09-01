@@ -17,6 +17,42 @@ static uint16_t saturating_add_u16(uint16_t left, uint16_t right)
     return UINT16_MAX - left < right ? UINT16_MAX : (uint16_t)(left + right);
 }
 
+static game_weather_t weather_for_day(uint32_t seed, uint8_t day)
+{
+    uint32_t value = seed ^ ((uint32_t)day * 0x9E3779B9U);
+    value ^= value >> 16U;
+    value *= 0x7FEB352DU;
+    value ^= value >> 15U;
+    uint32_t roll = value % 100U;
+    if (roll < 45U) return GAME_WEATHER_CLEAR;
+    if (roll < 70U) return GAME_WEATHER_CLOUDY;
+    if (roll < 95U) return GAME_WEATHER_RAIN;
+    return GAME_WEATHER_STORM;
+}
+
+static void update_calendar(game_state_t *state, uint32_t now)
+{
+    if (now < state->season_started_at) return;
+    uint32_t elapsed_days = (now - state->season_started_at) / (24U * 60U * 60U);
+    uint8_t day = elapsed_days >= GAME_SPRING_DAY_COUNT
+        ? GAME_SPRING_DAY_COUNT : (uint8_t)(elapsed_days + 1U);
+    state->spring_day = day;
+    state->weather = weather_for_day(state->weather_seed, day);
+    if (day >= 7U) state->calendar_milestones |= 0x01U;
+    if (day >= 14U) state->calendar_milestones |= 0x02U;
+}
+
+const char *game_weather_name(game_weather_t weather)
+{
+    switch (weather) {
+    case GAME_WEATHER_CLEAR: return "CLEAR";
+    case GAME_WEATHER_CLOUDY: return "CLOUDY";
+    case GAME_WEATHER_RAIN: return "RAIN";
+    case GAME_WEATHER_STORM: return "STORM";
+    }
+    return "UNKNOWN";
+}
+
 static void complete_timed_task(game_state_t *state, game_timed_task_t *task)
 {
     switch (task->kind) {
@@ -52,7 +88,10 @@ static void settle_reception(game_state_t *state, uint32_t elapsed)
     uint32_t hours = productive / 3600U;
     if (hours == 0) return;
 
-    state->pending.coins = saturating_add_u32(state->pending.coins, hours * 10U);
+    uint32_t income = hours * 10U;
+    if (state->weather == GAME_WEATHER_RAIN) income = income * 90U / 100U;
+    if (state->weather == GAME_WEATHER_STORM) income = income * 150U / 100U;
+    state->pending.coins = saturating_add_u32(state->pending.coins, income);
     state->pending.available = true;
 
     uint32_t stamina_cost = hours * 4U;
@@ -69,6 +108,10 @@ void game_state_init(game_state_t *state, uint32_t now)
     memset(state, 0, sizeof(*state));
     state->last_trusted_time = now;
     state->last_settled_time = now;
+    state->season_started_at = now;
+    state->weather_seed = now ^ 0x54494D45U;
+    state->spring_day = 1U;
+    state->weather = weather_for_day(state->weather_seed, 1U);
     state->momo.job = GAME_JOB_REST;
     state->momo.stamina = 100U;
     state->momo.mood = 80U;
@@ -78,7 +121,10 @@ void game_state_init(game_state_t *state, uint32_t now)
     state->atuan.job = GAME_JOB_REST;
     state->atuan.stamina = 100U;
     state->atuan.mood = 70U;
-    state->inventory_wheat = 4U;
+    state->lulu.job = GAME_JOB_REST;
+    state->lulu.stamina = 100U;
+    state->lulu.mood = 90U;
+    state->inventory_wheat_seed = 4U;
 }
 
 bool game_reduce(game_state_t *state, game_action_t action)
@@ -109,6 +155,7 @@ bool game_reduce(game_state_t *state, game_action_t action)
         if (elapsed > GAME_OFFLINE_CAP_SECONDS) {
             elapsed = GAME_OFFLINE_CAP_SECONDS;
         }
+        update_calendar(state, action.now);
         if (state->momo.job == GAME_JOB_RECEPTION) {
             settle_reception(state, elapsed);
         }
@@ -117,6 +164,24 @@ bool game_reduce(game_state_t *state, game_action_t action)
         }
         if (state->kitchen.active && state->kitchen.ends_at <= action.now) {
             complete_timed_task(state, &state->kitchen);
+        }
+        for (size_t i = 0; i < GAME_FARM_PLOT_COUNT; i++) {
+            game_farm_plot_t *plot = &state->farm[i];
+            if (plot->active && plot->matures_at <= action.now) {
+                if (plot->crop == GAME_CROP_WHEAT) {
+                    state->pending.wheat = saturating_add_u16(
+                        state->pending.wheat, 2U);
+                    state->pending.available = true;
+                }
+                memset(plot, 0, sizeof(*plot));
+            }
+        }
+        bool farm_active = false;
+        for (size_t i = 0; i < GAME_FARM_PLOT_COUNT; i++) {
+            farm_active = farm_active || state->farm[i].active;
+        }
+        if (!farm_active && state->lulu.job == GAME_JOB_FARM) {
+            state->lulu.job = GAME_JOB_REST;
         }
         if (state->pending.available) {
             state->pending.elapsed_seconds = saturating_add_u32(
@@ -177,7 +242,27 @@ bool game_reduce(game_state_t *state, game_action_t action)
             state->inventory_berries, state->pending.berries);
         state->inventory_hot_bread = saturating_add_u16(
             state->inventory_hot_bread, state->pending.hot_bread);
+        state->inventory_wheat = saturating_add_u16(
+            state->inventory_wheat, state->pending.wheat);
         memset(&state->pending, 0, sizeof(state->pending));
+        state->commit_sequence++;
+        return true;
+
+    case GAME_ACTION_PLANT_WHEAT:
+        if (action.target >= GAME_FARM_PLOT_COUNT ||
+            state->farm[action.target].active ||
+            state->inventory_wheat_seed == 0U ||
+            action.now > UINT32_MAX - 24U * 60U * 60U ||
+            action.now != state->last_settled_time) {
+            return false;
+        }
+        state->inventory_wheat_seed--;
+        state->farm[action.target].active = true;
+        state->farm[action.target].crop = GAME_CROP_WHEAT;
+        state->farm[action.target].planted_at = action.now;
+        state->farm[action.target].matures_at = action.now + 24U * 60U * 60U;
+        state->lulu.job = GAME_JOB_FARM;
+        state->lulu.job_started_at = action.now;
         state->commit_sequence++;
         return true;
     }
