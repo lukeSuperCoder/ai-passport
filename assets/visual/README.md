@@ -16,3 +16,7 @@ RGB565 LVGL image in `main/assets/station_scene.c`. The generated scene costs
 
 Source assets must contain no UI frames or text. All localized copy remains live
 LVGL text.
+
+`time-station-farm-crops-v1.png` is the source sheet for the four farm crops and
+their four growth stages. Run `tools/generate_farm_assets.sh` after replacing it;
+the generated RGB565A8 atlas costs 139,776 bytes of Flash and needs no decoder.

@@ -396,12 +396,34 @@ static void build_schedule(void)
     activate_screen();
 }
 
+static uint8_t farm_growth_stage(const game_farm_plot_t *plot)
+{
+    if (!plot->active || plot->matures_at <= plot->planted_at) return 0U;
+    if (s_now >= plot->matures_at) return 3U;
+    if (s_now <= plot->planted_at) return 0U;
+    uint32_t duration = plot->matures_at - plot->planted_at;
+    uint32_t elapsed = s_now - plot->planted_at;
+    uint8_t stage = (uint8_t)(((uint64_t)elapsed * 4U) / duration);
+    return stage > 3U ? 3U : stage;
+}
+
+static void draw_farm_crop(lv_obj_t *parent, game_crop_t crop,
+                           uint8_t stage, int x, int y)
+{
+    if (crop < GAME_CROP_WHEAT || crop >= GAME_CROP_COUNT) return;
+    lv_obj_t *image = lv_image_create(parent);
+    lv_image_set_src(image, visual_farm_crops[crop - GAME_CROP_WHEAT][stage]);
+    lv_obj_set_pos(image, x, y);
+    lv_obj_remove_flag(image, LV_OBJ_FLAG_SCROLLABLE);
+}
+
 static void build_farm(void)
 {
-    lv_obj_t *screen = new_screen(COLOR_GRASS);
-    rect(screen, 0, 48, 240, 228, 0x679B3C);
-    for (int y = 51; y < 276; y += 18) {
-        rect(screen, 0, y, 240, 2, 0x7DAF4D);
+    lv_obj_t *screen = new_screen(0x83B94E);
+    rect(screen, 0, 48, 240, 4, 0xA1C965);
+    for (int grass = 0; grass < 4; grass++) {
+        rect(screen, 207 + grass * 7, 276 - (grass % 2) * 3,
+             2, 7, 0x5F9139);
     }
     rect(screen, 0, 0, 240, 48, COLOR_NIGHT);
     label(screen, tr("农田", "FARM"), 10, 10, ui_font_20(), COLOR_PAPER);
@@ -411,31 +433,56 @@ static void build_farm(void)
     label(screen, stock, 78, 16, ui_font_14(), COLOR_GOLD);
 
     uint8_t plot_count = game_available_farm_plots(&s_game);
-    for (int i = 0; i < plot_count; i++) {
-        int y = 54 + i * 34;
-        lv_obj_t *plot = rect(screen, 10, y, 220, 30, COLOR_PAPER);
+    for (uint8_t i = 0; i < GAME_FARM_PLOT_COUNT; i++) {
+        int x = 6 + (i % 2) * 117;
+        int y = 55 + (i / 2) * 72;
+        bool unlocked = i < plot_count;
+        lv_obj_t *plot = rect(screen, x, y, 111, 66,
+                              unlocked ? 0x805237 : 0x75A84A);
         lv_obj_set_style_border_width(plot, i == s_farm_selection ? 3 : 2, 0);
         lv_obj_set_style_border_color(plot,
             lv_color_hex(i == s_farm_selection ? COLOR_GOLD : COLOR_WOOD_DARK), 0);
-        lv_obj_set_style_radius(plot, 4, 0);
+        lv_obj_set_style_radius(plot, 10, 0);
         if (i == s_farm_selection) {
             lv_obj_set_style_shadow_width(plot, 7, 0);
             lv_obj_set_style_shadow_color(plot, lv_color_hex(COLOR_INK), 0);
             lv_obj_set_style_shadow_opa(plot, LV_OPA_30, 0);
         }
-        uint32_t crop_color = s_game.farm[i].active ? 0x95B84C : COLOR_MUTED;
-        lv_obj_t *crop_mark = rect(plot, 7, 7, 12, 12, crop_color);
-        lv_obj_set_style_radius(crop_mark, LV_RADIUS_CIRCLE, 0);
-        char line[128];
-        game_crop_t crop = s_game.farm[i].crop;
-        snprintf(line, sizeof(line), tr("田地%d  %s", "PLOT %d  %s"), i + 1,
-                 s_game.farm[i].active
-                     ? app_i18n_crop(ui_language(), crop)
-                     : tr("按OK查看", "OK FOR DETAILS"));
-        label_one_line(plot, line, 25, 5, 185,
-                       ui_font_14(), COLOR_INK);
+        if (unlocked) {
+            static const uint8_t speck_x[5] = { 16, 35, 78, 91, 58 };
+            static const uint8_t speck_y[5] = { 43, 22, 17, 45, 52 };
+            for (int speck = 0; speck < 5; speck++) {
+                lv_obj_t *dot = rect(plot, speck_x[speck], speck_y[speck],
+                                     3, 2, 0x593927);
+                lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
+            }
+        }
+        char number[8];
+        snprintf(number, sizeof(number), "%d", i + 1);
+        lv_obj_t *number_badge = rect(plot, 4, 4, 18, 18,
+                                      i == s_farm_selection ? COLOR_GOLD : COLOR_PAPER);
+        lv_obj_set_style_radius(number_badge, LV_RADIUS_CIRCLE, 0);
+        lv_obj_t *number_label = label(number_badge, number, 0, 1,
+                                       ui_font_14(), COLOR_INK);
+        lv_obj_set_width(number_label, 18);
+        lv_obj_set_style_text_align(number_label, LV_TEXT_ALIGN_CENTER, 0);
+        if (!unlocked) {
+            for (int stone = 0; stone < 3; stone++) {
+                lv_obj_t *mark = rect(plot, 40 + stone * 11, 31 - (stone % 2) * 3,
+                                      8, 6, 0xB8B08B);
+                lv_obj_set_style_radius(mark, LV_RADIUS_CIRCLE, 0);
+            }
+        } else if (s_game.farm[i].active) {
+            draw_farm_crop(plot, s_game.farm[i].crop,
+                           farm_growth_stage(&s_game.farm[i]), 28, 8);
+        } else {
+            for (int seed = 0; seed < 3; seed++) {
+                lv_obj_t *mark = rect(plot, 42 + seed * 10, 30, 5, 5, 0x2A211C);
+                lv_obj_set_style_radius(mark, LV_RADIUS_CIRCLE, 0);
+            }
+        }
     }
-    label(screen, tr("长按OK：返回驿站", "HOLD OK: STATION"), 10, 276,
+    label(screen, tr("OK查看  长按返回", "OK VIEW  HOLD BACK"), 10, 289,
           ui_font_14(), COLOR_INK);
     activate_screen();
 }
@@ -453,6 +500,8 @@ static void build_farm_detail(void)
     if (s_game.farm[s_farm_selection].active) {
         label(card, app_i18n_crop(ui_language(), s_game.farm[s_farm_selection].crop),
               10, 12, ui_font_20(), COLOR_RED);
+        draw_farm_crop(card, s_game.farm[s_farm_selection].crop,
+                       farm_growth_stage(&s_game.farm[s_farm_selection]), 150, 6);
         uint32_t remaining = s_game.farm[s_farm_selection].matures_at > s_now
             ? s_game.farm[s_farm_selection].matures_at - s_now : 0U;
         char line[128];
@@ -465,6 +514,7 @@ static void build_farm_detail(void)
         game_crop_t crop = (game_crop_t)s_farm_crop_selection;
         const game_crop_definition_t *definition = game_crop_definition(crop);
         label(card, app_i18n_crop(ui_language(), crop), 10, 12, ui_font_20(), COLOR_RED);
+        draw_farm_crop(card, crop, 0U, 150, 6);
         char line[128];
         snprintf(line, sizeof(line), tr("种子%u / 生长%lu小时", "SEEDS %u / GROW %luh"),
                  ui_seed_count(crop),
