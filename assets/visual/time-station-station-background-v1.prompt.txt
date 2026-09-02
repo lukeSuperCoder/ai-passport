@@ -1,0 +1,9 @@
+Use case: precise-object-edit
+Asset type: full-screen scenic background for a 240 x 320 portrait handheld game
+Input images: the repository concept sheet is the authoritative style reference; the v2 home direction supplies the inn, cat, spring palette, and composition
+Primary request: remove all dialogue boxes, navigation boxes, UI frames, and empty interface areas, then naturally extend the Japanese countryside environment downward with stone path, grass, flowers, fence, and foreground foliage
+Scene/backdrop: the same bright spring Japanese countryside inn, cherry blossom, blue sky, mountains, rice fields, garden flowers, red noren, and black-and-white red-scarf cat; scenery continues from top edge to bottom edge
+Style/medium: crisp handcrafted 16-bit pixel art matching the references
+Composition/framing: exact portrait 3:4 full-bleed scene; inn and cat in the upper-middle; quieter foliage and path in the lower third for live overlays; calmer sky at top for status overlay
+Constraints: scenery only; no UI panels, boxes, borders, icons, text, letters, numbers, logos, or watermark; suitable for RGB565
+Avoid: blank flat-color bands, western fantasy elements, dark indoor scene, ornate frames, fake text, excessive detail beneath overlays

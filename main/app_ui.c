@@ -1,5 +1,7 @@
 #include "app_ui.h"
 #include "app_i18n.h"
+#include "ui_theme.h"
+#include "visual_assets.h"
 #include "game/game_state.h"
 #include "game/game_content.h"
 #include "services/app_persistence.h"
@@ -12,17 +14,17 @@
 LV_FONT_DECLARE(app_font_zh_14)
 LV_FONT_DECLARE(app_font_zh_20)
 
-#define COLOR_NIGHT       0x172637
-#define COLOR_SKY         0x78A58A
-#define COLOR_HILL        0x426B55
-#define COLOR_GRASS       0x78964B
-#define COLOR_WOOD        0x704936
-#define COLOR_WOOD_DARK   0x3B2D2A
-#define COLOR_PAPER       0xF2E4C4
-#define COLOR_GOLD        0xE7B85B
-#define COLOR_RED         0xA94B3F
-#define COLOR_INK         0x282522
-#define COLOR_MUTED       0x8C806E
+#define COLOR_NIGHT       UI_THEME_HEADER_BLUE
+#define COLOR_SKY         UI_THEME_SKY_BLUE
+#define COLOR_HILL        UI_THEME_MOUNTAIN_TEAL
+#define COLOR_GRASS       UI_THEME_SPRING_GREEN
+#define COLOR_WOOD        UI_THEME_TIMBER
+#define COLOR_WOOD_DARK   UI_THEME_DARK_TIMBER
+#define COLOR_PAPER       UI_THEME_PARCHMENT
+#define COLOR_GOLD        UI_THEME_WARM_YELLOW
+#define COLOR_RED         UI_THEME_RED_ACCENT
+#define COLOR_INK         UI_THEME_INK
+#define COLOR_MUTED       UI_THEME_MUTED
 
 typedef enum {
     PAGE_STATION = 0,
@@ -176,44 +178,16 @@ static void activate_screen(void)
     telemetry_log_memory(checkpoint);
 }
 
-static void draw_cat(lv_obj_t *parent, int x, int y)
-{
-    rect(parent, x + 3, y, 6, 7, COLOR_INK);
-    rect(parent, x + 23, y, 6, 7, COLOR_INK);
-    rect(parent, x, y + 5, 32, 24, COLOR_INK);
-    rect(parent, x + 5, y + 10, 5, 5, COLOR_GOLD);
-    rect(parent, x + 22, y + 10, 5, 5, COLOR_GOLD);
-    rect(parent, x + 10, y + 18, 12, 7, COLOR_PAPER);
-    rect(parent, x + 5, y + 27, 22, 18, COLOR_INK);
-    rect(parent, x + 3, y + 28, 26, 4, COLOR_RED);
-    rect(parent, x + 26, y + 35, 9, 4, COLOR_INK);
-}
-
 static void draw_inn(lv_obj_t *parent)
 {
-    uint32_t hour = (s_now / 3600U) % 24U;
-    uint32_t sky = (hour >= 21U || hour < 6U) ? COLOR_NIGHT :
-        ((hour >= 17U) ? 0xB96F52 : ((hour < 11U) ? 0x94AF9B : COLOR_SKY));
-    rect(parent, 0, 44, 240, 134, sky);
-    rect(parent, 0, 92, 240, 86, COLOR_HILL);
-    rect(parent, 0, 151, 240, 27, COLOR_GRASS);
-    rect(parent, 36, 76, 168, 9, COLOR_WOOD_DARK);
-    rect(parent, 49, 63, 142, 16, COLOR_WOOD_DARK);
-    rect(parent, 61, 55, 118, 10, COLOR_WOOD_DARK);
-    rect(parent, 48, 84, 144, 70, COLOR_PAPER);
-    rect(parent, 48, 84, 144, 6, COLOR_WOOD);
-    rect(parent, 48, 117, 144, 5, COLOR_WOOD);
-    rect(parent, 71, 90, 6, 64, COLOR_WOOD);
-    rect(parent, 164, 90, 6, 64, COLOR_WOOD);
-    rect(parent, 106, 111, 35, 43, COLOR_WOOD);
-    rect(parent, 82, 97, 18, 15, COLOR_GOLD);
-    rect(parent, 146, 97, 12, 15, COLOR_GOLD);
-    rect(parent, 32, 148, 178, 7, COLOR_WOOD_DARK);
-    draw_cat(parent, 63, 129);
+    lv_obj_t *scene = lv_image_create(parent);
+    lv_image_set_src(scene, &visual_station_scene);
+    lv_obj_set_pos(scene, 0, 0);
+    lv_obj_remove_flag(scene, LV_OBJ_FLAG_SCROLLABLE);
     if (s_game.weather == GAME_WEATHER_RAIN ||
         s_game.weather == GAME_WEATHER_STORM) {
         for (int i = 0; i < 12; i++) {
-            rect(parent, 6 + i * 20, 50 + (i % 4) * 19, 2, 10, COLOR_PAPER);
+            rect(parent, 6 + i * 20, 35 + (i % 7) * 39, 2, 12, COLOR_PAPER);
         }
     }
 }
@@ -229,12 +203,28 @@ static void draw_top_status(lv_obj_t *parent)
     snprintf(time_text, sizeof(time_text), "%02lu:%02lu",
              (unsigned long)hour,
              (unsigned long)((s_now / 60U) % 60U));
-    label(parent, time_text, 9, 7, ui_font_20(), COLOR_PAPER);
+    lv_obj_t *time_label = label(parent, time_text, 9, 7, ui_font_20(), COLOR_PAPER);
     char calendar[128];
     snprintf(calendar, sizeof(calendar), tr("春 %u日 / %s", "SPR %u / %s"),
              s_game.spring_day, app_i18n_weather(ui_language(), s_game.weather));
-    label(parent, calendar, 9, 29, ui_font_14(), COLOR_GOLD);
-    label(parent, "82%", 197, 11, ui_font_14(), COLOR_PAPER);
+    lv_obj_t *calendar_pill = rect(parent, 73, 6, 112, 24, COLOR_NIGHT);
+    lv_obj_set_style_bg_opa(calendar_pill, UI_THEME_STATUS_OPA, 0);
+    lv_obj_set_style_radius(calendar_pill, 12, 0);
+    lv_obj_set_style_border_width(calendar_pill, 1, 0);
+    lv_obj_set_style_border_color(calendar_pill, lv_color_hex(COLOR_PAPER), 0);
+    lv_obj_set_style_border_opa(calendar_pill, LV_OPA_50, 0);
+    lv_obj_t *calendar_label = label_one_line(calendar_pill, calendar, 6, 4, 100,
+                                               ui_font_14(), COLOR_PAPER);
+    lv_obj_set_style_text_align(calendar_label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_t *battery_label = label(parent, "82%", 197, 11, ui_font_14(), COLOR_PAPER);
+    lv_obj_t *status_labels[] = { time_label, calendar_label, battery_label };
+    for (size_t i = 0; i < sizeof(status_labels) / sizeof(status_labels[0]); i++) {
+        lv_obj_set_style_text_outline_stroke_width(
+            status_labels[i], UI_THEME_TEXT_OUTLINE_WIDTH, 0);
+        lv_obj_set_style_text_outline_stroke_color(status_labels[i],
+                                                   lv_color_hex(COLOR_NIGHT), 0);
+        lv_obj_set_style_text_outline_stroke_opa(status_labels[i], LV_OPA_COVER, 0);
+    }
 }
 
 static void draw_bottom_tabs(lv_obj_t *parent)
@@ -250,6 +240,7 @@ static void draw_bottom_tabs(lv_obj_t *parent)
         s_bottom_tabs[i] = tab;
         lv_obj_set_style_border_width(tab, 3, 0);
         lv_obj_set_style_border_color(tab, lv_color_hex(COLOR_INK), 0);
+        lv_obj_set_style_bg_opa(tab, UI_THEME_OVERLAY_OPA, 0);
         lv_obj_t *text = label(tab, items[i], 0, 7, ui_font_14(), COLOR_INK);
         lv_obj_set_width(text, 42);
         lv_obj_set_style_text_align(text, LV_TEXT_ALIGN_CENTER, 0);
@@ -275,9 +266,14 @@ static void build_station(void)
     lv_obj_t *screen = new_screen(COLOR_NIGHT);
     draw_inn(screen);
     draw_top_status(screen);
-    lv_obj_t *note = rect(screen, 9, 187, 222, 77, COLOR_PAPER);
+    lv_obj_t *note = rect(screen, 9, 184, 222, 82, COLOR_PAPER);
     lv_obj_set_style_border_width(note, 3, 0);
-    lv_obj_set_style_border_color(note, lv_color_hex(COLOR_WOOD_DARK), 0);
+    lv_obj_set_style_border_color(note, lv_color_hex(COLOR_GOLD), 0);
+    lv_obj_set_style_radius(note, UI_THEME_CARD_RADIUS, 0);
+    lv_obj_set_style_shadow_width(note, 8, 0);
+    lv_obj_set_style_shadow_color(note, lv_color_hex(COLOR_INK), 0);
+    lv_obj_set_style_shadow_opa(note, LV_OPA_40, 0);
+    lv_obj_set_style_bg_opa(note, UI_THEME_OVERLAY_OPA, 0);
     label(note, tr("灯火已经点亮", "THE LANTERN IS LIT"),
           10, 9, ui_font_14(), COLOR_RED);
     uint32_t hour = (s_now / 3600U) % 24U;
@@ -402,6 +398,10 @@ static void build_schedule(void)
 static void build_farm(void)
 {
     lv_obj_t *screen = new_screen(COLOR_GRASS);
+    rect(screen, 0, 48, 240, 228, 0x679B3C);
+    for (int y = 51; y < 276; y += 18) {
+        rect(screen, 0, y, 240, 2, 0x7DAF4D);
+    }
     rect(screen, 0, 0, 240, 48, COLOR_NIGHT);
     label(screen, tr("农田", "FARM"), 10, 10, ui_font_20(), COLOR_PAPER);
     char stock[128];
@@ -412,17 +412,26 @@ static void build_farm(void)
     uint8_t plot_count = game_available_farm_plots(&s_game);
     for (int i = 0; i < plot_count; i++) {
         int y = 54 + i * 34;
-        lv_obj_t *plot = rect(screen, 10, y, 220, 30,
-                              i == s_farm_selection ? COLOR_GOLD : COLOR_PAPER);
-        lv_obj_set_style_border_width(plot, 3, 0);
-        lv_obj_set_style_border_color(plot, lv_color_hex(COLOR_WOOD_DARK), 0);
+        lv_obj_t *plot = rect(screen, 10, y, 220, 30, COLOR_PAPER);
+        lv_obj_set_style_border_width(plot, i == s_farm_selection ? 3 : 2, 0);
+        lv_obj_set_style_border_color(plot,
+            lv_color_hex(i == s_farm_selection ? COLOR_GOLD : COLOR_WOOD_DARK), 0);
+        lv_obj_set_style_radius(plot, 4, 0);
+        if (i == s_farm_selection) {
+            lv_obj_set_style_shadow_width(plot, 7, 0);
+            lv_obj_set_style_shadow_color(plot, lv_color_hex(COLOR_INK), 0);
+            lv_obj_set_style_shadow_opa(plot, LV_OPA_30, 0);
+        }
+        uint32_t crop_color = s_game.farm[i].active ? 0x95B84C : COLOR_MUTED;
+        lv_obj_t *crop_mark = rect(plot, 7, 7, 12, 12, crop_color);
+        lv_obj_set_style_radius(crop_mark, LV_RADIUS_CIRCLE, 0);
         char line[128];
         game_crop_t crop = s_game.farm[i].crop;
         snprintf(line, sizeof(line), tr("田地%d  %s", "PLOT %d  %s"), i + 1,
                  s_game.farm[i].active
                      ? app_i18n_crop(ui_language(), crop)
                      : tr("按OK查看", "OK FOR DETAILS"));
-        label_one_line(plot, line, 8, 5, 198,
+        label_one_line(plot, line, 25, 5, 185,
                        ui_font_14(), COLOR_INK);
     }
     label(screen, tr("长按OK：返回驿站", "HOLD OK: STATION"), 10, 276,

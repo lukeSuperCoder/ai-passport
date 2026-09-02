@@ -56,6 +56,14 @@ implemented as complete playable features:
 5. Automated text-overflow/image comparison coverage. Current UI tests validate
    page reachability and memory-safe repeated transitions, not pixel fidelity.
 
+## Production visual slice
+
+The first production-art slice now covers Station and the Farm entry screen.
+Station uses a generated 240 x 320 RGB565 scene (153,600 bytes in Flash) while
+all status, dialogue, notification, and navigation text remains live and
+localized. Farm uses the same palette and focus treatment. The asset generation
+workflow and device constraints are recorded in `docs/VISUAL_ASSET_GUIDE.md`.
+
 ## Required device acceptance
 
 - Run `idf.py build` under ESP-IDF 5.5.3 and record image size, free DRAM, largest
