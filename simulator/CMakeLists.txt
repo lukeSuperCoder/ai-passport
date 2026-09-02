@@ -43,6 +43,9 @@ add_executable(ai_passport_sim
     ${APP_DIR}/assets/station_scene.c
     ${APP_DIR}/assets/navigation_icons.c
     ${APP_DIR}/assets/farm_crops.c
+    ${APP_DIR}/assets/partner_sprites.c
+    ${APP_DIR}/assets/dish_sprites.c
+    ${APP_DIR}/assets/expedition_assets.c
     ${APP_DIR}/fonts/app_font_zh_14.c
     ${APP_DIR}/fonts/app_font_zh_20.c
     ${APP_DIR}/ui_pixel.c
