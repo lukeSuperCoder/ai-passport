@@ -293,6 +293,191 @@ static lv_obj_t *draw_dish(lv_obj_t *parent, game_recipe_t recipe, int x, int y)
     return image;
 }
 
+typedef enum {
+    ITEM_ICON_WOOD = 0,
+    ITEM_ICON_BERRY,
+    ITEM_ICON_MUSHROOM,
+    ITEM_ICON_COIN,
+    ITEM_ICON_JOURNAL,
+    ITEM_ICON_BREAD,
+} item_icon_t;
+
+static void draw_item_icon(lv_obj_t *parent, item_icon_t icon, int x, int y)
+{
+    lv_obj_t *shape;
+    switch (icon) {
+    case ITEM_ICON_WOOD:
+        rect(parent, x + 1, y + 10, 17, 7, COLOR_WOOD_DARK);
+        rect(parent, x + 3, y + 8, 15, 6, COLOR_WOOD);
+        rect(parent, x + 4, y + 9, 9, 2, 0xC78A4A);
+        shape = rect(parent, x + 14, y + 9, 4, 4, COLOR_GOLD);
+        lv_obj_set_style_radius(shape, LV_RADIUS_CIRCLE, 0);
+        break;
+    case ITEM_ICON_BERRY:
+        rect(parent, x + 9, y + 3, 2, 5, COLOR_GRASS);
+        rect(parent, x + 6, y + 4, 8, 3, COLOR_GRASS);
+        shape = rect(parent, x + 3, y + 8, 8, 8, COLOR_RED);
+        lv_obj_set_style_radius(shape, LV_RADIUS_CIRCLE, 0);
+        shape = rect(parent, x + 9, y + 6, 9, 9, 0xB94755);
+        lv_obj_set_style_radius(shape, LV_RADIUS_CIRCLE, 0);
+        rect(parent, x + 12, y + 8, 2, 2, 0xF2A0A8);
+        break;
+    case ITEM_ICON_MUSHROOM:
+        shape = rect(parent, x + 2, y + 4, 17, 9, COLOR_RED);
+        lv_obj_set_style_radius(shape, 7, 0);
+        rect(parent, x + 4, y + 10, 13, 3, COLOR_WOOD_DARK);
+        rect(parent, x + 8, y + 11, 6, 7, 0xE8D5A9);
+        rect(parent, x + 6, y + 6, 3, 2, COLOR_PAPER);
+        rect(parent, x + 13, y + 7, 2, 2, COLOR_PAPER);
+        break;
+    case ITEM_ICON_COIN:
+        shape = rect(parent, x + 3, y + 2, 15, 16, COLOR_WOOD_DARK);
+        lv_obj_set_style_radius(shape, LV_RADIUS_CIRCLE, 0);
+        shape = rect(parent, x + 5, y + 4, 11, 12, COLOR_GOLD);
+        lv_obj_set_style_radius(shape, LV_RADIUS_CIRCLE, 0);
+        rect(parent, x + 9, y + 6, 3, 8, 0xE09A36);
+        rect(parent, x + 7, y + 8, 7, 2, 0xE09A36);
+        break;
+    case ITEM_ICON_JOURNAL:
+        rect(parent, x + 2, y + 1, 16, 18, COLOR_WOOD_DARK);
+        rect(parent, x + 5, y + 2, 12, 16, 0x5E9293);
+        rect(parent, x + 5, y + 2, 2, 16, COLOR_GOLD);
+        rect(parent, x + 9, y + 6, 6, 2, COLOR_PAPER);
+        rect(parent, x + 9, y + 10, 5, 2, COLOR_PAPER);
+        break;
+    case ITEM_ICON_BREAD:
+        shape = rect(parent, x + 1, y + 6, 19, 12, COLOR_WOOD_DARK);
+        lv_obj_set_style_radius(shape, 6, 0);
+        shape = rect(parent, x + 3, y + 4, 15, 12, COLOR_GOLD);
+        lv_obj_set_style_radius(shape, 6, 0);
+        rect(parent, x + 6, y + 5, 2, 5, COLOR_PAPER);
+        rect(parent, x + 11, y + 4, 2, 5, COLOR_PAPER);
+        rect(parent, x + 16, y + 7, 2, 4, COLOR_PAPER);
+        break;
+    }
+}
+
+static lv_obj_t *draw_crop_icon(lv_obj_t *parent, game_crop_t crop,
+                                int x, int y, int scale)
+{
+    if (crop < GAME_CROP_WHEAT || crop >= GAME_CROP_COUNT) return NULL;
+    lv_obj_t *image = lv_image_create(parent);
+    lv_image_set_src(image, visual_farm_crops[crop - GAME_CROP_WHEAT][3]);
+    lv_image_set_scale(image, scale);
+    lv_obj_set_pos(image, x, y);
+    lv_obj_remove_flag(image, LV_OBJ_FLAG_SCROLLABLE);
+    return image;
+}
+
+static void draw_seed_bag(lv_obj_t *parent, game_crop_t crop, int x, int y)
+{
+    static const uint32_t colors[] = { 0, 0xE2B74D, 0xE46B3F, 0xC94A68, 0x65A45D };
+    rect(parent, x + 2, y + 5, 19, 14, COLOR_WOOD_DARK);
+    rect(parent, x + 4, y + 4, 15, 13, COLOR_WOOD);
+    rect(parent, x + 6, y + 1, 11, 5, COLOR_PAPER);
+    rect(parent, x + 7, y + 7, 9, 8, colors[crop]);
+    switch (crop) {
+    case GAME_CROP_WHEAT:
+        rect(parent, x + 11, y + 8, 2, 6, COLOR_WOOD_DARK);
+        rect(parent, x + 8, y + 8, 3, 2, COLOR_GOLD);
+        rect(parent, x + 13, y + 10, 3, 2, COLOR_GOLD);
+        break;
+    case GAME_CROP_CARROT:
+        rect(parent, x + 10, y + 9, 4, 5, 0xF7A13A);
+        rect(parent, x + 9, y + 7, 2, 3, COLOR_GRASS);
+        rect(parent, x + 13, y + 7, 2, 3, COLOR_GRASS);
+        break;
+    case GAME_CROP_STRAWBERRY:
+        rect(parent, x + 9, y + 9, 6, 5, COLOR_RED);
+        rect(parent, x + 10, y + 7, 4, 2, COLOR_GRASS);
+        rect(parent, x + 11, y + 10, 1, 1, COLOR_PAPER);
+        rect(parent, x + 13, y + 12, 1, 1, COLOR_PAPER);
+        break;
+    case GAME_CROP_HERB:
+        rect(parent, x + 11, y + 8, 2, 6, COLOR_WOOD_DARK);
+        rect(parent, x + 8, y + 8, 4, 3, COLOR_GRASS);
+        rect(parent, x + 13, y + 10, 4, 3, COLOR_GRASS);
+        break;
+    default:
+        break;
+    }
+}
+
+static void draw_building_icon(lv_obj_t *parent, game_building_t building,
+                               int x, int y, bool done, bool active)
+{
+    lv_obj_t *thumb = rect(parent, x, y, 30, 24, COLOR_SKY);
+    lv_obj_set_style_bg_opa(thumb, done || active ? LV_OPA_COVER : LV_OPA_30, 0);
+    rect(thumb, 0, 21, 30, 3, COLOR_GRASS);
+    lv_obj_t *part = NULL;
+    switch (building) {
+    case GAME_BUILD_FRONT_DESK:
+        part = rect(thumb, 2, 10, 26, 11, COLOR_WOOD_DARK);
+        rect(thumb, 4, 12, 22, 7, COLOR_WOOD);
+        rect(thumb, 5, 8, 20, 4, COLOR_GOLD);
+        rect(thumb, 13, 4, 4, 4, COLOR_GOLD);
+        rect(thumb, 11, 7, 8, 2, COLOR_WOOD_DARK);
+        break;
+    case GAME_BUILD_KITCHEN:
+        part = rect(thumb, 3, 8, 24, 13, COLOR_WOOD_DARK);
+        rect(thumb, 5, 10, 20, 9, COLOR_PAPER);
+        rect(thumb, 7, 13, 7, 6, COLOR_RED);
+        rect(thumb, 18, 2, 5, 12, COLOR_MUTED);
+        rect(thumb, 17, 1, 7, 3, COLOR_WOOD_DARK);
+        rect(thumb, 16, 12, 7, 2, COLOR_INK);
+        break;
+    case GAME_BUILD_FARM:
+        part = rect(thumb, 2, 15, 26, 6, COLOR_WOOD);
+        rect(thumb, 3, 16, 24, 2, COLOR_PAPER);
+        for (int i = 0; i < 3; i++) {
+            rect(thumb, 5 + i * 9, 8, 2, 8, COLOR_WOOD_DARK);
+            rect(thumb, 2 + i * 9, 7, 5, 4, COLOR_GRASS);
+        }
+        rect(thumb, 0, 20, 30, 2, COLOR_WOOD_DARK);
+        break;
+    case GAME_BUILD_GUEST_ROOM:
+        part = rect(thumb, 4, 8, 22, 13, COLOR_WOOD_DARK);
+        rect(thumb, 6, 9, 18, 12, COLOR_WOOD);
+        rect(thumb, 2, 6, 26, 4, COLOR_RED);
+        rect(thumb, 5, 4, 20, 3, COLOR_RED);
+        rect(thumb, 8, 12, 5, 5, COLOR_GOLD);
+        rect(thumb, 17, 12, 5, 9, COLOR_PAPER);
+        rect(thumb, 18, 15, 2, 2, COLOR_WOOD_DARK);
+        break;
+    case GAME_BUILD_SINK:
+        part = rect(thumb, 3, 11, 24, 10, COLOR_WOOD_DARK);
+        rect(thumb, 5, 12, 20, 6, COLOR_PAPER);
+        rect(thumb, 7, 13, 16, 3, 0x5DAEC7);
+        rect(thumb, 12, 4, 9, 3, COLOR_MUTED);
+        rect(thumb, 18, 6, 3, 7, COLOR_MUTED);
+        rect(thumb, 15, 8, 3, 2, COLOR_MUTED);
+        rect(thumb, 14, 11, 2, 3, COLOR_SKY);
+        rect(thumb, 7, 19, 4, 3, COLOR_WOOD_DARK);
+        rect(thumb, 20, 19, 4, 3, COLOR_WOOD_DARK);
+        break;
+    case GAME_BUILD_SIGNPOST:
+        part = rect(thumb, 13, 3, 5, 20, COLOR_WOOD_DARK);
+        rect(thumb, 2, 4, 23, 7, COLOR_WOOD_DARK);
+        rect(thumb, 4, 5, 18, 5, COLOR_GOLD);
+        rect(thumb, 22, 6, 5, 3, COLOR_GOLD);
+        rect(thumb, 7, 13, 21, 7, COLOR_WOOD_DARK);
+        rect(thumb, 9, 14, 16, 5, COLOR_WOOD);
+        rect(thumb, 4, 15, 5, 3, COLOR_WOOD);
+        break;
+    default:
+        break;
+    }
+    if (!done && !active) {
+        lv_obj_set_style_opa(thumb, LV_OPA_40, 0);
+        if (part) lv_obj_set_style_opa(part, LV_OPA_40, 0);
+    }
+    if (active) {
+        rect(thumb, 20, 1, 8, 8, COLOR_GOLD);
+        rect(thumb, 23, 2, 2, 6, COLOR_INK);
+        rect(thumb, 21, 4, 6, 2, COLOR_INK);
+    }
+}
+
 static void draw_mistpine_scene(lv_obj_t *parent)
 {
     lv_obj_t *image = lv_image_create(parent);
@@ -814,12 +999,18 @@ static void build_backpack(void)
         lv_obj_set_style_border_color(card, lv_color_hex(COLOR_INK), 0);
         label(card, titles[i], 7, 5, ui_font_14(), COLOR_RED);
     }
-    char inventory[128];
-    snprintf(inventory, sizeof(inventory), "G%lu W%u B%u F%u M%u J%u",
-             (unsigned long)s_game.coins, s_game.inventory_wood,
-             s_game.inventory_berries, s_game.inventory_hot_bread,
-             s_game.inventory_mushrooms, s_game.travel_journal_count);
-    label(screen, inventory, 10, 236, ui_font_14(), COLOR_INK);
+    const uint32_t item_counts[] = {
+        s_game.inventory_wood, s_game.inventory_berries,
+        s_game.inventory_mushrooms, s_game.coins,
+        s_game.travel_journal_count, s_game.inventory_hot_bread,
+    };
+    for (int i = 0; i < 6; i++) {
+        int x = 3 + i * 39;
+        draw_item_icon(screen, (item_icon_t)i, x, 229);
+        char count[12];
+        snprintf(count, sizeof(count), "%lu", (unsigned long)item_counts[i]);
+        label(screen, count, x + 19, 232, ui_font_14(), COLOR_INK);
+    }
     char quest[128];
     snprintf(quest, sizeof(quest), tr("主线任务 %u/10%s", "MAIN QUEST %u/10%s"),
              s_game.quest_stage > 10U ? 10U : s_game.quest_stage,
@@ -843,13 +1034,19 @@ static void build_buildings(void)
                              i == s_building_selection ? COLOR_GOLD : COLOR_PAPER);
         lv_obj_set_style_border_width(row, 2, 0);
         lv_obj_set_style_border_color(row, lv_color_hex(COLOR_INK), 0);
-        char line[128];
         bool done = (s_game.completed_buildings & (1U << i)) != 0U;
-        snprintf(line, sizeof(line), tr("%s  %s 木%u 金%u", "%s  %s W%u G%u"),
+        bool active = s_game.construction.active &&
+            s_game.construction.building == (game_building_t)i;
+        draw_building_icon(row, (game_building_t)i, 3, 3, done, active);
+        char line[128];
+        snprintf(line, sizeof(line), "%s  %s",
                  app_i18n_building(ui_language(), (game_building_t)i),
-                 done ? tr("完成", "DONE") : "", definition->wood, definition->coins);
-        label(row, line, 6, 6, ui_font_14(),
-              done ? COLOR_MUTED : COLOR_INK);
+                 done ? tr("完成", "DONE") : active ? tr("建设中", "BUILDING") : "");
+        label_one_line(row, line, 38, 2, 180, ui_font_14(),
+                       done ? COLOR_MUTED : COLOR_INK);
+        snprintf(line, sizeof(line), tr("木%u 金%u", "W%u G%u"),
+                 definition->wood, definition->coins);
+        label_one_line(row, line, 38, 15, 180, ui_font_14(), COLOR_MUTED);
     }
     label(screen, s_game.construction.active
           ? tr("OK取消建设  长按返回", "OK ACTIVE BUILD: CANCEL  HOLD: BACK")
@@ -873,22 +1070,28 @@ static void build_backpack_detail(void)
     lv_obj_set_style_border_color(card, lv_color_hex(COLOR_INK), 0);
     char line[128];
     if (s_backpack_selection == 0) {
-        snprintf(line, sizeof(line), tr("木%u  浆果%u  蘑菇%u", "WOOD%u  BERRY%u  MUSH%u"),
-                 s_game.inventory_wood, s_game.inventory_berries,
-                 s_game.inventory_mushrooms);
-        label_one_line(card, line, 9, 12, 196,
-                       ui_font_14(), COLOR_INK);
-        snprintf(line, sizeof(line), tr("麦%u  胡萝卜%u  面包%u", "WHEAT%u  CARROT%u  BRD%u"),
-                 s_game.inventory_wheat,
-                 s_game.inventory_crops[GAME_CROP_CARROT],
-                 s_game.inventory_hot_bread);
-        label_one_line(card, line, 9, 48, 196,
-                       ui_font_14(), COLOR_INK);
-        snprintf(line, sizeof(line), tr("种子 麦%u 胡%u 莓%u 草%u", "SEED W%u C%u S%u H%u"),
-                 ui_seed_count(GAME_CROP_WHEAT), ui_seed_count(GAME_CROP_CARROT),
-                 ui_seed_count(GAME_CROP_STRAWBERRY), ui_seed_count(GAME_CROP_HERB));
-        label_one_line(card, line, 9, 84, 196,
-                       ui_font_14(), COLOR_INK);
+        const uint32_t material_counts[] = {
+            s_game.inventory_wood, s_game.inventory_berries,
+            s_game.inventory_mushrooms, s_game.coins,
+            s_game.travel_journal_count, s_game.inventory_hot_bread,
+        };
+        for (int i = 0; i < 6; i++) {
+            int x = 3 + i * 35;
+            draw_item_icon(card, (item_icon_t)i, x, 7);
+            snprintf(line, sizeof(line), "%lu", (unsigned long)material_counts[i]);
+            label(card, line, x + 18, 10, ui_font_14(), COLOR_INK);
+        }
+        label(card, tr("作物", "CROPS"), 5, 34, ui_font_14(), COLOR_MUTED);
+        label(card, tr("种子", "SEEDS"), 5, 68, ui_font_14(), COLOR_MUTED);
+        for (game_crop_t crop = GAME_CROP_WHEAT; crop < GAME_CROP_COUNT; crop++) {
+            int x = 43 + (crop - GAME_CROP_WHEAT) * 42;
+            draw_crop_icon(card, crop, x, 29, 96);
+            snprintf(line, sizeof(line), "%u", ui_crop_count(crop));
+            label(card, line, x + 22, 42, ui_font_14(), COLOR_INK);
+            draw_seed_bag(card, crop, x, 67);
+            snprintf(line, sizeof(line), "%u", ui_seed_count(crop));
+            label(card, line, x + 22, 72, ui_font_14(), COLOR_INK);
+        }
         game_recipe_t recipe = (game_recipe_t)s_item_selection;
         const game_recipe_definition_t *dish = game_recipe_definition(recipe);
         uint16_t stock = recipe == GAME_RECIPE_HOT_BREAD
@@ -898,20 +1101,20 @@ static void build_backpack_detail(void)
             : s_game.inventory_premium_dishes[recipe];
         snprintf(line, sizeof(line), "> %s x%u",
                  app_i18n_recipe(ui_language(), recipe), stock);
-        label_one_line(card, line, 9, 126, 140,
+        label_one_line(card, line, 9, 105, 140,
                        ui_font_14(), COLOR_RED);
         snprintf(line, sizeof(line), tr("优质%u / %u金", "QUALITY %u / %uG"),
                  premium, dish->sell_price);
-        label_one_line(card, line, 9, 148, 140,
+        label_one_line(card, line, 9, 127, 140,
                        ui_font_14(), COLOR_INK);
-        draw_dish(card, recipe, 154, 111);
+        draw_dish(card, recipe, 154, 96);
         if (premium > 0U) {
-            rect(card, 158, 108, 3, 7, COLOR_GOLD);
-            rect(card, 156, 110, 7, 3, COLOR_GOLD);
-            rect(card, 207, 158, 3, 6, COLOR_GOLD);
-            rect(card, 205, 160, 7, 3, COLOR_GOLD);
+            rect(card, 158, 94, 3, 7, COLOR_GOLD);
+            rect(card, 156, 96, 7, 3, COLOR_GOLD);
+            rect(card, 207, 145, 3, 6, COLOR_GOLD);
+            rect(card, 205, 147, 7, 3, COLOR_GOLD);
         }
-        label(card, tr("上下选料理  OK出售", "UP/DOWN DISH  OK: SELL"), 9, 169,
+        label(card, tr("上下选料理  OK出售", "UP/DOWN DISH  OK: SELL"), 9, 166,
               ui_font_14(), COLOR_MUTED);
     } else if (s_backpack_selection == 1) {
         game_pet_id_t pet = (game_pet_id_t)s_partner_selection;
