@@ -1,0 +1,9 @@
+Use case: stylized-concept
+Asset type: production sprite atlas for five bottom-navigation icons
+Input images: the full-screen station background is the sole style master
+Primary request: exactly five icons in one horizontal row: Japanese paper lantern, tied task scroll, golden wheat sheaf, countryside signpost, and travel backpack with red scarf accent
+Style/medium: crisp handcrafted 16-bit pixel art with chunky readable silhouettes, legible at 16 x 16
+Composition/framing: one icon per equal square cell, transparent padding, consistent apparent size and baseline
+Color palette: warm yellow, parchment cream, timber brown, restrained red, mountain teal, ink-blue outlines
+Constraints: genuinely transparent background; no panel, button, frame, text, glyphs, logo, watermark, overlap, or extra objects
+Avoid: glossy mobile icons, vectors, 3D, western medieval ornament, dark fantasy palette

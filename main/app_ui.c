@@ -229,21 +229,22 @@ static void draw_top_status(lv_obj_t *parent)
 
 static void draw_bottom_tabs(lv_obj_t *parent)
 {
-    const char *items[5] = {
-        tr("驿站", "INN"), tr("计划", "PLAN"), tr("农田", "FARM"),
-        tr("旅行", "TRIP"), tr("背包", "BAG"),
+    const lv_image_dsc_t *icons[5] = {
+        &visual_nav_inn, &visual_nav_plan, &visual_nav_farm,
+        &visual_nav_trip, &visual_nav_bag,
     };
     for (int i = 0; i < 5; i++) {
         int x = 3 + i * 47;
-        lv_obj_t *tab = rect(parent, x, 278, 46, 32,
+        lv_obj_t *tab = rect(parent, x, 272, 46, 46,
                              s_top_selection == i ? COLOR_GOLD : COLOR_PAPER);
         s_bottom_tabs[i] = tab;
-        lv_obj_set_style_border_width(tab, 3, 0);
+        lv_obj_set_style_border_width(tab, 2, 0);
         lv_obj_set_style_border_color(tab, lv_color_hex(COLOR_INK), 0);
         lv_obj_set_style_bg_opa(tab, UI_THEME_OVERLAY_OPA, 0);
-        lv_obj_t *text = label(tab, items[i], 0, 7, ui_font_14(), COLOR_INK);
-        lv_obj_set_width(text, 42);
-        lv_obj_set_style_text_align(text, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_t *icon = lv_image_create(tab);
+        lv_image_set_src(icon, icons[i]);
+        lv_obj_set_pos(icon, 2, 2);
+        lv_obj_remove_flag(icon, LV_OBJ_FLAG_SCROLLABLE);
         if (s_menu_hidden) lv_obj_add_flag(tab, LV_OBJ_FLAG_HIDDEN);
     }
 }

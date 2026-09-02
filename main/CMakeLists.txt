@@ -3,6 +3,7 @@ idf_component_register(
          "app_ui.c"
          "app_i18n.c"
          "assets/station_scene.c"
+         "assets/navigation_icons.c"
          "fonts/app_font_zh_14.c"
          "fonts/app_font_zh_20.c"
          "ui_pixel.c"
