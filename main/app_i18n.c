@@ -71,6 +71,19 @@ static const char *s_event_zh[GAME_CONTENT_EVENT_COUNT] = {
     "阿瑶画下驿站", "阿瑶的第二幅画", "灰影来到门前", "灰影的印章",
 };
 
+static const localized_text_t s_quest_objectives[10] = {
+    { "前往计划，确认事件", "OPEN SCHEDULE AND CONFIRM" },
+    { "制作1份热面包", "MAKE 1 HOT BREAD" },
+    { "收获2份作物", "HARVEST 2 CROPS" },
+    { "完成森林探索", "COMPLETE 1 FOREST RUN" },
+    { "完成客房建设", "REPAIR THE GUEST ROOM" },
+    { "制作1份胡萝卜炖菜", "MAKE 1 CARROT STEW" },
+    { "完成3份料理", "COMPLETE 3 DISHES" },
+    { "春7日参加路边集市", "VISIT THE MARKET ON SPRING 7" },
+    { "完成旧路牌建设", "REPAIR THE OLD SIGNPOST" },
+    { "完成旅行，参加灯会", "TRAVEL ONCE AND JOIN THE FESTIVAL" },
+};
+
 static const char *s_dialogue_zh[4][6] = {
     {
         "朝阳把旧屋顶照得发亮。", "走这段路正适合带个热面包。",
@@ -144,6 +157,15 @@ const char *app_i18n_event(app_language_t language, uint8_t event_id)
     return language == APP_LANG_EN ? event->title : s_event_zh[event_id];
 }
 
+const char *app_i18n_quest_objective(app_language_t language,
+                                     uint8_t quest_stage)
+{
+    if (quest_stage < 1U || quest_stage > 10U) {
+        return language == APP_LANG_EN ? "CHAPTER COMPLETE" : "第一章已完成";
+    }
+    return localized_at(s_quest_objectives, 10U, quest_stage - 1U, language);
+}
+
 const char *app_i18n_dialogue(app_language_t language, game_weather_t weather,
                               uint8_t period, uint32_t seed)
 {
@@ -155,4 +177,3 @@ const char *app_i18n_dialogue(app_language_t language, game_weather_t weather,
     uint8_t variant = (uint8_t)(seed & 1U);
     return s_dialogue_zh[weather][(base + variant) % 6U];
 }
-

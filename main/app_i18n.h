@@ -20,6 +20,7 @@ const char *app_i18n_pet(app_language_t language, game_pet_id_t pet);
 const char *app_i18n_pet_species(app_language_t language, game_pet_id_t pet);
 const char *app_i18n_pet_personality(app_language_t language, game_pet_id_t pet);
 const char *app_i18n_event(app_language_t language, uint8_t event_id);
+const char *app_i18n_quest_objective(app_language_t language,
+                                     uint8_t quest_stage);
 const char *app_i18n_dialogue(app_language_t language, game_weather_t weather,
                               uint8_t period, uint32_t seed);
-

@@ -187,7 +187,9 @@ static void draw_inn(lv_obj_t *parent)
     if (s_game.weather == GAME_WEATHER_RAIN ||
         s_game.weather == GAME_WEATHER_STORM) {
         for (int i = 0; i < 12; i++) {
-            rect(parent, 6 + i * 20, 35 + (i % 7) * 39, 2, 12, COLOR_PAPER);
+            lv_obj_t *drop = rect(parent, 6 + i * 20,
+                                  35 + (i % 7) * 39, 1, 7, COLOR_PAPER);
+            lv_obj_set_style_bg_opa(drop, LV_OPA_40, 0);
         }
     }
 }
@@ -521,17 +523,25 @@ static void build_station(void)
     lv_obj_set_style_shadow_color(note, lv_color_hex(COLOR_INK), 0);
     lv_obj_set_style_shadow_opa(note, LV_OPA_40, 0);
     lv_obj_set_style_bg_opa(note, UI_THEME_OVERLAY_OPA, 0);
-    label(note, tr("灯火已经点亮", "THE LANTERN IS LIT"),
-          10, 9, ui_font_14(), COLOR_RED);
+    const char *station_heading = s_game.chapter_complete
+        ? tr("第一章已完成", "CHAPTER ONE COMPLETE")
+        : app_i18n_event(ui_language(), (uint8_t)(s_game.quest_stage - 1U));
+    label(note, station_heading, 10, 9, ui_font_14(), COLOR_RED);
     uint32_t hour = (s_now / 3600U) % 24U;
     uint8_t period = hour < 6U ? 3U : (hour < 11U ? 0U :
                      (hour < 17U ? 1U : (hour < 21U ? 2U : 3U)));
-    const char *dialogue = app_i18n_dialogue(
-        ui_language(), s_game.weather, period,
-        s_game.weather_seed ^ s_game.spring_day);
-    label_one_line(note, dialogue, 10, 31, 202,
+    const char *station_message = s_game.chapter_complete
+        ? app_i18n_dialogue(ui_language(), s_game.weather, period,
+                            s_game.weather_seed ^ s_game.spring_day)
+        : app_i18n_quest_objective(ui_language(), s_game.quest_stage);
+    label_one_line(note, station_message, 10, 31, 202,
                    ui_font_14(), COLOR_INK);
-    if (s_game.pending_events != 0U || s_game.event_queue_count > 0U) {
+    const game_event_definition_t *queued_event = s_game.event_queue_count > 0U
+        ? game_event_definition(s_game.event_queue[0].id) : NULL;
+    if (queued_event && queued_event->type == GAME_EVENT_TYPE_MAIN) {
+        label(note, tr("！主线事件等待确认", "! MAIN STORY READY"), 10, 52,
+              ui_font_14(), COLOR_RED);
+    } else if (s_game.pending_events != 0U || s_game.event_queue_count > 0U) {
         label(note, tr("！计划中有剧情事件", "! STORY EVENT IN PLAN"), 10, 52,
               ui_font_14(), COLOR_RED);
     } else if (s_game.notifications != 0U) {
@@ -571,15 +581,15 @@ static void build_schedule(void)
     }
 
     char report_line[128];
-    if (s_game.pending_events & GAME_EVENT_MARKET) {
+    if (s_game.event_queue_count > 0U) {
+        snprintf(report_line, sizeof(report_line), "%s",
+                 app_i18n_event(ui_language(), s_game.event_queue[0].id));
+    } else if (s_game.pending_events & GAME_EVENT_MARKET) {
         snprintf(report_line, sizeof(report_line), "%s",
                  tr("路边集市 · 按OK前往", "ROAD MARKET - OK TO VISIT"));
     } else if (s_game.pending_events & GAME_EVENT_FESTIVAL) {
         snprintf(report_line, sizeof(report_line), "%s",
                  tr("灯会 · 按OK参加", "LANTERN FEST - OK TO JOIN"));
-    } else if (s_game.event_queue_count > 0U) {
-        snprintf(report_line, sizeof(report_line), "%s",
-                 app_i18n_event(ui_language(), s_game.event_queue[0].id));
     } else if (s_game.notifications != 0U) {
         snprintf(report_line, sizeof(report_line),
                  tr("%u项结果 · 按OK查看", "%u RESULT(S) - OK TO VIEW"),
@@ -1141,8 +1151,10 @@ static void build_backpack_detail(void)
         snprintf(line, sizeof(line), tr("第一章  %u / 10", "FIRST CHAPTER  %u / 10"),
                  s_game.quest_stage > 10U ? 10U : s_game.quest_stage);
         label(card, line, 9, 12, ui_font_20(), COLOR_RED);
-        label(card, s_game.chapter_complete ? tr("道路已重新点亮", "THE ROAD IS RELIT")
-                                            : tr("下一目标进行中", "NEXT OBJECTIVE ACTIVE"),
+        label(card, s_game.chapter_complete
+                        ? tr("第一章已完成", "CHAPTER ONE COMPLETE")
+                        : app_i18n_event(ui_language(),
+                                         (uint8_t)(s_game.quest_stage - 1U)),
               9, 55, ui_font_14(), COLOR_INK);
         snprintf(line, sizeof(line), tr("森林%u  收获%u  日志%u",
                                         "FOREST %u  HARVEST %u  JOURNALS %u"),
@@ -1202,6 +1214,8 @@ static void build_event(void)
 {
     lv_obj_t *screen = new_screen(COLOR_NIGHT);
     uint8_t event_id = s_game.event_queue[0].id;
+    const game_event_definition_t *definition = game_event_definition(event_id);
+    bool main_story = definition && definition->type == GAME_EVENT_TYPE_MAIN;
     label(screen, tr("事件", "EVENT"), 10, 10, ui_font_20(), COLOR_PAPER);
     lv_obj_t *card = rect(screen, 9, 52, 222, 208, COLOR_PAPER);
     lv_obj_set_style_border_width(card, 3, 0);
@@ -1210,21 +1224,32 @@ static void build_event(void)
                             ui_font_14(), COLOR_RED);
     lv_obj_set_width(title, 198);
     lv_label_set_long_mode(title, LV_LABEL_LONG_WRAP);
-    label(card, tr("旅人正在等待你的回答。", "A traveler waits for your answer."), 9, 58,
+    label(card, main_story
+                    ? tr("任务已经完成", "THE OBJECTIVE IS COMPLETE")
+                    : tr("旅人正在等待你的回答。",
+                         "A traveler waits for your answer."),
+          9, 58,
           ui_font_14(), COLOR_INK);
-    lv_obj_t *choice_a = rect(card, 8, 96, 200, 38,
-                              s_event_choice == 0 ? COLOR_GOLD : COLOR_PAPER);
-    lv_obj_t *choice_b = rect(card, 8, 143, 200, 38,
-                              s_event_choice == 1 ? COLOR_GOLD : COLOR_PAPER);
+    lv_obj_t *choice_a = rect(card, 8, main_story ? 120 : 96, 200, 38,
+                              main_story || s_event_choice == 0
+                                  ? COLOR_GOLD : COLOR_PAPER);
     lv_obj_set_style_border_width(choice_a, 2, 0);
-    lv_obj_set_style_border_width(choice_b, 2, 0);
     lv_obj_set_style_border_color(choice_a, lv_color_hex(COLOR_INK), 0);
-    lv_obj_set_style_border_color(choice_b, lv_color_hex(COLOR_INK), 0);
-    label(choice_a, tr("实际帮助 / 奖励", "PRACTICAL HELP / REWARD"), 7, 9,
-          ui_font_14(), COLOR_INK);
-    label(choice_b, tr("倾听 / 关系", "LISTEN / RELATIONSHIP"), 7, 9,
-          ui_font_14(), COLOR_INK);
-    label(screen, tr("上下选择  OK确认", "UP/DOWN CHOOSE  OK CONFIRM"), 10, 278,
+    label(choice_a, main_story
+                        ? tr("确认完成", "CONFIRM")
+                        : tr("实际帮助 / 奖励", "PRACTICAL HELP / REWARD"),
+          7, 9, ui_font_14(), COLOR_INK);
+    if (!main_story) {
+        lv_obj_t *choice_b = rect(card, 8, 143, 200, 38,
+                                  s_event_choice == 1 ? COLOR_GOLD : COLOR_PAPER);
+        lv_obj_set_style_border_width(choice_b, 2, 0);
+        lv_obj_set_style_border_color(choice_b, lv_color_hex(COLOR_INK), 0);
+        label(choice_b, tr("倾听 / 关系", "LISTEN / RELATIONSHIP"), 7, 9,
+              ui_font_14(), COLOR_INK);
+    }
+    label(screen, main_story ? tr("OK确认", "OK: CONFIRM")
+                             : tr("上下选择  OK确认", "UP/DOWN CHOOSE  OK CONFIRM"),
+          10, 278,
           ui_font_14(), COLOR_PAPER);
     activate_screen();
 }
@@ -1420,14 +1445,18 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
     }
 
     if (s_page == PAGE_EVENT) {
-        if (ev == BSP_BTN_CLICK && (btn == BSP_BTN_UP || btn == BSP_BTN_DOWN)) {
+        const game_event_definition_t *definition = game_event_definition(
+            s_game.event_queue[0].id);
+        bool main_story = definition && definition->type == GAME_EVENT_TYPE_MAIN;
+        if (!main_story && ev == BSP_BTN_CLICK &&
+            (btn == BSP_BTN_UP || btn == BSP_BTN_DOWN)) {
             s_event_choice = 1 - s_event_choice;
             build_event();
         } else if (ev == BSP_BTN_CLICK && btn == BSP_BTN_OK) {
             game_state_t candidate = s_game;
             if (game_reduce(&candidate, (game_action_t){
                     .type = GAME_ACTION_RESOLVE_CONTENT_EVENT,
-                    .target = (uint8_t)s_event_choice,
+                    .target = main_story ? 0U : (uint8_t)s_event_choice,
                 }) && app_persistence_store(&candidate)) {
                 s_game = candidate;
                 s_page = PAGE_SCHEDULE;
@@ -1766,6 +1795,11 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
             s_schedule_selection = (s_schedule_selection + delta + 4) % 4;
             refresh_schedule_selection();
         } else if (ev == BSP_BTN_CLICK && btn == BSP_BTN_OK &&
+                   s_schedule_selection == 0 && s_game.event_queue_count > 0U) {
+            s_page = PAGE_EVENT;
+            s_event_choice = 0;
+            build_event();
+        } else if (ev == BSP_BTN_CLICK && btn == BSP_BTN_OK &&
                    s_schedule_selection == 0 && s_game.pending_events != 0U) {
             game_state_t candidate = s_game;
             uint8_t event = (candidate.pending_events & GAME_EVENT_MARKET)
@@ -1776,11 +1810,6 @@ void app_ui_handle_key(bsp_btn_t btn, bsp_btn_ev_t ev)
                 s_game = candidate;
             }
             build_schedule();
-        } else if (ev == BSP_BTN_CLICK && btn == BSP_BTN_OK &&
-                   s_schedule_selection == 0 && s_game.event_queue_count > 0U) {
-            s_page = PAGE_EVENT;
-            s_event_choice = 0;
-            build_event();
         } else if (ev == BSP_BTN_CLICK && btn == BSP_BTN_OK &&
                    s_schedule_selection == 0 && s_game.notifications != 0U) {
             s_page = PAGE_NOTICE;

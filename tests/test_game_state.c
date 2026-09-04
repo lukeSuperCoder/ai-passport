@@ -18,6 +18,22 @@ static uint32_t hourly_income(game_weather_t weather)
     return 10U;
 }
 
+static void resolve_main_story_event(game_state_t *state, uint8_t event_id)
+{
+    assert(state->event_queue_count > 0U);
+    assert(state->event_queue[0].id == event_id);
+    assert(game_reduce(state, (game_action_t){
+        .type = GAME_ACTION_RESOLVE_CONTENT_EVENT,
+        .target = 0U,
+    }));
+}
+
+static void enter_first_playable_objective(game_state_t *state)
+{
+    resolve_main_story_event(state, 0U);
+    state->event_queue_count = 0U;
+}
+
 static void assert_reception_duration(uint32_t seconds, uint32_t paid_hours)
 {
     game_state_t state;
@@ -451,16 +467,27 @@ static void test_content_events_wait_for_player_choice(void)
 {
     game_state_t state;
     game_state_init(&state, 0U);
+    assert(state.event_queue_count == 2U);
+    assert(state.event_queue[0].id == 0U);
+    assert(state.event_queue[1].id == 53U);
+    resolve_main_story_event(&state, 0U);
+    assert(state.quest_stage == 2U);
     assert(state.event_queue_count == 1U);
     assert(state.event_queue[0].id == 53U);
     uint32_t coins = state.pending.coins;
     assert(game_reduce(&state, (game_action_t){
         .type = GAME_ACTION_RESOLVE_CONTENT_EVENT, .target = 0U,
     }));
-    assert(state.event_queue_count == 0U);
+    assert(state.event_queue_count == 1U);
+    assert(state.event_queue[0].id == 54U);
     assert(state.pending.coins > coins);
     assert(state.visitor_stages[0] == 1U);
-    assert(state.event_history_count == 1U);
+    assert(state.event_history_count == 2U);
+    assert(game_reduce(&state, (game_action_t){
+        .type = GAME_ACTION_RESOLVE_CONTENT_EVENT, .target = 1U,
+    }));
+    assert(state.event_queue_count == 0U);
+    assert(state.visitor_stages[0] == 2U);
     assert(!game_reduce(&state, (game_action_t){
         .type = GAME_ACTION_RESOLVE_CONTENT_EVENT, .target = 0U,
     }));
@@ -473,14 +500,80 @@ static void test_content_events_wait_for_player_choice(void)
     assert(game_reduce(&state, (game_action_t){
         .type = GAME_ACTION_SETTLE_TO_TIME, .now = 10U * 60U,
     }));
-    assert(state.event_queue_count == 1U);
+    assert(state.event_queue_count >= 1U);
+    assert(state.event_queue[0].id == 1U);
+    assert(state.quest_stage == 2U);
+    assert(state.inventory_seeds[GAME_CROP_CARROT] == 0U);
     uint8_t relation = state.relationships[state.event_queue[0].id %
                                            GAME_RELATION_COUNT];
     assert(game_reduce(&state, (game_action_t){
         .type = GAME_ACTION_RESOLVE_CONTENT_EVENT, .target = 1U,
     }));
-    assert(state.relationships[state.event_history[1] % GAME_RELATION_COUNT] ==
+    assert(state.relationships[state.event_history[3] % GAME_RELATION_COUNT] ==
            relation + 3U);
+    assert(state.quest_stage == 3U);
+    assert(state.inventory_seeds[GAME_CROP_CARROT] == 2U);
+}
+
+static void test_event_sources_use_matching_catalog_ranges(void)
+{
+    game_state_t reception;
+    game_state_init(&reception, 0U);
+    enter_first_playable_objective(&reception);
+    assert(game_reduce(&reception, (game_action_t){
+        .type = GAME_ACTION_ASSIGN_MOMO_RECEPTION, .now = 0U,
+    }));
+    assert(game_reduce(&reception, (game_action_t){
+        .type = GAME_ACTION_SETTLE_TO_TIME, .now = 60U * 60U,
+    }));
+    assert(reception.event_queue[0].id >= 18U &&
+           reception.event_queue[0].id <= 21U);
+
+    game_state_t farm;
+    game_state_init(&farm, 0U);
+    enter_first_playable_objective(&farm);
+    farm.completed_buildings |= (uint8_t)(1U << GAME_BUILD_SINK);
+    farm.inventory_seeds[GAME_CROP_HERB] = 1U;
+    assert(game_reduce(&farm, (game_action_t){
+        .type = GAME_ACTION_PLANT_CROP, .target = 5U, .option = GAME_CROP_HERB,
+    }));
+    assert(game_reduce(&farm, (game_action_t){
+        .type = GAME_ACTION_SETTLE_TO_TIME, .now = 36U * 60U * 60U,
+    }));
+    assert(farm.event_queue[0].id == 25U);
+
+    game_state_t forest;
+    game_state_init(&forest, 0U);
+    enter_first_playable_objective(&forest);
+    assert(game_reduce(&forest, (game_action_t){
+        .type = GAME_ACTION_START_FOREST_2H,
+    }));
+    assert(game_reduce(&forest, (game_action_t){
+        .type = GAME_ACTION_SETTLE_TO_TIME, .now = 2U * 60U * 60U,
+    }));
+    assert(forest.event_queue[0].id >= 30U && forest.event_queue[0].id <= 33U);
+
+    game_state_t pet;
+    game_state_init(&pet, 0U);
+    enter_first_playable_objective(&pet);
+    assert(game_reduce(&pet, (game_action_t){
+        .type = GAME_ACTION_TALK_TO_PET, .target = GAME_PET_MOMO,
+    }));
+    assert(game_reduce(&pet, (game_action_t){
+        .type = GAME_ACTION_TALK_TO_PET, .target = GAME_PET_MOMO,
+    }));
+    assert(pet.event_queue[0].id == 10U);
+
+    game_state_t combination;
+    game_state_init(&combination, 0U);
+    enter_first_playable_objective(&combination);
+    combination.relationships[0] = 49U;
+    combination.event_queue[0] = (game_queued_event_t){ .id = 18U };
+    combination.event_queue_count = 1U;
+    assert(game_reduce(&combination, (game_action_t){
+        .type = GAME_ACTION_RESOLVE_CONTENT_EVENT, .target = 1U,
+    }));
+    assert(combination.event_queue[0].id == 38U);
 }
 
 static void test_job_scores_include_strength_mood_relationship_and_weather(void)
@@ -533,6 +626,8 @@ static void test_main_story_can_reach_spring_14_without_deadlock(void)
     game_state_t state;
     game_state_init(&state, 0U);
     uint32_t now = 0U;
+    assert(state.quest_stage == 1U);
+    resolve_main_story_event(&state, 0U);
     assert(state.quest_stage == 2U);
     assert(game_reduce(&state, (game_action_t){
         .type = GAME_ACTION_ASSIGN_MOMO_RECEPTION, .now = now,
@@ -552,6 +647,7 @@ static void test_main_story_can_reach_spring_14_without_deadlock(void)
     assert(game_reduce(&state, (game_action_t){
         .type = GAME_ACTION_SETTLE_TO_TIME, .now = now,
     }));
+    resolve_main_story_event(&state, 1U);
     assert(state.quest_stage == 3U);
 
     assert(game_reduce(&state, (game_action_t){
@@ -562,6 +658,7 @@ static void test_main_story_can_reach_spring_14_without_deadlock(void)
     assert(game_reduce(&state, (game_action_t){
         .type = GAME_ACTION_SETTLE_TO_TIME, .now = now,
     }));
+    resolve_main_story_event(&state, 2U);
     assert(state.quest_stage == 4U);
 
     assert(game_reduce(&state, (game_action_t){
@@ -571,6 +668,7 @@ static void test_main_story_can_reach_spring_14_without_deadlock(void)
     assert(game_reduce(&state, (game_action_t){
         .type = GAME_ACTION_SETTLE_TO_TIME, .now = now,
     }));
+    resolve_main_story_event(&state, 3U);
     assert(state.quest_stage == 5U);
     assert(game_reduce(&state, (game_action_t){ .type = GAME_ACTION_CLAIM_REPORT }));
     state.inventory_wood = 8U;
@@ -583,6 +681,7 @@ static void test_main_story_can_reach_spring_14_without_deadlock(void)
     assert(game_reduce(&state, (game_action_t){
         .type = GAME_ACTION_SETTLE_TO_TIME, .now = now,
     }));
+    resolve_main_story_event(&state, 4U);
     assert(state.quest_stage == 6U);
 
     assert(game_reduce(&state, (game_action_t){
@@ -606,6 +705,7 @@ static void test_main_story_can_reach_spring_14_without_deadlock(void)
     assert(game_reduce(&state, (game_action_t){
         .type = GAME_ACTION_SETTLE_TO_TIME, .now = now,
     }));
+    resolve_main_story_event(&state, 5U);
     assert(state.quest_stage == 7U);
     state.inventory_crops[GAME_CROP_HERB] += 2U;
     assert(game_reduce(&state, (game_action_t){
@@ -616,6 +716,7 @@ static void test_main_story_can_reach_spring_14_without_deadlock(void)
     assert(game_reduce(&state, (game_action_t){
         .type = GAME_ACTION_SETTLE_TO_TIME, .now = now,
     }));
+    resolve_main_story_event(&state, 6U);
     assert(state.quest_stage == 8U);
 
     now = 6U * 24U * 60U * 60U;
@@ -625,6 +726,7 @@ static void test_main_story_can_reach_spring_14_without_deadlock(void)
     assert(game_reduce(&state, (game_action_t){
         .type = GAME_ACTION_RESOLVE_EVENT, .target = GAME_EVENT_MARKET,
     }));
+    resolve_main_story_event(&state, 7U);
     assert(state.quest_stage == 9U);
     for (int i = state.forest_runs; i < 5; i++) {
         assert(game_reduce(&state, (game_action_t){
@@ -644,6 +746,7 @@ static void test_main_story_can_reach_spring_14_without_deadlock(void)
     assert(game_reduce(&state, (game_action_t){
         .type = GAME_ACTION_SETTLE_TO_TIME, .now = now,
     }));
+    resolve_main_story_event(&state, 8U);
     assert(state.quest_stage == 10U);
     assert(state.inventory_hot_bread > 0U ||
            state.inventory_premium_hot_bread > 0U);
@@ -666,6 +769,7 @@ static void test_main_story_can_reach_spring_14_without_deadlock(void)
     assert(game_reduce(&state, (game_action_t){
         .type = GAME_ACTION_RESOLVE_EVENT, .target = GAME_EVENT_FESTIVAL,
     }));
+    resolve_main_story_event(&state, 9U);
     assert(state.quest_stage == 11U);
     assert(state.chapter_complete);
 }
@@ -991,6 +1095,7 @@ int main(void)
     test_content_catalog_is_complete_and_valid();
     test_settings_toggle_deterministically();
     test_content_events_wait_for_player_choice();
+    test_event_sources_use_matching_catalog_ranges();
     test_job_scores_include_strength_mood_relationship_and_weather();
     test_rest_recovers_eight_per_hour_with_eight_hour_cap();
     test_sink_building_unlocks_two_additional_plots();

@@ -15,6 +15,12 @@ int main(void)
         assert(app_i18n_event(APP_LANG_ZH_CN, id)[0] != '\0');
         assert(app_i18n_event(APP_LANG_EN, id)[0] != '\0');
     }
+    for (uint8_t stage = 1U; stage <= 10U; stage++) {
+        assert(app_i18n_quest_objective(APP_LANG_ZH_CN, stage)[0] != '\0');
+        assert(app_i18n_quest_objective(APP_LANG_EN, stage)[0] != '\0');
+    }
+    assert(strcmp(app_i18n_quest_objective(APP_LANG_ZH_CN, 11U),
+                  "第一章已完成") == 0);
     for (uint8_t weather = GAME_WEATHER_CLEAR;
          weather <= GAME_WEATHER_STORM; weather++) {
         for (uint8_t period = 0U; period < 4U; period++) {

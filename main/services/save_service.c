@@ -412,7 +412,7 @@ static bool decode_payload(const uint8_t payload[SAVE_PAYLOAD_SIZE],
         decoded.travel.kind > GAME_TASK_RECIPE_RESEARCH ||
         decoded.construction.kind > GAME_TASK_RECIPE_RESEARCH ||
         decoded.construction.building >= GAME_BUILD_COUNT ||
-        decoded.quest_stage < 2U || decoded.quest_stage > 11U ||
+        decoded.quest_stage < 1U || decoded.quest_stage > 11U ||
         decoded.companion_actions > 2U ||
         decoded.event_queue_count > GAME_EVENT_QUEUE_SIZE ||
         decoded.event_history_count > GAME_EVENT_HISTORY_SIZE ||

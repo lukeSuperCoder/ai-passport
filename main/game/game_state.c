@@ -9,6 +9,7 @@ _Static_assert(sizeof(game_state_t) <= 12U * 1024U,
                "game_state_t exceeds the MVP resident RAM budget");
 
 static void refresh_quest_progress(game_state_t *state);
+static void refresh_relationship_events(game_state_t *state);
 static game_pet_state_t *pet_state(game_state_t *state, game_pet_id_t pet);
 
 uint8_t game_available_farm_plots(const game_state_t *state)
@@ -129,8 +130,7 @@ static bool event_seen(const game_state_t *state, uint8_t id)
 static bool enqueue_event(game_state_t *state, uint8_t id)
 {
     const game_event_definition_t *definition = game_event_definition(id);
-    if (!definition || state->event_queue_count >= GAME_EVENT_QUEUE_SIZE ||
-        (!definition->repeatable && event_seen(state, id))) {
+    if (!definition || (!definition->repeatable && event_seen(state, id))) {
         return false;
     }
     for (uint8_t i = 0U; i < state->event_queue_count; i++) {
@@ -141,10 +141,23 @@ static bool enqueue_event(game_state_t *state, uint8_t id)
         state->spring_day < (uint8_t)(last_day + definition->cooldown_days)) {
         return false;
     }
-    state->event_queue[state->event_queue_count++] = (game_queued_event_t){
+
+    bool main_story = definition->type == GAME_EVENT_TYPE_MAIN;
+    if (state->event_queue_count >= GAME_EVENT_QUEUE_SIZE) {
+        if (!main_story) return false;
+        /* Main-story events must not be lost behind ambient events. */
+        state->event_queue_count--;
+    }
+    if (main_story && state->event_queue_count > 0U) {
+        memmove(state->event_queue + 1, state->event_queue,
+                state->event_queue_count * sizeof(state->event_queue[0]));
+    }
+    uint8_t index = main_story ? 0U : state->event_queue_count;
+    state->event_queue[index] = (game_queued_event_t){
         .id = id,
         .queued_day = state->spring_day,
     };
+    state->event_queue_count++;
     return true;
 }
 
@@ -269,6 +282,7 @@ static void update_calendar(game_state_t *state, uint32_t now)
         if (day >= 3U && state->visitor_stages[1] == 0U) enqueue_event(state, 55U);
         if (day >= 4U && state->visitor_stages[2] == 0U) enqueue_event(state, 57U);
         if (day >= 5U && state->visitor_stages[3] == 0U) enqueue_event(state, 59U);
+        if (day >= 7U && state->visitor_stages[4] == 0U) enqueue_event(state, 61U);
         if (day >= 10U && state->visitor_stages[5] == 0U) enqueue_event(state, 63U);
     }
     if (previous < 14U && day >= 14U) {
@@ -330,7 +344,7 @@ static void complete_timed_task(game_state_t *state, game_timed_task_t *task)
         state->job_experience[GAME_PET_AMAI][GAME_JOB_FOREST] =
             saturating_add_u16(
                 state->job_experience[GAME_PET_AMAI][GAME_JOB_FOREST], 25U);
-        enqueue_event(state, (uint8_t)(34U + task->task_id % 6U));
+        enqueue_event(state, (uint8_t)(30U + task->task_id % 4U));
         state->notifications |= GAME_NOTICE_FOREST;
         break;
     }
@@ -402,6 +416,7 @@ static void complete_timed_task(game_state_t *state, game_timed_task_t *task)
             uint16_t improved = (uint16_t)state->relationships[relation] + 5U;
             state->relationships[relation] = improved > 100U ? 100U : (uint8_t)improved;
         }
+        refresh_relationship_events(state);
         enqueue_event(state, (uint8_t)(44U + task->task_id % 9U));
         state->travel_journal_count = state->travel_journal_count == UINT8_MAX
             ? UINT8_MAX : (uint8_t)(state->travel_journal_count + 1U);
@@ -433,87 +448,96 @@ static void complete_timed_task(game_state_t *state, game_timed_task_t *task)
 
 static void refresh_quest_progress(game_state_t *state)
 {
-    bool advanced;
-    do {
-        advanced = false;
-        switch (state->quest_stage) {
-        case 2U:
-            if (state->cooked_counts[GAME_RECIPE_HOT_BREAD] > 0U) {
-                state->quest_stage = 3U;
-                state->coins = saturating_add_u32(state->coins, 100U);
-                state->inventory_seeds[GAME_CROP_CARROT] = saturating_add_u16(
-                    state->inventory_seeds[GAME_CROP_CARROT], 2U);
-                advanced = true;
-            }
-            break;
-        case 3U:
-            if (state->total_crops_harvested >= 2U) {
-                state->quest_stage = 4U;
-                advanced = true;
-            }
-            break;
-        case 4U:
-            if (state->forest_runs > 0U) {
-                state->quest_stage = 5U;
-                advanced = true;
-            }
-            break;
-        case 5U:
-            if ((state->completed_buildings & (1U << GAME_BUILD_GUEST_ROOM)) != 0U) {
-                state->quest_stage = 6U;
-                state->unlocked_recipes |= (uint8_t)(
-                    (1U << GAME_RECIPE_CARROT_STEW) |
-                    (1U << GAME_RECIPE_HERB_TEA));
-                state->inventory_seeds[GAME_CROP_HERB] = saturating_add_u16(
-                    state->inventory_seeds[GAME_CROP_HERB], 2U);
-                advanced = true;
-            }
-            break;
-        case 6U:
-            if (state->cooked_counts[GAME_RECIPE_CARROT_STEW] > 0U) {
-                state->quest_stage = 7U;
-                advanced = true;
-            }
-            break;
-        case 7U: {
-            uint32_t cooked = 0U;
-            for (size_t i = 0; i < GAME_RECIPE_COUNT; i++) {
-                cooked += state->cooked_counts[i];
-            }
-            if (cooked >= 3U) {
-                state->quest_stage = 8U;
-                state->unlocked_recipes |= (uint8_t)(1U << GAME_RECIPE_FOREST_CAKE);
-                advanced = true;
-            }
-            break;
+    bool objective_complete = false;
+    switch (state->quest_stage) {
+    case 1U:
+        objective_complete = true;
+        break;
+    case 2U:
+        objective_complete = state->cooked_counts[GAME_RECIPE_HOT_BREAD] > 0U;
+        break;
+    case 3U:
+        objective_complete = state->total_crops_harvested >= 2U;
+        break;
+    case 4U:
+        objective_complete = state->forest_runs > 0U;
+        break;
+    case 5U:
+        objective_complete =
+            (state->completed_buildings & (1U << GAME_BUILD_GUEST_ROOM)) != 0U;
+        break;
+    case 6U:
+        objective_complete = state->cooked_counts[GAME_RECIPE_CARROT_STEW] > 0U;
+        break;
+    case 7U: {
+        uint32_t cooked = 0U;
+        for (size_t i = 0; i < GAME_RECIPE_COUNT; i++) {
+            cooked += state->cooked_counts[i];
         }
-        case 8U:
-            if ((state->completed_events & GAME_EVENT_MARKET) != 0U) {
-                state->quest_stage = 9U;
-                state->unlocked_recipes |= (uint8_t)(1U << GAME_RECIPE_STRAWBERRY_JAM);
-                state->inventory_seeds[GAME_CROP_STRAWBERRY] = saturating_add_u16(
-                    state->inventory_seeds[GAME_CROP_STRAWBERRY], 2U);
-                advanced = true;
-            }
-            break;
-        case 9U:
-            if ((state->completed_buildings & (1U << GAME_BUILD_SIGNPOST)) != 0U) {
-                state->quest_stage = 10U;
-                advanced = true;
-            }
-            break;
-        case 10U:
-            if (state->travel_journal_count > 0U &&
-                (state->completed_events & GAME_EVENT_FESTIVAL) != 0U) {
-                state->quest_stage = 11U;
-                state->chapter_complete = true;
-                advanced = true;
-            }
-            break;
-        default:
-            break;
+        objective_complete = cooked >= 3U;
+        break;
+    }
+    case 8U:
+        objective_complete =
+            (state->completed_events & GAME_EVENT_MARKET) != 0U;
+        break;
+    case 9U:
+        objective_complete =
+            (state->completed_buildings & (1U << GAME_BUILD_SIGNPOST)) != 0U;
+        break;
+    case 10U:
+        objective_complete = state->travel_journal_count > 0U &&
+            (state->completed_events & GAME_EVENT_FESTIVAL) != 0U;
+        break;
+    default:
+        break;
+    }
+    if (objective_complete && state->quest_stage <= 10U) {
+        enqueue_event(state, (uint8_t)(state->quest_stage - 1U));
+    }
+}
+
+static void advance_main_story(game_state_t *state, uint8_t event_id)
+{
+    if (event_id >= 10U || state->quest_stage != (uint8_t)(event_id + 1U)) {
+        return;
+    }
+    switch (event_id) {
+    case 1U:
+        state->coins = saturating_add_u32(state->coins, 100U);
+        state->inventory_seeds[GAME_CROP_CARROT] = saturating_add_u16(
+            state->inventory_seeds[GAME_CROP_CARROT], 2U);
+        break;
+    case 4U:
+        state->unlocked_recipes |= (uint8_t)(
+            (1U << GAME_RECIPE_CARROT_STEW) |
+            (1U << GAME_RECIPE_HERB_TEA));
+        state->inventory_seeds[GAME_CROP_HERB] = saturating_add_u16(
+            state->inventory_seeds[GAME_CROP_HERB], 2U);
+        break;
+    case 6U:
+        state->unlocked_recipes |= (uint8_t)(1U << GAME_RECIPE_FOREST_CAKE);
+        break;
+    case 7U:
+        state->unlocked_recipes |= (uint8_t)(1U << GAME_RECIPE_STRAWBERRY_JAM);
+        state->inventory_seeds[GAME_CROP_STRAWBERRY] = saturating_add_u16(
+            state->inventory_seeds[GAME_CROP_STRAWBERRY], 2U);
+        break;
+    default:
+        break;
+    }
+    state->quest_stage++;
+    if (event_id == 9U) state->chapter_complete = true;
+    refresh_quest_progress(state);
+}
+
+static void refresh_relationship_events(game_state_t *state)
+{
+    for (uint8_t relation = 0U; relation < GAME_RELATION_COUNT; relation++) {
+        if (state->relationships[relation] >= 50U) {
+            enqueue_event(state, (uint8_t)(38U + relation));
         }
-    } while (advanced);
+    }
 }
 
 static void settle_reception(game_state_t *state, uint32_t from, uint32_t elapsed)
@@ -538,6 +562,7 @@ static void settle_reception(game_state_t *state, uint32_t from, uint32_t elapse
     }
     state->pending.coins = saturating_add_u32(state->pending.coins, income);
     state->pending.available = true;
+    enqueue_event(state, (uint8_t)(18U + (from / 3600U + hours) % 4U));
 
     uint32_t stamina_cost = hours * 4U;
     state->momo.stamina = stamina_cost >= state->momo.stamina
@@ -586,7 +611,7 @@ void game_state_init(game_state_t *state, uint32_t now)
         (1U << GAME_BUILD_FRONT_DESK) |
         (1U << GAME_BUILD_KITCHEN) |
         (1U << GAME_BUILD_FARM));
-    state->quest_stage = 2U;
+    state->quest_stage = 1U;
     for (size_t i = 0; i < GAME_RELATION_COUNT; i++) {
         state->relationships[i] = 20U;
     }
@@ -596,6 +621,7 @@ void game_state_init(game_state_t *state, uint32_t now)
     state->night_mute_enabled = true;
     state->clock_24_hour = true;
     state->language_english = false;
+    refresh_quest_progress(state);
     enqueue_event(state, 53U);
 }
 
@@ -659,7 +685,7 @@ bool game_reduce(game_state_t *state, game_action_t action)
                         state->total_crops_harvested, definition->yield);
                     state->pending.available = true;
                     refresh_quest_progress(state);
-                    enqueue_event(state, (uint8_t)(22U + i));
+                    enqueue_event(state, (uint8_t)(22U + plot->crop - 1U));
                 }
                 memset(plot, 0, sizeof(*plot));
             }
@@ -681,6 +707,7 @@ bool game_reduce(game_state_t *state, game_action_t action)
         recover_resting_pet(&state->atuan, initial_atuan_job, elapsed);
         /* Calendar follows trusted wall time even when economic simulation is capped. */
         update_calendar(state, action.now);
+        refresh_quest_progress(state);
         state->last_settled_time = action.now;
         state->last_trusted_time = action.now;
         state->commit_sequence++;
@@ -910,6 +937,9 @@ bool game_reduce(game_state_t *state, game_action_t action)
         partner->mood = partner->mood > 90U ? 100U : (uint8_t)(partner->mood + 10U);
         state->player_affinity[pet] = state->player_affinity[pet] > 95U
             ? 100U : (uint8_t)(state->player_affinity[pet] + 5U);
+        uint8_t story_event = (uint8_t)(10U + pet * 2U);
+        if (state->player_affinity[pet] >= 10U) enqueue_event(state, story_event);
+        if (state->player_affinity[pet] >= 30U) enqueue_event(state, story_event + 1U);
         state->commit_sequence++;
         return true;
     }
@@ -941,6 +971,7 @@ bool game_reduce(game_state_t *state, game_action_t action)
             game_pet_id_t pet = (game_pet_id_t)(id % GAME_PET_COUNT);
             state->player_affinity[pet] = state->player_affinity[pet] > 98U
                 ? 100U : (uint8_t)(state->player_affinity[pet] + 2U);
+            refresh_relationship_events(state);
         }
         state->event_last_day[id] = state->spring_day;
         if (!definition->repeatable) {
@@ -958,6 +989,13 @@ bool game_reduce(game_state_t *state, game_action_t action)
                 state->event_queue_count * sizeof(state->event_queue[0]));
         memset(&state->event_queue[state->event_queue_count], 0,
                sizeof(state->event_queue[0]));
+        if (definition->type == GAME_EVENT_TYPE_VISITOR &&
+            id < GAME_CONTENT_EVENT_COUNT - 1U && ((id - 53U) % 2U) == 0U) {
+            enqueue_event(state, (uint8_t)(id + 1U));
+        }
+        if (definition->type == GAME_EVENT_TYPE_MAIN) {
+            advance_main_story(state, id);
+        }
         state->commit_sequence++;
         return true;
     }
